@@ -23,7 +23,7 @@
 class MyMapper : public LegionRuntime::HighLevel::DefaultMapper {
 public:
   MyMapper(
-        LegionRuntime::HighLevel::Machine *machine,
+        LegionRuntime::HighLevel::Machine machine,
         LegionRuntime::HighLevel::HighLevelRuntime *rt,
         LegionRuntime::HighLevel::Processor local);
 public:

@@ -126,16 +126,16 @@ void QCS::setCornerDivTask(
 
     // [1] Compute a zone-centered velocity
     const IndexSpace& isz = task->regions[1].region.get_index_space();
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next(); )
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         acc_zuc.write(z, double2(0., 0.));
     }
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next(); )
     {
-        ptr_t s = itrs.p.get_index();
+        ptr_t s = itrs.next();
         ptr_t p = acc_mapsp1.read(s);
         int preg = acc_mapsp1reg.read(s);
         ptr_t z = acc_mapsz.read(s);
@@ -147,9 +147,9 @@ void QCS::setCornerDivTask(
     }
 
     // [2] Divergence at the corner
-    for (Domain::DomainPointIterator itrc(iss); itrc; itrc++)
+    for (IndexIterator itrc(runtime,ctx,iss); itrc.has_next();)
     {
-        ptr_t c = itrc.p.get_index();
+        ptr_t c = itrc.next();
         ptr_t s2 = c;
         ptr_t s = acc_mapss3.read(s2);
         // Associated zone, point
@@ -277,9 +277,9 @@ void QCS::setQCnForceTask(
 
     // [4.1] Compute the crmu (real Kurapatenko viscous scalar)
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrc(iss); itrc; itrc++)
+    for (IndexIterator itrc(runtime,ctx,iss); itrc.has_next(); )
     {
-        ptr_t c = itrc.p.get_index();
+        ptr_t c = itrc.next();
         ptr_t z = acc_mapsz.read(c);
 
         // Kurapatenko form of the viscosity
@@ -298,9 +298,9 @@ void QCS::setQCnForceTask(
     }
 
     // [4.2] Compute the cqe for each corner
-    for (Domain::DomainPointIterator itrc(iss); itrc; itrc++)
+    for (IndexIterator itrc(runtime,ctx,iss); itrc.has_next(); )
     {
-        ptr_t c = itrc.p.get_index();
+        ptr_t c = itrc.next();
         ptr_t s2 = c;
         ptr_t s = acc_mapss3.read(s2);
         ptr_t p = acc_mapsp2.read(s);
@@ -353,9 +353,9 @@ void QCS::setForceTask(
 
     // [5.1] Preparation of extra variables
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrc(iss); itrc; itrc++)
+    for (IndexIterator itrc(runtime,ctx,iss); itrc.has_next(); )
     {
-        ptr_t c = itrc.p.get_index();
+        ptr_t c = itrc.next();
         double ccos = acc_ccos.read(c);
         double csin2 = 1.0 - ccos * ccos;
         double carea = acc_carea.read(c);
@@ -366,9 +366,9 @@ void QCS::setForceTask(
     }
 
     // [5.2] Set-Up the forces on corners
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next(); )
     {
-        ptr_t s = itrs.p.get_index();
+        ptr_t s = itrs.next();
         // Associated corners 1 and 2
         ptr_t c1 = s;
         ptr_t c2 = acc_mapss4.read(s);
@@ -428,16 +428,16 @@ void QCS::setVelDiffTask(
         get_accessor<double>(regions[4], FID_ZDU);
 
     const IndexSpace& isz = task->regions[4].region.get_index_space();
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next(); )
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         acc_ztmp.write(z, 0.);
     }
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next();)
     {
-        ptr_t s = itrs.p.get_index();
+        ptr_t s = itrs.next();
         ptr_t p1 = acc_mapsp1.read(s);
         int p1reg = acc_mapsp1reg.read(s);
         ptr_t p2 = acc_mapsp2.read(s);
@@ -459,9 +459,9 @@ void QCS::setVelDiffTask(
         acc_ztmp.write(z, ztmp);
     }
 
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next();)
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         double zss  = acc_zss.read(z);
         double ztmp  = acc_ztmp.read(z);
         double zdu = q1 * zss + 2. * q2 * ztmp;

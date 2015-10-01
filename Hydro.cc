@@ -254,8 +254,19 @@ void Hydro::doCycle(
     ArgumentMap am;
 
     runtime->begin_trace(ctx, 123);
-
+#if 0
     // store fields from last cycle where needed
+    CopyLauncher launchcfd;
+    launchcfd.add_copy_requirements(
+      RegionRequirement(lrz, READ_ONLY, EXCLUSIVE, lrz), 
+      RegionRequirement(lrz, WRITE_DISCARD, EXCLUSIVE, lrz));
+    
+    launchcfd.add_src_field(0, FID_ZVOL);
+    launchcfd.add_dst_field(0, FID_ZVOL0);
+    
+    runtime->issue_copy_operation(ctx, launchcfd);
+#endif
+#if 1 
     IndexLauncher launchcfd(TID_COPYFIELDDBL, dompc, ta, am);
     launchcfd.add_region_requirement(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
@@ -264,7 +275,9 @@ void Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcfd.add_field(1, FID_ZVOL0);
     runtime->execute_index_space(ctx, launchcfd);
-
+    
+#endif
+    
     // begin hydro cycle
     IndexLauncher launchcfd2(TID_COPYFIELDDBL2, dompc, ta, am);
     double ffdargs[] = { 0. };
@@ -275,7 +288,8 @@ void Hydro::doCycle(
             TaskArgument(ffd2args, sizeof(ffd2args)), am);
     double aphargs[] = { dt };
     IndexLauncher launchaph(TID_ADVPOSHALF, dompc,
-            TaskArgument(aphargs, sizeof(aphargs)), am);
+                            TaskArgument(aphargs, sizeof(aphargs)), am, Predicate::TRUE_PRED,
+                            false);
     // do point routines twice, once each for private and master
     // partitions
     for (int part = 0; part < 2; ++part) {
@@ -827,7 +841,7 @@ void Hydro::advPosHalfTask(
         HighLevelRuntime *runtime) {
     const double dt = *((const double*)task->args);
     const double dth = 0.5 * dt;
-
+    assert(0);
     MyAccessor<double2> acc_px0 =
         get_accessor<double2>(regions[0], FID_PX0);
     MyAccessor<double2> acc_pu0 =
@@ -836,9 +850,10 @@ void Hydro::advPosHalfTask(
         get_accessor<double2>(regions[1], FID_PXP);
 
     const IndexSpace& isp = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrp(isp); itrp; itrp++)
+        
+    for (IndexIterator itrp(runtime, ctx, isp); itrp.has_next(); )
     {
-        ptr_t p = itrp.p.get_index();
+        ptr_t p = itrp.next();
         double2 x0 = acc_px0.read(p);
         double2 u0 = acc_pu0.read(p);
         double2 xp = x0 + dth * u0;
@@ -863,9 +878,9 @@ void Hydro::calcRhoTask(
         get_accessor<double>(regions[1], fid_zr);
 
     const IndexSpace& isz = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+    for (IndexIterator itrz(runtime, ctx, isz); itrz.has_next();)
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         double m = acc_zm.read(z);
         double v = acc_zvol.read(z);
         double r = m / v;
@@ -900,9 +915,10 @@ void Hydro::calcCrnrMassTask(
         get_reduction_accessor<SumOp<double> >(regions[3]);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+
+    for (IndexIterator itrs(runtime, ctx, iss); itrs.has_next();)
     {
-        ptr_t s  = itrs.p.get_index();
+        ptr_t s  = itrs.next();
         ptr_t s3 = acc_mapss3.read(s);
         ptr_t z  = acc_mapsz.read(s);
         ptr_t p = acc_mapsp1.read(s);
@@ -943,9 +959,10 @@ void Hydro::sumCrnrForceTask(
         get_reduction_accessor<SumOp<double2> >(regions[2]);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+
+    for (IndexIterator itrs(runtime, ctx, iss); itrs.has_next(); )
     {
-        ptr_t s  = itrs.p.get_index();
+        ptr_t s  = itrs.next();
         ptr_t s3 = acc_mapss3.read(s);
         ptr_t p = acc_mapsp1.read(s);
         int preg = acc_mapsp1reg.read(s);
@@ -978,9 +995,10 @@ void Hydro::calcAccelTask(
 
     const double fuzz = 1.e-99;
     const IndexSpace& isp = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrp(isp); itrp; itrp++)
+
+    for (IndexIterator itrp(runtime, ctx, isp); itrp.has_next(); )
     {
-        ptr_t p = itrp.p.get_index();
+        ptr_t p = itrp.next();
         double2 f = acc_pf.read(p);
         double m = acc_pmass.read(p);
         double2 a = f / max(m, fuzz);
@@ -1008,9 +1026,10 @@ void Hydro::advPosFullTask(
         get_accessor<double2>(regions[1], FID_PU);
 
     const IndexSpace& isp = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrp(isp); itrp; itrp++)
+
+    for (IndexIterator itrp(runtime, ctx, isp); itrp.has_next(); )
     {
-        ptr_t p = itrp.p.get_index();
+        ptr_t p = itrp.next();
         double2 x0 = acc_px0.read(p);
         double2 u0 = acc_pu0.read(p);
         double2 a = acc_pa.read(p);
@@ -1067,9 +1086,10 @@ void Hydro::calcWorkTask(
     // and vavg is the average velocity of the node over the time period
 
     const IndexSpace& isz = task->regions[3].region.get_index_space();
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+
+    for (IndexIterator itrz(runtime, ctx, isz); itrz.has_next(); )
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         acc_zw.write(z, 0.);
 
     }
@@ -1077,9 +1097,10 @@ void Hydro::calcWorkTask(
     const double dth = 0.5 * dt;
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+ 
+    for (IndexIterator itrs(runtime, ctx, iss); itrs.has_next();)
     {
-        ptr_t s = itrs.p.get_index();
+        ptr_t s = itrs.next();
         ptr_t p1 = acc_mapsp1.read(s);
         int p1reg = acc_mapsp1reg.read(s);
         ptr_t p2 = acc_mapsp2.read(s);
@@ -1130,9 +1151,10 @@ void Hydro::calcWorkRateTask(
     double dtinv = 1. / dt;
 
     const IndexSpace& isz = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+
+    for (IndexIterator itrz(runtime, ctx, isz); itrz.has_next();)
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         double zvol = acc_zvol.read(z);
         double zvol0 = acc_zvol0.read(z);
         double dvol = zvol - zvol0;
@@ -1158,9 +1180,10 @@ void Hydro::calcEnergyTask(
 
     const double fuzz = 1.e-99;
     const IndexSpace& isz = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+
+    for (IndexIterator itrz(runtime, ctx, isz); itrz.has_next(); )
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         double zetot = acc_zetot.read(z);
         double zm = acc_zm.read(z);
         double ze = zetot / (zm + fuzz);
@@ -1198,9 +1221,11 @@ double Hydro::calcDtTask(
     double dtnew = 1.e99;
     int zmin = -1;
     const IndexSpace& isz = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+    
+
+    for (IndexIterator itrz(runtime, ctx, isz); itrz.has_next(); )
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         double zdu = acc_zdu.read(z);
         double zss = acc_zss.read(z);
         double cdu = max(zdu, max(zss, fuzz));
@@ -1216,9 +1241,11 @@ double Hydro::calcDtTask(
     // compute dt using volume condition
     double dvovmax = 1.e-99;
     int zmax = -1;
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+    
+
+    for (IndexIterator itrz(runtime, ctx, isz); itrz.has_next();)
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         double zvol = acc_zvol.read(z);
         double zvol0 = acc_zvol0.read(z);
         double zdvov = abs((zvol - zvol0) / zvol0);

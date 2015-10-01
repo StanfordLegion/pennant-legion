@@ -124,7 +124,7 @@ Mesh::Mesh(
         const int numpcsa,
         Context ctxa,
         HighLevelRuntime* runtimea)
-        : gmesh(NULL), egold(NULL), wxy(NULL),
+        : gmesh(NULL),  wxy(NULL), egold(NULL),
           numpcs(numpcsa), ctx(ctxa), runtime(runtimea) {
 
     chunksize = inp->getInt("chunksize", 0);
@@ -276,13 +276,18 @@ void Mesh::init() {
     faglb.allocate_field(sizeof(int), FID_NUMSBAD);
 
     // create domain over pieces
-    IndexSpace ispc = runtime->create_index_space(ctx, numpcs);
+    Rect<1> task_rect(Point<1>(0), Point<1>(numpcs-1));
+    dompc  = Domain::from_rect<1>(task_rect);
+    IndexSpace ispc = runtime->create_index_space(ctx, dompc);
+    
+#if 0 
+    
     {
       IndexAllocator allocator = runtime->create_index_allocator(ctx, ispc);
       allocator.alloc(numpcs);
     }
     dompc = runtime->get_index_space_domain(ctx, ispc);
-
+#endif 
     // create zone and side partitions
     Coloring colorz, colors;
     int z0 = 0;
@@ -559,18 +564,22 @@ void Mesh::copyFieldTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         HighLevelRuntime *runtime) {
-    // determine which fields to use in the copy
-    FieldID fid_src = *(task->regions[0].privilege_fields.begin());
-    FieldID fid_dst = *(task->regions[1].privilege_fields.begin());
-    MyAccessor<T> acc_src =
-        get_accessor<T>(regions[0], fid_src);
-    MyAccessor<T> acc_dst =
-        get_accessor<T>(regions[1], fid_dst);
+  // determine which fields to use in the copy
+    FieldID fid_src = *(task->regions[0].instance_fields.begin());
+    FieldID fid_dst = *(task->regions[1].instance_fields.begin());
+    LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_src;
+    acc_src = regions[0].get_field_accessor(fid_src).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
+      
+    //MyAccessor<T> acc_src = get_accessor<T>(regions[0], fid_src); //regions[0].get_field_accessor(fid_src).typeify<T>().convert<AccessorType::SOA>();
+    LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_dst;
+    acc_dst = regions[1].get_field_accessor(fid_dst).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
+//    MyAccessor<T> acc_dst =
+//        get_accessor<T>(regions[1], fid_dst);
 
     const IndexSpace& is = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itr(is); itr; itr++)
+    for (IndexIterator itr(runtime, ctx, is); itr.has_next(); )
     {
-        ptr_t idx = itr.p.get_index();
+        ptr_t idx = itr.next();
         acc_dst.write(idx, acc_src.read(idx));
     }
 
@@ -587,13 +596,17 @@ void Mesh::fillFieldTask(
     const T val = args[0];
 
     FieldID fid_var = task->regions[0].instance_fields[0];
-    MyAccessor<T> acc_var =
-        get_accessor<T>(regions[0], fid_var);
+   LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_var;
+   acc_var = regions[0].get_field_accessor(fid_var).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
+      
+//     MyAccessor<T> acc_var =
+//        get_accessor<T>(regions[0], fid_var);
 
     const IndexSpace& is = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itr(is); itr; itr++)
+    
+    for (IndexIterator itr(runtime, ctx, is); itr.has_next();)
     {
-        ptr_t idx = itr.p.get_index();
+        ptr_t idx = itr.next();
         acc_var.write(idx, val);
     }
 
@@ -630,17 +643,17 @@ void Mesh::calcCtrsTask(
         get_accessor<double2>(regions[5], fid_zx);
 
     const IndexSpace& isz = task->regions[1].region.get_index_space();
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next();)
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         acc_zx.write(z, double2(0., 0.));
 
     }
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+    for (IndexIterator itrs(runtime,ctx, iss); itrs.has_next(); )
     {
-        ptr_t s = itrs.p.get_index();
+        ptr_t s = itrs.next();
         ptr_t p1 = acc_mapsp1.read(s);
         int p1reg = acc_mapsp1reg.read(s);
         ptr_t p2 = acc_mapsp2.read(s);
@@ -695,9 +708,9 @@ int Mesh::calcVolsTask(
         get_accessor<double>(regions[5], fid_zvol);
 
     const IndexSpace& isz = task->regions[3].region.get_index_space();
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+    for (IndexIterator itrz(runtime, ctx, isz); itrz.has_next(); )
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         acc_zarea.write(z, 0.);
         acc_zvol.write(z, 0.);
     }
@@ -705,9 +718,9 @@ int Mesh::calcVolsTask(
     const double third = 1. / 3.;
     int count = 0;
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+    for (IndexIterator itrs(runtime, ctx, iss); itrs.has_next(); )
     {
-        ptr_t s = itrs.p.get_index();
+        ptr_t s = itrs.next();
         ptr_t p1 = acc_mapsp1.read(s);
         int p1reg = acc_mapsp1reg.read(s);
         ptr_t p2 = acc_mapsp2.read(s);
@@ -752,9 +765,9 @@ void Mesh::calcSurfVecsTask(
         get_accessor<double2>(regions[2], FID_SSURFP);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next();)
     {
-        ptr_t s = itrs.p.get_index();
+        ptr_t s = itrs.next();
         ptr_t z = acc_mapsz.read(s);
         double2 ex = acc_ex.read(s);
         double2 zx = acc_zx.read(z);
@@ -785,9 +798,9 @@ void Mesh::calcEdgeLenTask(
         get_accessor<double>(regions[3], FID_ELEN);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+    for (IndexIterator itrs(runtime,ctx,iss); itrs.next(); )
     {
-        ptr_t s = itrs.p.get_index();
+        ptr_t s = itrs.next();
         ptr_t p1 = acc_mapsp1.read(s);
         int p1reg = acc_mapsp1reg.read(s);
         ptr_t p2 = acc_mapsp2.read(s);
@@ -818,17 +831,17 @@ void Mesh::calcCharLenTask(
         get_accessor<double>(regions[2], FID_ZDL);
 
     const IndexSpace& isz = task->regions[1].region.get_index_space();
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next();)
     {
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         acc_zdl.write(z, 1.e99);
-
+        
     }
-
+    
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next();)
     {
-        ptr_t s = itrs.p.get_index();
+        ptr_t s = itrs.next();
         ptr_t z  = acc_mapsz.read(s);
         double area = acc_sarea.read(s);
         double base = acc_elen.read(s);

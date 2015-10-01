@@ -363,12 +363,12 @@ void Mesh::getField(
     RegionAccessor<AccessorType::Generic, T> acc =
             pr.get_field_accessor(fid).typeify<T>();
     const IndexSpace& is = lr.get_index_space();
-    Domain::DomainPointIterator itr(is);
+    
+    IndexIterator itr(runtime, ctx, is);
     for (int i = 0; i < n; ++i)
     {
-        ptr_t p = itr.p.get_index();
+        ptr_t p = itr.next();
         var[i] = acc.read(p);
-        itr++;
     }
     runtime->unmap_region(ctx, pr);
 }
@@ -390,12 +390,12 @@ void Mesh::setField(
     RegionAccessor<AccessorType::Generic, T> acc =
             pr.get_field_accessor(fid).typeify<T>();
     const IndexSpace& is = lr.get_index_space();
-    Domain::DomainPointIterator itr(is);
+
+    IndexIterator itr(runtime, ctx, is);
     for (int i = 0; i < n; ++i)
     {
-        ptr_t p = itr.p.get_index();
+        ptr_t p = itr.next();
         acc.write(p, var[i]);
-        itr++;
     }
     runtime->unmap_region(ctx, pr);
 }

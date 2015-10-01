@@ -111,9 +111,10 @@ void HydroBC::applyFixedBCTask(
     };
 
     const IndexSpace& isb = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrb(isb); itrb; itrb++)
+   
+    for (IndexIterator itrb(runtime, ctx, isb); itrb.has_next(); )
     {
-        ptr_t b = itrb.p.get_index();
+        ptr_t b = itrb.next();
         ptr_t p = acc_mapbp.read(b);
         int preg = acc_mapbpreg.read(b);
         double2 pu = acc_pu[preg].read(p);

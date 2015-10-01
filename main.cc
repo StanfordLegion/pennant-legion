@@ -29,7 +29,7 @@ enum TaskID {
 
 
 void registerMappers(
-        Machine *machine,
+        Machine machine,
         HighLevelRuntime *rt,
         const std::set<Processor> &local_procs)
 {
@@ -55,22 +55,33 @@ void mainTask(const Task *task,
         if (arg != "-ll" && arg != "-hl" && arg != "-ca" && arg != "-le" && arg != "-dm") break;
         i += 2;
     }
-
+    
+    volatile bool debug = false;
     int numpcs = 1;
     const char* filename;
-    if (i == iargs.argc - 1) {
-        filename = iargs.argv[i];
-    }
-    else if (i == iargs.argc - 3 && iargs.argv[i] == string("-n")) {
+    while (i < iargs.argc) { 
+      if (iargs.argv[i] == string("-f")) { 
+        filename = iargs.argv[i+1];
+        i += 2;
+      }
+      else if (iargs.argv[i] == string("-d")) {
+        debug = true;
+        i++;
+      }
+      else if (iargs.argv[i] == string("-n")) {
         numpcs = atoi(iargs.argv[i + 1]);
-        filename = iargs.argv[i + 2];
-    }
-    else {
+        i += 2;
+      }
+      else {
         cerr << "Usage: pennant [legion args] "
              << "[-n <numpcs>] <filename>" << endl;
         exit(1);
+      }
     }
 
+    /* spin so debugger can attach... */
+    while (debug) {} 
+    
     InputFile inp(filename);
 
     string probname(filename);

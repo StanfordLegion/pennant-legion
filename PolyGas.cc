@@ -74,10 +74,10 @@ void PolyGas::calcStateHalfTask(
     const double gm1 = gamma - 1.;
     const double ssmin2 = max(ssmin * ssmin, 1.e-99);
     const IndexSpace& isz = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrz(isz); itrz; itrz++)
+    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next(); )
     {
         // compute EOS at beginning of time step
-        ptr_t z = itrz.p.get_index();
+        ptr_t z = itrz.next();
         double r = acc_zr.read(z);
         double e = max(acc_ze.read(z), 0.);
         double p = gm1 * r * e;
@@ -117,9 +117,10 @@ void PolyGas::calcForceTask(
         get_accessor<double2>(regions[2], FID_SFP);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+
+    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next(); )
     {
-        ptr_t s  = itrs.p.get_index();
+        ptr_t s  = itrs.next();
         ptr_t z  = acc_mapsz.read(s);
         double p = acc_zp.read(z);
         double2 surf = acc_ssurf.read(s);

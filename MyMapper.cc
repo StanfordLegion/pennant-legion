@@ -24,7 +24,7 @@ using namespace LegionRuntime::HighLevel;
 
 
 MyMapper::MyMapper(
-        Machine *m,
+        Machine m,
         HighLevelRuntime *rt,
         Processor p)
         : DefaultMapper(m, rt, p) {}

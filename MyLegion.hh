@@ -33,8 +33,11 @@ template <typename T>
 typename MyAccessor<T>::accessor_t get_accessor(
         const LegionRuntime::HighLevel::PhysicalRegion& region,
         const LegionRuntime::HighLevel::FieldID fid) {
-    return region.get_field_accessor(fid).typeify<T>().
-        template convert<typename MyAccessor<T>::accessor_type_t>();
+  //typename MyAccessor<T>::accessor_t my_accessor =
+  return region.get_field_accessor(fid).typeify<T>().
+    template convert<typename MyAccessor<T>::accessor_type_t>();
+  //std::cout << &my_accessor << std::endl;
+  //return my_accessor; 
 }
 
 

@@ -83,9 +83,9 @@ void TTS::calcForceTask(
     //           svfac stores (sv/zv)
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (Domain::DomainPointIterator itrs(iss); itrs; itrs++)
+    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next(); )
     {
-        ptr_t s  = itrs.p.get_index();
+        ptr_t s  = itrs.next();
         ptr_t z  = acc_mapsz.read(s);
         double sarea = acc_sarea.read(s);
         double zarea = acc_zarea.read(z);
