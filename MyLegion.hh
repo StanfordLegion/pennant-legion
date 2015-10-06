@@ -16,29 +16,49 @@
 #include "legion.h"
 
 
-// convenience class for accessors
-// (this would be a template typedef if C++98 allowed it)
+// // convenience class for accessors
+// // (this would be a template typedef if C++98 allowed it)
+// template <typename T>
+// struct MyAccessor : public LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)>, T> {
+//     typedef LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> accessor_type_t;
+//     typedef LegionRuntime::Accessor::RegionAccessor<accessor_type_t, T> accessor_t;
+
+//     MyAccessor(const accessor_t& rhs) : accessor_t(rhs) {}
+
+// };
+
+
+
 template <typename T>
-struct MyAccessor : public LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)>, T> {
-    typedef LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> accessor_type_t;
-    typedef LegionRuntime::Accessor::RegionAccessor<accessor_type_t, T> accessor_t;
+using MyAccessorType = typename LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)>;
 
-    MyAccessor(const accessor_t& rhs) : accessor_t(rhs) {}
-
-};
-
+template <typename T>
+  using MyAccessor = typename LegionRuntime::Accessor::RegionAccessor<MyAccessorType<T> , T>;
 
 // convenience function for getting accessors
 template <typename T>
-typename MyAccessor<T>::accessor_t get_accessor(
+MyAccessor<T> get_accessor(
         const LegionRuntime::HighLevel::PhysicalRegion& region,
         const LegionRuntime::HighLevel::FieldID fid) {
   //typename MyAccessor<T>::accessor_t my_accessor =
   return region.get_field_accessor(fid).typeify<T>().
-    template convert<typename MyAccessor<T>::accessor_type_t>();
+    template convert<MyAccessorType<T>>();
   //std::cout << &my_accessor << std::endl;
   //return my_accessor; 
 }
+
+
+// convenience function for getting accessors
+// template <typename T>
+// typename MyAccessor<T>::accessor_t get_accessor(
+//         const LegionRuntime::HighLevel::PhysicalRegion& region,
+//         const LegionRuntime::HighLevel::FieldID fid) {
+//   //typename MyAccessor<T>::accessor_t my_accessor =
+//   return region.get_field_accessor(fid).typeify<T>().
+//     template convert<typename MyAccessor<T>::accessor_type_t>();
+//   //std::cout << &my_accessor << std::endl;
+//   //return my_accessor; 
+// }
 
 
 // convenience class for reduction accessors

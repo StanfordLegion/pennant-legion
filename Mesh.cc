@@ -832,7 +832,7 @@ void Mesh::calcEdgeLenTask(
         get_accessor<double>(regions[3], FID_ELEN);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.next(); )
+    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next(); )
     {
         ptr_t s = itrs.next();
         ptr_t p1 = acc_mapsp1.read(s);
