@@ -18,6 +18,7 @@
 
 #include "legion.h"
 
+#include "Mesh.hh"
 #include "Vec2.hh"
 
 // forward declarations
@@ -28,28 +29,6 @@ class TTS;
 class QCS;
 class HydroBC;
 
-
-enum HydroFieldID {
-    FID_DTREC = 'H' * 100,
-    FID_PU,
-    FID_PU0,
-    FID_PMASWT,
-    FID_PF,
-    FID_PAP,
-    FID_ZM,
-    FID_ZR,
-    FID_ZRP,
-    FID_ZE,
-    FID_ZETOT,
-    FID_ZW,
-    FID_ZWRATE,
-    FID_ZP,
-    FID_ZSS,
-    FID_ZDU,
-    FID_SFP,
-    FID_SFQ,
-    FID_SFT
-};
 
 enum HydroTaskID {
     TID_ADVPOSHALF = 'H' * 100,

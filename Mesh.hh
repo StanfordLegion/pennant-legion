@@ -60,6 +60,42 @@ enum MeshFieldID {
     FID_ZDL
 };
 
+enum HydroFieldID {
+    FID_DTREC = 'H' * 100,
+    FID_PU,
+    FID_PU0,
+    FID_PMASWT,
+    FID_PF,
+    FID_PAP,
+    FID_ZM,
+    FID_ZR,
+    FID_ZRP,
+    FID_ZE,
+    FID_ZETOT,
+    FID_ZW,
+    FID_ZWRATE,
+    FID_ZP,
+    FID_ZSS,
+    FID_ZDU,
+    FID_SFP,
+    FID_SFQ,
+    FID_SFT
+};
+
+enum QCSFieldID {
+    FID_CAREA = 'Q' * 100,
+    FID_CEVOL,
+    FID_CDU,
+    FID_CDIV,
+    FID_CCOS,
+    FID_CQE1,
+    FID_CQE2,
+    FID_ZUC,
+    FID_CRMU,
+    FID_CW,
+    FID_ZTMP
+};
+
 enum MeshTaskID {
     TID_COPYFIELDDBL = 'M' * 100,
     TID_COPYFIELDDBL2,

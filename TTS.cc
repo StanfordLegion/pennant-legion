@@ -29,7 +29,7 @@ namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
     HighLevelRuntime::register_legion_task<TTS::calcForceTask>(
             TID_CALCFORCETTS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcforcetts");
 }
 }; // namespace
 

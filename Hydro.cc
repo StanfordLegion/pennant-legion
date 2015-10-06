@@ -40,34 +40,34 @@ namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
     HighLevelRuntime::register_legion_task<Hydro::advPosHalfTask>(
             TID_ADVPOSHALF, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "advposhalf");
     HighLevelRuntime::register_legion_task<Hydro::calcRhoTask>(
             TID_CALCRHO, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcrho");
     HighLevelRuntime::register_legion_task<Hydro::calcCrnrMassTask>(
             TID_CALCCRNRMASS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calccrnrmass");
     HighLevelRuntime::register_legion_task<Hydro::sumCrnrForceTask>(
             TID_SUMCRNRFORCE, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "sumcrnrforce");
     HighLevelRuntime::register_legion_task<Hydro::calcAccelTask>(
             TID_CALCACCEL, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcaccel");
     HighLevelRuntime::register_legion_task<Hydro::advPosFullTask>(
             TID_ADVPOSFULL, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "advposfull");
     HighLevelRuntime::register_legion_task<Hydro::calcWorkTask>(
             TID_CALCWORK, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcwork");
     HighLevelRuntime::register_legion_task<Hydro::calcWorkRateTask>(
             TID_CALCWORKRATE, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcworkrate");
     HighLevelRuntime::register_legion_task<Hydro::calcEnergyTask>(
             TID_CALCENERGY, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcenergy");
     HighLevelRuntime::register_legion_task<double, Hydro::calcDtTask>(
             TID_CALCDT, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcdt");
 }
 }; // namespace
 
@@ -173,36 +173,38 @@ void Hydro::init() {
             fill(&pu[pfirst], &pu[plast], double2(0., 0.));
     }  // for pch
 
-    FieldSpace fsp = mesh->lrp.get_field_space();
-    FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
-    fap.allocate_field(sizeof(double2), FID_PU);
-    fap.allocate_field(sizeof(double2), FID_PU0);
-    fap.allocate_field(sizeof(double), FID_PMASWT);
-    fap.allocate_field(sizeof(double2), FID_PF);
-    fap.allocate_field(sizeof(double2), FID_PAP);
+    // FIXME: This doesn't work, the fields won't appear in this tasks
+    // region requirements.
+    // FieldSpace fsp = mesh->lrp.get_field_space();
+    // FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
+    // fap.allocate_field(sizeof(double2), FID_PU);
+    // fap.allocate_field(sizeof(double2), FID_PU0);
+    // fap.allocate_field(sizeof(double), FID_PMASWT);
+    // fap.allocate_field(sizeof(double2), FID_PF);
+    // fap.allocate_field(sizeof(double2), FID_PAP);
 
-    FieldSpace fsz = mesh->lrz.get_field_space();
-    FieldAllocator faz = runtime->create_field_allocator(ctx, fsz);
-    faz.allocate_field(sizeof(double), FID_ZM);
-    faz.allocate_field(sizeof(double), FID_ZR);
-    faz.allocate_field(sizeof(double), FID_ZRP);
-    faz.allocate_field(sizeof(double), FID_ZE);
-    faz.allocate_field(sizeof(double), FID_ZETOT);
-    faz.allocate_field(sizeof(double), FID_ZW);
-    faz.allocate_field(sizeof(double), FID_ZWRATE);
-    faz.allocate_field(sizeof(double), FID_ZP);
-    faz.allocate_field(sizeof(double), FID_ZSS);
-    faz.allocate_field(sizeof(double), FID_ZDU);
+    // FieldSpace fsz = mesh->lrz.get_field_space();
+    // FieldAllocator faz = runtime->create_field_allocator(ctx, fsz);
+    // faz.allocate_field(sizeof(double), FID_ZM);
+    // faz.allocate_field(sizeof(double), FID_ZR);
+    // faz.allocate_field(sizeof(double), FID_ZRP);
+    // faz.allocate_field(sizeof(double), FID_ZE);
+    // faz.allocate_field(sizeof(double), FID_ZETOT);
+    // faz.allocate_field(sizeof(double), FID_ZW);
+    // faz.allocate_field(sizeof(double), FID_ZWRATE);
+    // faz.allocate_field(sizeof(double), FID_ZP);
+    // faz.allocate_field(sizeof(double), FID_ZSS);
+    // faz.allocate_field(sizeof(double), FID_ZDU);
 
-    FieldSpace fss = mesh->lrs.get_field_space();
-    FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
-    fas.allocate_field(sizeof(double2), FID_SFP);
-    fas.allocate_field(sizeof(double2), FID_SFQ);
-    fas.allocate_field(sizeof(double2), FID_SFT);
+    // FieldSpace fss = mesh->lrs.get_field_space();
+    // FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
+    // fas.allocate_field(sizeof(double2), FID_SFP);
+    // fas.allocate_field(sizeof(double2), FID_SFQ);
+    // fas.allocate_field(sizeof(double2), FID_SFT);
 
-    FieldSpace fsglb = mesh->lrglb.get_field_space();
-    FieldAllocator faglb = runtime->create_field_allocator(ctx, fsglb);
-    faglb.allocate_field(sizeof(double), FID_DTREC);
+    // FieldSpace fsglb = mesh->lrglb.get_field_space();
+    // FieldAllocator faglb = runtime->create_field_allocator(ctx, fsglb);
+    // faglb.allocate_field(sizeof(double), FID_DTREC);
 
     LogicalRegion& lrp = mesh->lrp;
     LogicalRegion& lrz = mesh->lrz;
@@ -841,7 +843,6 @@ void Hydro::advPosHalfTask(
         HighLevelRuntime *runtime) {
     const double dt = *((const double*)task->args);
     const double dth = 0.5 * dt;
-    assert(0);
     MyAccessor<double2> acc_px0 =
         get_accessor<double2>(regions[0], FID_PX0);
     MyAccessor<double2> acc_pu0 =

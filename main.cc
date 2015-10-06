@@ -103,7 +103,8 @@ int main(int argc, char **argv)
     // registered by the classes that own them
     HighLevelRuntime::set_top_level_task_id(TID_MAIN);
     HighLevelRuntime::register_legion_task<mainTask>(
-            TID_MAIN, Processor::LOC_PROC, true, false);
+      TID_MAIN, Processor::LOC_PROC, true, false,
+      AUTO_GENERATE_ID, TaskConfigOptions(), "main");
 
     HighLevelRuntime::set_registration_callback(registerMappers);
 

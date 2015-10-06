@@ -29,7 +29,7 @@ namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
     HighLevelRuntime::register_legion_task<HydroBC::applyFixedBCTask>(
             TID_APPLYFIXEDBC, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "applyfixedbc");
 }
 }; // namespace
 
@@ -54,9 +54,9 @@ HydroBC::HydroBC(
     iab.alloc(numb);
     FieldSpace fsb = runtime->create_field_space(ctx);
     FieldAllocator fab = runtime->create_field_allocator(ctx, fsb);
-    lrb = runtime->create_logical_region(ctx, isb, fsb);
     fab.allocate_field(sizeof(ptr_t), FID_MAPBP);
     fab.allocate_field(sizeof(int), FID_MAPBPREG);
+    lrb = runtime->create_logical_region(ctx, isb, fsb);
 
     // create boundary point partition
     Coloring colorb;

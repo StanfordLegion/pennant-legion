@@ -31,16 +31,16 @@ namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
     HighLevelRuntime::register_legion_task<QCS::setCornerDivTask>(
             TID_SETCORNERDIV, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "setcornerdiv");
     HighLevelRuntime::register_legion_task<QCS::setQCnForceTask>(
             TID_SETQCNFORCE, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "setqcnforce");
     HighLevelRuntime::register_legion_task<QCS::setForceTask>(
             TID_SETFORCEQCS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "setforceqcs");
     HighLevelRuntime::register_legion_task<QCS::setVelDiffTask>(
             TID_SETVELDIFF, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "setveldiff");
 }
 }; // namespace
 
@@ -50,24 +50,24 @@ QCS::QCS(const InputFile* inp, Hydro* h) : hydro(h) {
     q1 = inp->getDouble("q1", 0.);
     q2 = inp->getDouble("q2", 2.);
 
-    FieldSpace fsz = hydro->mesh->lrz.get_field_space();
-    FieldAllocator faz = hydro->runtime->create_field_allocator(
-            hydro->ctx, fsz);
-    faz.allocate_field(sizeof(double2), FID_ZUC);
-    faz.allocate_field(sizeof(double), FID_ZTMP);
+    // FieldSpace fsz = hydro->mesh->lrz.get_field_space();
+    // FieldAllocator faz = hydro->runtime->create_field_allocator(
+    //         hydro->ctx, fsz);
+    // faz.allocate_field(sizeof(double2), FID_ZUC);
+    // faz.allocate_field(sizeof(double), FID_ZTMP);
 
-    FieldSpace fss = hydro->mesh->lrs.get_field_space();
-    FieldAllocator fas = hydro->runtime->create_field_allocator(
-            hydro->ctx, fss);
-    fas.allocate_field(sizeof(double), FID_CAREA);
-    fas.allocate_field(sizeof(double), FID_CEVOL);
-    fas.allocate_field(sizeof(double), FID_CDU);
-    fas.allocate_field(sizeof(double), FID_CDIV);
-    fas.allocate_field(sizeof(double), FID_CCOS);
-    fas.allocate_field(sizeof(double2), FID_CQE1);
-    fas.allocate_field(sizeof(double2), FID_CQE2);
-    fas.allocate_field(sizeof(double), FID_CRMU);
-    fas.allocate_field(sizeof(double), FID_CW);
+    // FieldSpace fss = hydro->mesh->lrs.get_field_space();
+    // FieldAllocator fas = hydro->runtime->create_field_allocator(
+    //         hydro->ctx, fss);
+    // fas.allocate_field(sizeof(double), FID_CAREA);
+    // fas.allocate_field(sizeof(double), FID_CEVOL);
+    // fas.allocate_field(sizeof(double), FID_CDU);
+    // fas.allocate_field(sizeof(double), FID_CDIV);
+    // fas.allocate_field(sizeof(double), FID_CCOS);
+    // fas.allocate_field(sizeof(double2), FID_CQE1);
+    // fas.allocate_field(sizeof(double2), FID_CQE2);
+    // fas.allocate_field(sizeof(double), FID_CRMU);
+    // fas.allocate_field(sizeof(double), FID_CW);
 }
 
 QCS::~QCS() {}

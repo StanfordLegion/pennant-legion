@@ -36,31 +36,31 @@ namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
     HighLevelRuntime::register_legion_task<Mesh::copyFieldTask<double> >(
             TID_COPYFIELDDBL, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "copyfielddbl");
     HighLevelRuntime::register_legion_task<Mesh::copyFieldTask<double2> >(
             TID_COPYFIELDDBL2, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "copyfielddbl2");
     HighLevelRuntime::register_legion_task<Mesh::fillFieldTask<double> >(
             TID_FILLFIELDDBL, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "fillfielddbl");
     HighLevelRuntime::register_legion_task<Mesh::fillFieldTask<double2> >(
             TID_FILLFIELDDBL2, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "fillfielddbl2");
     HighLevelRuntime::register_legion_task<Mesh::calcCtrsTask>(
             TID_CALCCTRS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcctrs");
     HighLevelRuntime::register_legion_task<int, Mesh::calcVolsTask>(
             TID_CALCVOLS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcvols");
     HighLevelRuntime::register_legion_task<Mesh::calcSurfVecsTask>(
             TID_CALCSURFVECS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcsurfvecs");
     HighLevelRuntime::register_legion_task<Mesh::calcEdgeLenTask>(
             TID_CALCEDGELEN, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcedgelen");
     HighLevelRuntime::register_legion_task<Mesh::calcCharLenTask>(
             TID_CALCCHARLEN, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calccharlen");
 
     HighLevelRuntime::register_reduction_op<SumOp<int> >(
             OPID_SUMINT);
@@ -222,17 +222,22 @@ void Mesh::init() {
     iap.alloc(nump);
     FieldSpace fsp = runtime->create_field_space(ctx);
     FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
-    lrp = runtime->create_logical_region(ctx, isp, fsp);
     fap.allocate_field(sizeof(double2), FID_PX);
     fap.allocate_field(sizeof(double2), FID_PXP);
     fap.allocate_field(sizeof(double2), FID_PX0);
+    fap.allocate_field(sizeof(double2), FID_PU);
+    fap.allocate_field(sizeof(double2), FID_PU0);
+    fap.allocate_field(sizeof(double), FID_PMASWT);
+    fap.allocate_field(sizeof(double2), FID_PF);
+    fap.allocate_field(sizeof(double2), FID_PAP);
+    lrp = runtime->create_logical_region(ctx, isp, fsp);
+    runtime->attach_name(lrp, "lrp");
 
     IndexSpace isz = runtime->create_index_space(ctx, numz);
     IndexAllocator iaz = runtime->create_index_allocator(ctx, isz);
     iaz.alloc(numz);
     FieldSpace fsz = runtime->create_field_space(ctx);
     FieldAllocator faz = runtime->create_field_allocator(ctx, fsz);
-    lrz = runtime->create_logical_region(ctx, isz, fsz);
     faz.allocate_field(sizeof(int), FID_ZNUMP);
     faz.allocate_field(sizeof(double2), FID_ZX);
     faz.allocate_field(sizeof(double2), FID_ZXP);
@@ -242,13 +247,26 @@ void Mesh::init() {
     faz.allocate_field(sizeof(double), FID_ZVOLP);
     faz.allocate_field(sizeof(double), FID_ZVOL0);
     faz.allocate_field(sizeof(double), FID_ZDL);
+    faz.allocate_field(sizeof(double), FID_ZM);
+    faz.allocate_field(sizeof(double), FID_ZR);
+    faz.allocate_field(sizeof(double), FID_ZRP);
+    faz.allocate_field(sizeof(double), FID_ZE);
+    faz.allocate_field(sizeof(double), FID_ZETOT);
+    faz.allocate_field(sizeof(double), FID_ZW);
+    faz.allocate_field(sizeof(double), FID_ZWRATE);
+    faz.allocate_field(sizeof(double), FID_ZP);
+    faz.allocate_field(sizeof(double), FID_ZSS);
+    faz.allocate_field(sizeof(double), FID_ZDU);
+    faz.allocate_field(sizeof(double2), FID_ZUC);
+    faz.allocate_field(sizeof(double), FID_ZTMP);
+    lrz = runtime->create_logical_region(ctx, isz, fsz);
+    runtime->attach_name(lrz, "lrz");
 
     IndexSpace iss = runtime->create_index_space(ctx, nums);
     IndexAllocator ias = runtime->create_index_allocator(ctx, iss);
     ias.alloc(nums);
     FieldSpace fss = runtime->create_field_space(ctx);
     FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
-    lrs = runtime->create_logical_region(ctx, iss, fss);
     fas.allocate_field(sizeof(ptr_t), FID_MAPSP1);
     fas.allocate_field(sizeof(ptr_t), FID_MAPSP2);
     fas.allocate_field(sizeof(ptr_t), FID_MAPSZ);
@@ -265,6 +283,20 @@ void Mesh::init() {
     fas.allocate_field(sizeof(double2), FID_SSURFP);
     fas.allocate_field(sizeof(double), FID_ELEN);
     fas.allocate_field(sizeof(double), FID_SMF);
+    fas.allocate_field(sizeof(double2), FID_SFP);
+    fas.allocate_field(sizeof(double2), FID_SFQ);
+    fas.allocate_field(sizeof(double2), FID_SFT);
+    fas.allocate_field(sizeof(double), FID_CAREA);
+    fas.allocate_field(sizeof(double), FID_CEVOL);
+    fas.allocate_field(sizeof(double), FID_CDU);
+    fas.allocate_field(sizeof(double), FID_CDIV);
+    fas.allocate_field(sizeof(double), FID_CCOS);
+    fas.allocate_field(sizeof(double2), FID_CQE1);
+    fas.allocate_field(sizeof(double2), FID_CQE2);
+    fas.allocate_field(sizeof(double), FID_CRMU);
+    fas.allocate_field(sizeof(double), FID_CW);
+    lrs = runtime->create_logical_region(ctx, iss, fss);
+    runtime->attach_name(lrs, "lrs");
 
     // create index spaces and fields for global vars
     IndexSpace isglb = runtime->create_index_space(ctx, 1);
@@ -272,8 +304,10 @@ void Mesh::init() {
     iaglb.alloc(1);
     FieldSpace fsglb = runtime->create_field_space(ctx);
     FieldAllocator faglb = runtime->create_field_allocator(ctx, fsglb);
-    lrglb = runtime->create_logical_region(ctx, isglb, fsglb);
     faglb.allocate_field(sizeof(int), FID_NUMSBAD);
+    faglb.allocate_field(sizeof(double), FID_DTREC);
+    lrglb = runtime->create_logical_region(ctx, isglb, fsglb);
+    runtime->attach_name(lrglb, "lrglb");
 
     // create domain over pieces
     Rect<1> task_rect(Point<1>(0), Point<1>(numpcs-1));

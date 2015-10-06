@@ -29,10 +29,10 @@ namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
     HighLevelRuntime::register_legion_task<PolyGas::calcStateHalfTask>(
             TID_CALCSTATEHALF, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcstatehalf");
     HighLevelRuntime::register_legion_task<PolyGas::calcForceTask>(
             TID_CALCFORCEPGAS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true));
+            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcforcepgas");
 }
 }; // namespace
 

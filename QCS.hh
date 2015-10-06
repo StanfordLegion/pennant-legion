@@ -15,24 +15,12 @@
 
 #include "legion_types.h"
 
+#include "Mesh.hh"
+
 // forward declarations
 class InputFile;
 class Hydro;
 
-
-enum QCSFieldID {
-    FID_CAREA = 'Q' * 100,
-    FID_CEVOL,
-    FID_CDU,
-    FID_CDIV,
-    FID_CCOS,
-    FID_CQE1,
-    FID_CQE2,
-    FID_ZUC,
-    FID_CRMU,
-    FID_CW,
-    FID_ZTMP
-};
 
 enum QCSTaskID {
     TID_SETCORNERDIV = 'Q' * 100,
