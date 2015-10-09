@@ -153,27 +153,27 @@ void Mesh::init() {
 
     // generate mesh
     vector<double2> nodepos;
-    vector<int> cellstart, cellsize, cellnodes;
-    vector<int> cellcolors;
-    gmesh->generate(numpcs, nodepos, nodecolors, nodemcolors,
-            cellstart, cellsize, cellnodes, cellcolors);
+    vector<int> zonestart, zonesize, zonenodes;
+    vector<int> zonecolors;
+    gmesh->generate(numpcs, nodepos, pointcolors, pointmcolors,
+            zonestart, zonesize, zonenodes, zonecolors);
 
     nump = nodepos.size();
-    numz = cellstart.size();
-    nums = cellnodes.size();
+    numz = zonestart.size();
+    nums = zonenodes.size();
     numc = nums;
 
-    // copy cell sizes to mesh
+    // copy zone sizes to mesh
     znump = alloc<int>(numz);
-    copy(cellsize.begin(), cellsize.end(), znump);
+    copy(zonesize.begin(), zonesize.end(), znump);
 
     // populate maps:
-    // use the cell* arrays to populate the side maps
-    initSides(cellstart, cellsize, cellnodes);
-    // release memory from cell* arrays
-    cellstart.resize(0);
-    cellsize.resize(0);
-    cellnodes.resize(0);
+    // use the zone* arrays to populate the side maps
+    initSides(zonestart, zonesize, zonenodes);
+    // release memory from zone* arrays
+    zonestart.resize(0);
+    zonesize.resize(0);
+    zonenodes.resize(0);
 
     // populate chunk information
     initChunks();
@@ -233,6 +233,15 @@ void Mesh::init() {
     lrp = runtime->create_logical_region(ctx, isp, fsp);
     runtime->attach_name(lrp, "lrp");
 
+    /* setup explicit ghost fields rather than simply sharing fields */ 
+    FieldSpace fsp_ghost = runtime->create_field_space(ctx);
+    FieldAllocator fap_ghost = runtime->create_field_allocator(ctx, fsp_ghost);
+    fap_ghost.allocate_field(sizeof(double2), FID_PXP_GHOST);
+    fap_ghost.allocate_field(sizeof(double2), FID_PU_GHOST);
+    fap_ghost.allocate_field(sizeof(double2), FID_PU0_GHOST);
+    fap_ghost.allocate_field(sizeof(double), FID_PMASWT_GHOST);
+    fap_ghost.allocate_field(sizeof(double2), FID_PF_GHOST);
+    
     IndexSpace isz = runtime->create_index_space(ctx, numz);
     IndexAllocator iaz = runtime->create_index_allocator(ctx, isz);
     iaz.alloc(numz);
@@ -313,26 +322,20 @@ void Mesh::init() {
     Rect<1> task_rect(Point<1>(0), Point<1>(numpcs-1));
     dompc  = Domain::from_rect<1>(task_rect);
     IndexSpace ispc = runtime->create_index_space(ctx, dompc);
-    
-#if 0 
-    
-    {
-      IndexAllocator allocator = runtime->create_index_allocator(ctx, ispc);
-      allocator.alloc(numpcs);
-    }
-    dompc = runtime->get_index_space_domain(ctx, ispc);
-#endif 
+    runtime->attach_name(ispc, "disjoint index space");
+
+
     // create zone and side partitions
     Coloring colorz, colors;
     int z0 = 0;
     while (z0 < numz)
     {
-        int s0 = cellstart[z0];
-        int c = cellcolors[z0];
+        int s0 = zonestart[z0];
+        int c = zonecolors[z0];
         int z1 = z0 + 1;
         // find range with [z0, z1) all the same color
-        while (z1 < numz && cellcolors[z1] == c) ++z1;
-        int s1 = (z1 < numz ? cellstart[z1] : nums);
+        while (z1 < numz && zonecolors[z1] == c) ++z1;
+        int s1 = (z1 < numz ? zonestart[z1] : nums);
         colorz[c].ranges.insert(pair<int, int>(z0, z1 - 1));
         colors[c].ranges.insert(pair<int, int>(s0, s1 - 1));
         z0 = z1;
@@ -345,7 +348,7 @@ void Mesh::init() {
     lps = runtime->get_logical_partition(ctx, lrs, ips);
 
     // create point partitions
-    Coloring colorpall, colorpprv, colorpshr, colorpmstr;
+    Coloring colorpall, colorpprv, colorpshr, colorpmstr, colorpghost;
     // force all colors to exist, even if they might be empty
     colorpall[0];
     colorpall[1];
@@ -353,30 +356,74 @@ void Mesh::init() {
         colorpprv[c];
         colorpmstr[c];
         colorpshr[c];
+        colorpghost[c];
     }
     int p0 = 0;
     while (p0 < nump)
     {
-        int c = nodecolors[p0];
+        int c = pointcolors[p0];
         int p1 = p0 + 1;
         if (c != MULTICOLOR) {
             // find range with [p0, p1) all the same color
-            while (p1 < nump && nodecolors[p1] == c) ++p1;
+            while (p1 < nump && pointcolors[p1] == c) ++p1;
             colorpall[0].ranges.insert(pair<int, int>(p0, p1 - 1));
             colorpprv[c].ranges.insert(pair<int, int>(p0, p1 - 1));
         }
         else {
             // insert p0 by itself
             colorpall[1].points.insert(p0);
-            vector<int>& pmc = nodemcolors[p0];
+            vector<int>& pmc = pointmcolors[p0];
             colorpmstr[pmc[0]].points.insert(p0);
-            for (int i = 0; i < pmc.size(); ++i)
-                colorpshr[pmc[i]].points.insert(p0);
+            for (int i = 0; i < pmc.size(); ++i) {
+              colorpshr[pmc[i]].points.insert(p0);
+              if(i > 0) /* only add true ghosts to the ghost coloring */ 
+                colorpghost[pmc[i]].points.insert(p0);
+            }
+            // Create logical partitions for ghosts
+            
         }
         p0 = p1;
     }
+
+    int nshared_points = 0;
+    char buf[32]; 
+    for (int c = 0; c < numpcs; ++c){
+      std::cout << "Color " << c << " has " << colorpshr[c].points.size() << " shared points" << std::endl;
+      /* create a ghost region for each of these colors */
+      nshared_points += colorpshr[c].points.size(); 
+#if 0
+      for(int pt = 0; pt < colorpshr[c].points.size(); pt++) {
+        auto search = colorpshr[c].points.find(pt);
+        if(search != colorpshr[c].points.end()) { 
+          std::cout << " Point " << pt << " has colors ";
+          for (int cm = 0; cm < pointmcolors[pt].size(); cm++) {
+            std::cout << pointmcolors[pt][cm] << " ";
+            
+          }
+        }
+      }
+      std::cout << std::endl;
+#endif
+    }
+    std:: cout << " Total number of shared points is: " << pointmcolors.size() << " and color*point total is " << nshared_points << std::endl;
+
+    for(int pt = 0; pt < pointmcolors.size(); pt++) {
+      vector<int> &pmc = pointmcolors[pt];
+      if(!pmc.size()) continue; 
+      std::cout << "Point " << pt << " has colors: ";
+      
+      for (int i = 0; i < pmc.size(); i++) {
+        std::cout <<  pmc[i] << ","; 
+      }
+      std::cout << std::endl;
+        
+    }
+    
+    /* this is the disjoint index partition based on colors from number of pieces */ 
     IndexPartition ippall = runtime->create_index_partition(
                 ctx, isp, colorpall, true);
+
+    
     lppall = runtime->get_logical_partition(ctx, lrp, ippall);
     IndexSpace ispprv = runtime->get_index_subspace(ctx, ippall, 0);
     IndexSpace ispshr = runtime->get_index_subspace(ctx, ippall, 1);
@@ -393,7 +440,34 @@ void Mesh::init() {
                 ctx, ispshr, colorpshr, false);
     lppshr = runtime->get_logical_partition_by_tree(
             ctx, ippshr, fsp, lrp.get_tree_id());
+    
+    IndexPartition ippghost = runtime->create_index_partition(
+      ctx, isp, colorpghost, false); 
+    
+    /* create a ghost region for each  color */
+    for (int c = 0; c < numpcs; ++c){
+      IndexSpace iss_ghost = runtime->get_index_subspace(ctx, ippghost,c);
+      sprintf(buf, "iss_ghost_%d", c);
+      runtime->attach_name(iss_ghost, buf);         
+      LogicalRegion lr_ghost =runtime->create_logical_region(ctx, iss_ghost, fsp_ghost);
+      sprintf(buf, "lr_ghost%d", c);
+      runtime->attach_name(lr_ghost, buf);
+      ghost_regions.push_back(lr_ghost);                                                      
+    }
 
+    /* create a master ghost region for each color */
+    /*   - by convention the lowest order color of a multi-color point is master */ 
+    for (int c = 0; c< numpcs; ++c) {
+      IndexSpace iss_master = runtime->get_index_subspace(ctx, ippmstr, c);
+      sprintf(buf, "iss_master_%d", c);
+      runtime->attach_name(iss_master, buf);         
+      LogicalRegion lr_master =runtime->create_logical_region(ctx, iss_master, fsp_ghost);
+      sprintf(buf, "lr_master%d", c);
+      runtime->attach_name(lr_master, buf);
+      master_regions.push_back(lr_master);
+    }
+
+    
     vector<ptr_t> lgmapsp1(&mapsp1[0], &mapsp1[nums]);
     vector<ptr_t> lgmapsp2(&mapsp2[0], &mapsp2[nums]);
     vector<ptr_t> lgmapsz (&mapsz [0], &mapsz [nums]);
@@ -402,8 +476,8 @@ void Mesh::init() {
 
     vector<int> lgmapsp1reg(nums), lgmapsp2reg(nums);
     for (int s = 0; s < nums; ++s) {
-        lgmapsp1reg[s] = (nodecolors[mapsp1[s]] == MULTICOLOR);
-        lgmapsp2reg[s] = (nodecolors[mapsp2[s]] == MULTICOLOR);
+        lgmapsp1reg[s] = (pointcolors[mapsp1[s]] == MULTICOLOR);
+        lgmapsp2reg[s] = (pointcolors[mapsp2[s]] == MULTICOLOR);
     }
 
     setField(lrs, FID_MAPSP1, &lgmapsp1[0], nums);
@@ -425,9 +499,9 @@ void Mesh::init() {
 
 
 void Mesh::initSides(
-        std::vector<int>& cellstart,
-        std::vector<int>& cellsize,
-        std::vector<int>& cellnodes) {
+        std::vector<int>& zonestart,
+        std::vector<int>& zonesize,
+        std::vector<int>& zonenodes) {
 
     mapsp1 = alloc<int>(nums);
     mapsp2 = alloc<int>(nums);
@@ -436,15 +510,15 @@ void Mesh::initSides(
     mapss4 = alloc<int>(nums);
 
     for (int z = 0; z < numz; ++z) {
-        int sbase = cellstart[z];
-        int size = cellsize[z];
+        int sbase = zonestart[z];
+        int size = zonesize[z];
         for (int n = 0; n < size; ++n) {
             int s = sbase + n;
             int snext = sbase + (n + 1 == size ? 0 : n + 1);
             int slast = sbase + (n == 0 ? size : n) - 1;
             mapsz[s] = z;
-            mapsp1[s] = cellnodes[s];
-            mapsp2[s] = cellnodes[snext];
+            mapsp1[s] = zonenodes[s];
+            mapsp2[s] = zonenodes[snext];
             mapss3[s] = slast;
             mapss4[s] = snext;
         } // for n
