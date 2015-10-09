@@ -66,8 +66,8 @@ HydroBC::HydroBC(
     }
     for (int b = 0; b < numb; ++b) {
         int p = mbp[b];
-        int c = mesh->nodecolors[p];
-        if (c == MULTICOLOR) c = mesh->nodemcolors[p][0];
+        int c = mesh->pointcolors[p];
+        if (c == MULTICOLOR) c = mesh->pointmcolors[p][0];
         colorb[c].points.insert(b);
     }
     IndexPartition ipb = runtime->create_index_partition(
@@ -78,7 +78,7 @@ HydroBC::HydroBC(
     vector<ptr_t> lgmapbp(&mbp[0], &mbp[numb]);
     vector<int> lgmapbpreg(numb);
     for (int b = 0; b < numb; ++b) {
-        lgmapbpreg[b] = (mesh->nodecolors[mbp[b]] == MULTICOLOR);
+        lgmapbpreg[b] = (mesh->pointcolors[mbp[b]] == MULTICOLOR);
     }
 
     mesh->setField(lrb, FID_MAPBP, &lgmapbp[0], numb);
