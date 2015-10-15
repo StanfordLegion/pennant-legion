@@ -179,7 +179,18 @@ public:
     { ReduceHelper<T, EXCLUSIVE>::minOf(rhs1, rhs2); }
 };
 
+#define MAX_NEIGHBOR_DEGREE 4 
 
+struct SPMDArgs{
+public:
+  int num_waiters; /* this is the number of ghosts for my master regions  */ 
+  int num_notifiers; /* this is the number of masters for which I have ghosts */ 
+  LegionRuntime::HighLevel::PhaseBarrier notify_ready[MAX_NEIGHBOR_DEGREE];
+  LegionRuntime::HighLevel::PhaseBarrier notify_empty[MAX_NEIGHBOR_DEGREE];
+  LegionRuntime::HighLevel::PhaseBarrier wait_ready[MAX_NEIGHBOR_DEGREE];
+  LegionRuntime::HighLevel::PhaseBarrier wait_empty[MAX_NEIGHBOR_DEGREE];
+};
+  
 class Mesh {
 public:
 
@@ -240,16 +251,20 @@ public:
   LegionRuntime::HighLevel::LogicalRegion lrp, lrz, lrs;
   LegionRuntime::HighLevel::LogicalRegion lrglb;
   LegionRuntime::HighLevel::LogicalPartition lppall, lpz, lps;
-  LegionRuntime::HighLevel::LogicalPartition lppprv, lppmstr, lppshr;
+  LegionRuntime::HighLevel::LogicalPartition lppprv, lppmstr, lppshr, lppslaveghost, lppmasterghost;
   LegionRuntime::HighLevel::Domain dompc;
   // domain of legion pieces
   LegionRuntime::HighLevel::FutureMap fmapcv;
   // future map for calcVolsTask
-  std::vector<LegionRuntime::HighLevel::LogicalRegion> ghost_regions;
-  /* Ghost regions are for points with multiple colors, one logical region is created for each color that has multi-color points as members. Each logical region contains the set of points that satisfy pointmcolors[point][i>0] exists. By convention pointmcolors[point][0] (the lowest order color of a multicolor point is the master color, see below */
+  std::vector<LegionRuntime::HighLevel::LogicalRegion> slave_ghost_regions;
+  /* Slave ghost regions are for points with multiple colors, one logical region is created for each color that has multi-color points as members. Each logical region contains the set of points that satisfy pointmcolors[point][i>0] exists. By convention pointmcolors[point][0] (the lowest order color of a multicolor point is the master color, see below */
   
-  std::vector<LegionRuntime::HighLevel::LogicalRegion> master_regions;
-  /* Master regions are for points with multiple colors, one logical region is created for each color that has multi-color points  as members (similar to lr_ghosts). Points which are mastered by a specific color are included in the logical region, that is, forall point s.t. pointmcolors[point][0]  exists. */ 
+  std::vector<LegionRuntime::HighLevel::LogicalRegion> master_ghost_regions;
+  /* Master ghost regions are for points with multiple colors, one logical region is created for each color that has multi-color points  as members (similar to lr_ghosts). Points which are mastered by a specific color are included in the logical region, that is, forall point s.t. pointmcolors[point][0]  exists. */ 
+
+  std::vector<LegionRuntime::HighLevel::PhaseBarrier> ready_barriers;
+  std::vector<LegionRuntime::HighLevel::PhaseBarrier> empty_barriers;  
+  
   
   Mesh(
     const InputFile* inp,
