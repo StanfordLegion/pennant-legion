@@ -11,6 +11,7 @@
  */
 
 #include "Mesh.hh"
+#include "Utils.hh"
 
 #include <cmath>
 #include <iostream>
@@ -348,7 +349,7 @@ void Mesh::init() {
     lps = runtime->get_logical_partition(ctx, lrs, ips);
 
     // create point partitions
-    Coloring colorpall, colorpprv, colorpshr, colorpmstr, colorpghost;
+    Coloring colorpall, colorpprv, colorpshr, colorpmstr, colorpmasterghost, colorpslaveghost;  
     // force all colors to exist, even if they might be empty
     colorpall[0];
     colorpall[1];
@@ -356,8 +357,20 @@ void Mesh::init() {
         colorpprv[c];
         colorpmstr[c];
         colorpshr[c];
+#ifdef PENNANT_DEPENDENT_PARTITIONING
         colorpghost[c];
+#endif
     }
+    /* create colorpace with all possible two color comobos */ 
+    for (int c = 0; c < numpcs*numpcs; ++c) {
+      colorpslaveghost[c];
+      colorpmasterghost[c];  
+    }
+    /* now create a color space that will be used to identify each intersection of
+       colors, for ghosting */
+    Domain color_space_ghost = Domain::from_rect<1>(Rect<1>(0, (numpcs * numpcs)-1)); 
+
+    
     int p0 = 0;
     while (p0 < nump)
     {
@@ -376,8 +389,17 @@ void Mesh::init() {
             colorpmstr[pmc[0]].points.insert(p0);
             for (int i = 0; i < pmc.size(); ++i) {
               colorpshr[pmc[i]].points.insert(p0);
-              if(i > 0) /* only add true ghosts to the ghost coloring */ 
-                colorpghost[pmc[i]].points.insert(p0);
+              if(i > 0) {
+                /* only add true ghosts to the ghost coloring
+                   note that we use the convention that the color of the ghost regions 
+                   is the master color + the slave color with the slave color scaled by the 
+                   the width of the color space 
+                */
+                DEBUG( "Adding a point to master ghost color " << pmc[0] << "," << pmc[i] << std::endl ); 
+                colorpmasterghost[pmc[0]+pmc[i]*numpcs].points.insert(p0);
+                DEBUG( "Adding a point to slave ghost color " << pmc[i] << "," << pmc[0] << std::endl ); 
+                colorpslaveghost[pmc[i]+pmc[0]*numpcs].points.insert(p0);
+              }
             }
             // Create logical partitions for ghosts
             
@@ -385,37 +407,71 @@ void Mesh::init() {
         p0 = p1;
     }
 
+                                                              
     int nshared_points = 0;
     char buf[32]; 
     for (int c = 0; c < numpcs; ++c){
-      std::cout << "Color " << c << " has " << colorpshr[c].points.size() << " shared points" << std::endl;
+      DEBUG("Color " << c << " has " << colorpshr[c].points.size() << " shared points" << std::endl);
       /* create a ghost region for each of these colors */
       nshared_points += colorpshr[c].points.size(); 
-#if 0
-      for(int pt = 0; pt < colorpshr[c].points.size(); pt++) {
-        auto search = colorpshr[c].points.find(pt);
-        if(search != colorpshr[c].points.end()) { 
-          std::cout << " Point " << pt << " has colors ";
-          for (int cm = 0; cm < pointmcolors[pt].size(); cm++) {
-            std::cout << pointmcolors[pt][cm] << " ";
-            
-          }
-        }
-      }
-      std::cout << std::endl;
-#endif
     }
-    std:: cout << " Total number of shared points is: " << pointmcolors.size() << " and color*point total is " << nshared_points << std::endl;
+    DEBUG (" Total number of shared points is: " << pointmcolors.size() << " and color*point total is " << nshared_points << std::endl ); 
+
+    typedef std::set<int> my_set;
+    typedef std::map<int, my_set> my_map_set;
+    my_map_set map_master_to_slave;
+    my_map_set map_slaves_to_masters;
+    /* this is a hack ghould be moved to GenMesh::generate.. */
+    for(int pt = 0; pt < pointmcolors.size(); pt++) {
+      DEBUG("PT: " << pt << std::endl);
+      vector<int> &pmc = pointmcolors[pt];
+      if(!pmc.size()) continue;
+      my_map_set::iterator it_master = map_master_to_slave.find(pmc[0]);
+      if(it_master==map_master_to_slave.end()){
+        my_set slaves;
+        map_master_to_slave.insert(std::pair<int, my_set>(pmc[0], slaves));
+        it_master = map_master_to_slave.find(pmc[0]);
+      }
+      for (int i = 1; i < pmc.size(); i++) {
+        DEBUG("on pt: " << pt << " color is " << i << std::endl);
+        it_master->second.insert(pmc[i]);
+        my_map_set::iterator it = map_slaves_to_masters.find(pmc[i]);
+        if(it!=map_slaves_to_masters.end()) {
+          it->second.insert(pmc[0]);
+        } else {
+          my_set masters;
+          masters.insert(pmc[0]); 
+          map_slaves_to_masters.insert(std::pair<int, my_set>(pmc[i], masters));
+        }
+        
+      }
+    }
+
+    for(my_map_set::iterator it = map_master_to_slave.begin(); it != map_master_to_slave.end(); it++) {
+      DEBUG("Master is: " << it->first << " slave(s) are: ");
+      for(my_set::iterator its = it->second.begin(); its != it->second.end(); its++){
+        DEBUG(*its << ","); 
+      }
+      DEBUG(std::endl);
+    }
+    
+    for(my_map_set::iterator it = map_slaves_to_masters.begin(); it != map_slaves_to_masters.end(); it++) {
+      DEBUG("Slave is: " << it->first << " master(s) are: ");
+      for(my_set::iterator its = it->second.begin(); its != it->second.end(); its++){
+        DEBUG(*its << ","); 
+      }
+      DEBUG(std::endl); 
+    }
 
     for(int pt = 0; pt < pointmcolors.size(); pt++) {
       vector<int> &pmc = pointmcolors[pt];
       if(!pmc.size()) continue; 
-      std::cout << "Point " << pt << " has colors: ";
-      
+      DEBUG("Point " << pt << " has colors: ");
       for (int i = 0; i < pmc.size(); i++) {
-        std::cout <<  pmc[i] << ","; 
+        DEBUG(pmc[i] << ",");
+        
       }
-      std::cout << std::endl;
+      DEBUG(std::endl);
         
     }
     
@@ -437,36 +493,122 @@ void Mesh::init() {
     lppmstr = runtime->get_logical_partition_by_tree(
             ctx, ippmstr, fsp, lrp.get_tree_id());
     IndexPartition ippshr = runtime->create_index_partition(
-                ctx, ispshr, colorpshr, false);
+      ctx, ispshr, colorpshr, false);
     lppshr = runtime->get_logical_partition_by_tree(
             ctx, ippshr, fsp, lrp.get_tree_id());
     
-    IndexPartition ippghost = runtime->create_index_partition(
-      ctx, isp, colorpghost, false); 
+
+
+    IndexPartition ippslaveghost = runtime->create_index_partition(
+      ctx, isp, colorpslaveghost, false);
+    lppslaveghost = runtime->get_logical_partition_by_tree(
+      ctx, ippslaveghost, fsp_ghost, lrp.get_tree_id());
+
+    IndexPartition ippmasterghost = runtime->create_index_partition(
+      ctx, isp, colorpmasterghost, false);
+    lppmasterghost = runtime->get_logical_partition_by_tree(
+      ctx, ippmasterghost, fsp_ghost, lrp.get_tree_id());
+
+
     
-    /* create a ghost region for each  color */
-    for (int c = 0; c < numpcs; ++c){
-      IndexSpace iss_ghost = runtime->get_index_subspace(ctx, ippghost,c);
-      sprintf(buf, "iss_ghost_%d", c);
-      runtime->attach_name(iss_ghost, buf);         
-      LogicalRegion lr_ghost =runtime->create_logical_region(ctx, iss_ghost, fsp_ghost);
-      sprintf(buf, "lr_ghost%d", c);
-      runtime->attach_name(lr_ghost, buf);
-      ghost_regions.push_back(lr_ghost);                                                      
+#ifdef PENNANT_DEPENDENT_PARTITIONING
+    /* note that colorpslaveghost has multicolor points, that is a point may belong to 
+       more than one color in this partitioning so it is not disjoint */ 
+    IndexPartition ippslaveghost = runtime->create_index_partition(
+      ctx, isp, colorpslaveghost, false); 
+
+    /* this pending partition will be used to populate intersections of points
+       that is the intersection of points with two colors, master and slave */ 
+    IndexPartition ippghosts_individual = runtime->create_pending_partition(ctx, isp, color_space_ghost);
+    
+    DEBUG("Created individual ghosts using create_pending_partition" << std::endl);
+    /* create a ghost region for each pair of colors */
+    for (int c0 = 0; c0 < numpcs; ++c0){
+      DEBUG("At the top of the create ghost regions loop" << std::endl);
+      IndexSpace iss_ghost_c0 = runtime->get_index_subspace(ctx, ippghost, c0);
+      DEBUG("Created index space for color " << c0 << std::endl);
+      sprintf(buf, "iss_ghost_%d", c0);
+      runtime->attach_name(iss_ghost_c0, buf);
+      for (int c1 = 0; c1 < numpcs; ++c1) {  // fix me.. this N^2 is not needed //
+        if(c1 == c0) continue;
+        IndexSpace iss_ghost_c1 = runtime->get_index_subspace(ctx, ippghost, c1);
+        DEBUG("Created index space for color " << c1 << std::endl);
+
+        sprintf(buf, "iss_ghost_%d", c1);
+        runtime->attach_name(iss_ghost_c1, buf);
+        std::vector<IndexSpace> iss_handles;
+        iss_handles.push_back(iss_ghost_c0); 
+        iss_handles.push_back(iss_ghost_c1);
+        /* Compute intersection of points with colors c1 and c0 */
+        /* note linearization of two color space... */
+        DEBUG("Creating index space for intersection colors  " << c0 << "," << c1 << " aka: " << c0+c1*numpcs  << std::endl);
+        DomainPoint dp = DomainPoint::from_point<1>(c0+c1*numpcs);
+        IndexSpace iss_ghost_c0_c1 = runtime->create_index_space_intersection(ctx, ippghosts_individual, dp, iss_handles);
+        sprintf(buf, "iss_ghost_%d_%d", c0, c1);
+        runtime->attach_name(iss_ghost_c0_c1, buf);
+
+        LogicalRegion lr_ghost =runtime->create_logical_region(ctx, iss_ghost_c0_c1, fsp_ghost);
+        sprintf(buf, "lr_ghost_%d_%d", c0, c1);
+        runtime->attach_name(lr_ghost, buf);
+        ghost_regions.push_back(lr_ghost);                                                        
+      }
+    }
+#endif
+
+    for(my_map_set::iterator it = map_master_to_slave.begin(); it != map_master_to_slave.end(); it++) {
+      for(my_set::iterator its = it->second.begin(); its != it->second.end(); its++){
+        auto c0 = it->first;
+        auto c1 = *its; 
+        DEBUG("Creating master ghost region on colors: " << c0 << "," <<  c1 << std::endl);
+        IndexSpace iss_master_ghost = runtime->get_index_subspace(ctx, ippmasterghost,
+                                                                  c0+c1*numpcs);
+        sprintf(buf, "iss_master_ghost_%d_%d", c0, c1);
+        runtime->attach_name(iss_master_ghost, buf);
+        LogicalRegion lr_master_ghost =runtime->create_logical_region(ctx, iss_master_ghost, fsp_ghost);
+        sprintf(buf, "lr_master_ghost_%d_%d", c0, c1);
+        runtime->attach_name(lr_master_ghost, buf);
+        master_ghost_regions.push_back(lr_master_ghost);
+      }
+    }
+    
+    for(my_map_set::iterator it = map_slaves_to_masters.begin(); it != map_slaves_to_masters.end(); it++) {
+      for(my_set::iterator its = it->second.begin(); its != it->second.end(); its++){
+        auto c0 = it->first;
+        auto c1 = *its; 
+        DEBUG("Creating slave ghost region on colors: " << c0 << "," << c1  << std::endl);
+        IndexSpace iss_slave_ghost = runtime->get_index_subspace(ctx, ippslaveghost,
+                                                                 c0+c1*numpcs);
+        sprintf(buf, "iss_slave_ghost_%d_%d", c0, c1);
+        runtime->attach_name(iss_slave_ghost, buf);
+        LogicalRegion lr_slave_ghost =runtime->create_logical_region(ctx, iss_slave_ghost, fsp_ghost);
+        sprintf(buf, "lr_slave_ghost_%d_%d", c0, c1);
+        runtime->attach_name(lr_slave_ghost, buf);
+        slave_ghost_regions.push_back(lr_slave_ghost);
+ 
+      }
+    }
+    DEBUG("Done creating index spaces and corresponding logical regions for each ghost" << std::endl);
+
+     for (int c = 0; c < numpcs; ++c) {
+      ready_barriers.push_back(runtime->create_phase_barrier(ctx, 1));
+      empty_barriers.push_back(runtime->create_phase_barrier(ctx, 1));
     }
 
-    /* create a master ghost region for each color */
-    /*   - by convention the lowest order color of a multi-color point is master */ 
-    for (int c = 0; c< numpcs; ++c) {
-      IndexSpace iss_master = runtime->get_index_subspace(ctx, ippmstr, c);
-      sprintf(buf, "iss_master_%d", c);
-      runtime->attach_name(iss_master, buf);         
-      LogicalRegion lr_master =runtime->create_logical_region(ctx, iss_master, fsp_ghost);
-      sprintf(buf, "lr_master%d", c);
-      runtime->attach_name(lr_master, buf);
-      master_regions.push_back(lr_master);
-    }
+    std::vector<SPMDArgs> args(numpcs); 
+    for (int c = 0; c < numpcs; ++c) {
+      /* only one notifier of ready per color (the master) */ 
+      args[c].notify_ready[0] = ready_barriers[c];
+      
+      
+      for ( int pt = 0; pt < colorpshr[c].points.size(); ++pt) {
+        /* master must wait for all slaves to be empty */ 
+        args[c].wait_empty[pt] = empty_barriers[c];
+        args[c].notify_empty[0] = empty_barriers[c];
 
+        //args[c].wait_ready; 
+          
+      }
+    }
     
     vector<ptr_t> lgmapsp1(&mapsp1[0], &mapsp1[nums]);
     vector<ptr_t> lgmapsp2(&mapsp2[0], &mapsp2[nums]);
