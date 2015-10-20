@@ -339,6 +339,9 @@ void Mesh::init() {
         int s1 = (z1 < numz ? zonestart[z1] : nums);
         colorz[c].ranges.insert(pair<int, int>(z0, z1 - 1));
         colors[c].ranges.insert(pair<int, int>(s0, s1 - 1));
+        DEBUG( "Adding range of zones  " << z0 << "," << z1-1 << " to color: " << c << std::endl);
+        DEBUG( "Adding range of sides  " << s0 << "," << s1-1 << " to color: " << c << std::endl);
+               
         z0 = z1;
     }
     IndexPartition ipz = runtime->create_index_partition(
@@ -361,7 +364,7 @@ void Mesh::init() {
         colorpghost[c];
 #endif
     }
-    /* create colorpace with all possible two color comobos */ 
+    /* create colorpace with all possible two color combos */ 
     for (int c = 0; c < numpcs*numpcs; ++c) {
       colorpslaveghost[c];
       colorpmasterghost[c];  
@@ -407,7 +410,8 @@ void Mesh::init() {
         p0 = p1;
     }
 
-                                                              
+    std::vector<SPMDArgs> args(numpcs); 
+
     int nshared_points = 0;
     char buf[32]; 
     for (int c = 0; c < numpcs; ++c){
@@ -423,7 +427,7 @@ void Mesh::init() {
     my_map_set map_slaves_to_masters;
     /* this is a hack ghould be moved to GenMesh::generate.. */
     for(int pt = 0; pt < pointmcolors.size(); pt++) {
-      DEBUG("PT: " << pt << std::endl);
+      //DEBUG("PT: " << pt << std::endl);
       vector<int> &pmc = pointmcolors[pt];
       if(!pmc.size()) continue;
       my_map_set::iterator it_master = map_master_to_slave.find(pmc[0]);
@@ -432,8 +436,9 @@ void Mesh::init() {
         map_master_to_slave.insert(std::pair<int, my_set>(pmc[0], slaves));
         it_master = map_master_to_slave.find(pmc[0]);
       }
+      DEBUG("On pt: " << pt << " master color is " << pmc[0] << " additional colors are: "); 
       for (int i = 1; i < pmc.size(); i++) {
-        DEBUG("on pt: " << pt << " color is " << i << std::endl);
+        DEBUG(pmc[i] << ", ");
         it_master->second.insert(pmc[i]);
         my_map_set::iterator it = map_slaves_to_masters.find(pmc[i]);
         if(it!=map_slaves_to_masters.end()) {
@@ -443,13 +448,15 @@ void Mesh::init() {
           masters.insert(pmc[0]); 
           map_slaves_to_masters.insert(std::pair<int, my_set>(pmc[i], masters));
         }
-        
       }
+      DEBUG(std::endl);
     }
 
     for(my_map_set::iterator it = map_master_to_slave.begin(); it != map_master_to_slave.end(); it++) {
       DEBUG("Master is: " << it->first << " slave(s) are: ");
       for(my_set::iterator its = it->second.begin(); its != it->second.end(); its++){
+        ready_barriers[it->first][*its] = runtime->create_phase_barrier(ctx, 1);
+        empty_barriers[it->first][*its] = runtime->create_phase_barrier(ctx, 1);
         DEBUG(*its << ","); 
       }
       DEBUG(std::endl);
@@ -555,6 +562,22 @@ void Mesh::init() {
     }
 #endif
 
+    // for (int c = 0; c < numpcs; ++c) {
+    //   /* only one notifier of ready per color (the master) */ 
+    //   args[c].notify_ready[0] = ready_barriers[c];
+      
+    //   for ( int pt = 0; pt < colorpshr[c].points.size(); ++pt) {
+    //     /* master must wait for all slaves to be empty */ 
+    //     args[c].wait_empty[pt] = empty_barriers[c];
+    //     args[c].notify_empty[0] = empty_barriers[c];
+        
+    //     //args[c].wait_ready; 
+        
+    //   }
+    // }
+
+    
+    
     for(my_map_set::iterator it = map_master_to_slave.begin(); it != map_master_to_slave.end(); it++) {
       for(my_set::iterator its = it->second.begin(); its != it->second.end(); its++){
         auto c0 = it->first;
@@ -567,7 +590,7 @@ void Mesh::init() {
         LogicalRegion lr_master_ghost =runtime->create_logical_region(ctx, iss_master_ghost, fsp_ghost);
         sprintf(buf, "lr_master_ghost_%d_%d", c0, c1);
         runtime->attach_name(lr_master_ghost, buf);
-        master_ghost_regions.push_back(lr_master_ghost);
+        master_ghost_regions[c0][c1] = lr_master_ghost;
       }
     }
     
@@ -583,32 +606,13 @@ void Mesh::init() {
         LogicalRegion lr_slave_ghost =runtime->create_logical_region(ctx, iss_slave_ghost, fsp_ghost);
         sprintf(buf, "lr_slave_ghost_%d_%d", c0, c1);
         runtime->attach_name(lr_slave_ghost, buf);
-        slave_ghost_regions.push_back(lr_slave_ghost);
+        slave_ghost_regions[c0][c1] = lr_slave_ghost;
  
       }
     }
     DEBUG("Done creating index spaces and corresponding logical regions for each ghost" << std::endl);
 
-     for (int c = 0; c < numpcs; ++c) {
-      ready_barriers.push_back(runtime->create_phase_barrier(ctx, 1));
-      empty_barriers.push_back(runtime->create_phase_barrier(ctx, 1));
-    }
-
-    std::vector<SPMDArgs> args(numpcs); 
-    for (int c = 0; c < numpcs; ++c) {
-      /* only one notifier of ready per color (the master) */ 
-      args[c].notify_ready[0] = ready_barriers[c];
-      
-      
-      for ( int pt = 0; pt < colorpshr[c].points.size(); ++pt) {
-        /* master must wait for all slaves to be empty */ 
-        args[c].wait_empty[pt] = empty_barriers[c];
-        args[c].notify_empty[0] = empty_barriers[c];
-
-        //args[c].wait_ready; 
-          
-      }
-    }
+    
     
     vector<ptr_t> lgmapsp1(&mapsp1[0], &mapsp1[nums]);
     vector<ptr_t> lgmapsp2(&mapsp2[0], &mapsp2[nums]);
