@@ -256,14 +256,14 @@ public:
   // domain of legion pieces
   LegionRuntime::HighLevel::FutureMap fmapcv;
   // future map for calcVolsTask
-  std::vector<LegionRuntime::HighLevel::LogicalRegion> slave_ghost_regions;
+  std::map<int, std::map<int, LegionRuntime::HighLevel::LogicalRegion>> slave_ghost_regions;
   /* Slave ghost regions are for points with multiple colors, one logical region is created for each color that has multi-color points as members. Each logical region contains the set of points that satisfy pointmcolors[point][i>0] exists. By convention pointmcolors[point][0] (the lowest order color of a multicolor point is the master color, see below */
   
-  std::vector<LegionRuntime::HighLevel::LogicalRegion> master_ghost_regions;
+  std::map<int, std::map<int, LegionRuntime::HighLevel::LogicalRegion>> master_ghost_regions;
   /* Master ghost regions are for points with multiple colors, one logical region is created for each color that has multi-color points  as members (similar to lr_ghosts). Points which are mastered by a specific color are included in the logical region, that is, forall point s.t. pointmcolors[point][0]  exists. */ 
-
-  std::vector<LegionRuntime::HighLevel::PhaseBarrier> ready_barriers;
-  std::vector<LegionRuntime::HighLevel::PhaseBarrier> empty_barriers;  
+  
+  std::map<int, std::map<int, LegionRuntime::HighLevel::PhaseBarrier>>  ready_barriers, empty_barriers; 
+  
   
   
   Mesh(

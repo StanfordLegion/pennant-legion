@@ -90,7 +90,7 @@ HydroBC::HydroBC(
 HydroBC::~HydroBC() {}
 
 
-void HydroBC::applyFixedBCTask(
+void HydroBC::applyFixedBCTask( // this updates ghosts (new point values) 
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,

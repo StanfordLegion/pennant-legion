@@ -40,7 +40,8 @@ enum HydroTaskID {
     TID_CALCWORK,
     TID_CALCWORKRATE,
     TID_CALCENERGY,
-    TID_CALCDT
+    TID_CALCDT,
+    TID_SPMD_TASK,
 };
 
 
@@ -101,6 +102,12 @@ public:
 
     void getFinalState();
 
+  static void SPMDtask(
+    const LegionRuntime::HighLevel::Task *task,
+    const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
+    LegionRuntime::HighLevel::Context ctx,
+    LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+ 
     static void advPosHalfTask(
             const LegionRuntime::HighLevel::Task *task,
             const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,

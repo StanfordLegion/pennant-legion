@@ -38,13 +38,17 @@ using namespace LegionRuntime::Accessor;
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
+  HighLevelRuntime::register_legion_task<Hydro::SPMDtask>(
+    TID_SPMD_TASK, Processor::LOC_PROC, true, true,
+    AUTO_GENERATE_ID, TaskConfigOptions(true), "SPMDtask"); 
+  
     HighLevelRuntime::register_legion_task<Hydro::advPosHalfTask>(
             TID_ADVPOSHALF, Processor::LOC_PROC, true, true,
             AUTO_GENERATE_ID, TaskConfigOptions(true), "advposhalf");
     HighLevelRuntime::register_legion_task<Hydro::calcRhoTask>(
             TID_CALCRHO, Processor::LOC_PROC, true, true,
             AUTO_GENERATE_ID, TaskConfigOptions(true), "calcrho");
-    HighLevelRuntime::register_legion_task<Hydro::calcCrnrMassTask>(
+    HighLevelRuntime::register_legion_task<Hydro::calcCrnrMassTask>( // this updates ghosts? 
             TID_CALCCRNRMASS, Processor::LOC_PROC, true, true,
             AUTO_GENERATE_ID, TaskConfigOptions(true), "calccrnrmass");
     HighLevelRuntime::register_legion_task<Hydro::sumCrnrForceTask>(
@@ -305,6 +309,8 @@ void Hydro::doCycle(
                 RegionRequirement(lppcurr, 0,
                         WRITE_DISCARD, EXCLUSIVE, lrp));
         launchcfd2.add_field(1, FID_PX0);
+        // save off point variable values from previous step (FID_PX -> FID_PX0)
+        //   - no shared point updates to slave.. 
         runtime->execute_index_space(ctx, launchcfd2);
 
         // reuse copy launcher for different field
@@ -314,6 +320,8 @@ void Hydro::doCycle(
         launchcfd2.region_requirements[1].privilege_fields.clear();
         launchcfd2.region_requirements[1].instance_fields.clear();
         launchcfd2.add_field(1, FID_PU0);
+        // save off point variable values from previous step (FID_PU -> FID_PU0)
+        //   - no shared point updates to slave.. 
         runtime->execute_index_space(ctx, launchcfd2);
 
         launchffd.region_requirements.clear();
@@ -321,13 +329,18 @@ void Hydro::doCycle(
                 RegionRequirement(lppcurr, 0,
                         WRITE_DISCARD, EXCLUSIVE, lrp));
         launchffd.add_field(0, FID_PMASWT);
+
+        // fill point (FID_PMASWT) with 0..
         runtime->execute_index_space(ctx, launchffd);
 
+        
         launchffd2.region_requirements.clear();
         launchffd2.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
                         WRITE_DISCARD, EXCLUSIVE, lrp));
         launchffd2.add_field(0, FID_PF);
+
+        // fill point (FID_PF) with 0..
         runtime->execute_index_space(ctx, launchffd2);
 
         launchaph.region_requirements.clear();
@@ -340,9 +353,14 @@ void Hydro::doCycle(
                 RegionRequirement(lppcurr, 0,
                         WRITE_DISCARD, EXCLUSIVE, lrp));
         launchaph.add_field(1, FID_PXP);
+        // ======= Predictor step ======
+        // 1. Advance mesh to center of time step
+        //  updates master and private points, note that the tasks below
+        //  will access ghost versions of these points, so an update of ghosts is required here. 
         runtime->execute_index_space(ctx, launchaph);
     }  // for part
 
+    // 1.a Computer new mesh geometry 
     IndexLauncher launchcc(TID_CALCCTRS, dompc, ta, am);
     launchcc.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
@@ -366,6 +384,7 @@ void Hydro::doCycle(
     launchcc.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcc.add_field(5, FID_ZXP);
+    // requires read access to ghost points, updates private zones and sides 
     runtime->execute_index_space(ctx, launchcc);
 
     IndexLauncher launchcv(TID_CALCVOLS, dompc, ta, am);
@@ -393,6 +412,7 @@ void Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcv.add_field(5, FID_ZAREAP);
     launchcv.add_field(5, FID_ZVOLP);
+    // requires read access to ghost points, updates private zones and sides 
     mesh->fmapcv = runtime->execute_index_space(ctx, launchcv);
 
     IndexLauncher launchcsv(TID_CALCSURFVECS, dompc, ta, am);
@@ -406,6 +426,7 @@ void Hydro::doCycle(
     launchcsv.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcsv.add_field(2, FID_SSURFP);
+    // no ghost access required (all private partitions) 
     runtime->execute_index_space(ctx, launchcsv);
 
     IndexLauncher launchcel(TID_CALCEDGELEN, dompc, ta, am);
@@ -424,6 +445,7 @@ void Hydro::doCycle(
     launchcel.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcel.add_field(3, FID_ELEN);
+    // requires read access to ghost points and write access to private edges 
     runtime->execute_index_space(ctx, launchcel);
 
     IndexLauncher launchccl(TID_CALCCHARLEN, dompc, ta, am);
@@ -438,8 +460,10 @@ void Hydro::doCycle(
     launchccl.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchccl.add_field(2, FID_ZDL);
+    // no ghost access required (all private partitions) 
     runtime->execute_index_space(ctx, launchccl);
 
+    // 2. compute point masses 
     IndexLauncher launchcr(TID_CALCRHO, dompc, ta, am);
     launchcr.add_region_requirement(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
@@ -448,8 +472,9 @@ void Hydro::doCycle(
     launchcr.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcr.add_field(1, FID_ZRP);
+    // no ghost access required (all private partitions) 
     runtime->execute_index_space(ctx, launchcr);
-
+    
     IndexLauncher launchccm(TID_CALCCRNRMASS, dompc, ta, am);
     launchccm.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
@@ -469,8 +494,11 @@ void Hydro::doCycle(
             RegionRequirement(lppshr, 0, OPID_SUMDBL,
                     SIMULTANEOUS, lrp));
     launchccm.add_field(3, FID_PMASWT);
+    // requires read / write access to private and shared (ghosted) points
+    //   uses a reduction operation to sum corner masses to point mass 
     runtime->execute_index_space(ctx, launchccm);
 
+    // 3. compute material state (half-advanced) 
     double cshargs[] = { pgas->gamma, pgas->ssmin, dt };
     IndexLauncher launchcsh(TID_CALCSTATEHALF, dompc,
             TaskArgument(cshargs, sizeof(cshargs)), am);
@@ -486,8 +514,10 @@ void Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcsh.add_field(1, FID_ZP);
     launchcsh.add_field(1, FID_ZSS);
+    // no ghost access required (all private partitions) 
     runtime->execute_index_space(ctx, launchcsh);
 
+    // 4. compute forces 
     IndexLauncher launchcfp(TID_CALCFORCEPGAS, dompc, ta, am);
     launchcfp.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
@@ -499,6 +529,7 @@ void Hydro::doCycle(
     launchcfp.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcfp.add_field(2, FID_SFP);
+    // no ghost access required (all private partitions) 
     runtime->execute_index_space(ctx, launchcfp);
 
     double cftargs[] = { tts->alfa, tts->ssmin };
@@ -518,6 +549,7 @@ void Hydro::doCycle(
     launchcft.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcft.add_field(2, FID_SFT);
+    // no ghost access required (all private partitions) 
     runtime->execute_index_space(ctx, launchcft);
 
     IndexLauncher launchscd(TID_SETCORNERDIV, dompc, ta, am);
@@ -553,6 +585,7 @@ void Hydro::doCycle(
     launchscd.add_field(5, FID_CDIV);
     launchscd.add_field(5, FID_CEVOL);
     launchscd.add_field(5, FID_CDU);
+    // requires read only access to shared (ghost) and private point data 
     runtime->execute_index_space(ctx, launchscd);
 
     double sqcfargs[] = { qcs->qgamma, qcs->q1, qcs->q2 };
@@ -585,6 +618,7 @@ void Hydro::doCycle(
     launchsqcf.add_field(4, FID_CRMU);
     launchsqcf.add_field(4, FID_CQE1);
     launchsqcf.add_field(4, FID_CQE2);
+    // requires read only access to shared (ghost) and private point data 
     runtime->execute_index_space(ctx, launchsqcf);
 
     IndexLauncher launchsfq(TID_SETFORCEQCS, dompc, ta, am);
@@ -602,6 +636,7 @@ void Hydro::doCycle(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchsfq.add_field(2, FID_CW);
     launchsfq.add_field(2, FID_SFQ);
+    // no ghost data required 
     runtime->execute_index_space(ctx, launchsfq);
 
     double svdargs[] = { qcs->q1, qcs->q2 };
@@ -630,8 +665,10 @@ void Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchsvd.add_field(4, FID_ZTMP);
     launchsvd.add_field(4, FID_ZDU);
+    // requires read only access to shared (ghost) and private point data 
     runtime->execute_index_space(ctx, launchsvd);
 
+    // this sums corner forces to points 
     IndexLauncher launchscf(TID_SUMCRNRFORCE, dompc, ta, am);
     launchscf.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
@@ -648,11 +685,14 @@ void Hydro::doCycle(
             RegionRequirement(lppshr, 0, OPID_SUMDBL2,
                     SIMULTANEOUS, lrp));
     launchscf.add_field(2, FID_PF);
+    // requires read / write access to private and shared (ghosted) points
+    //   uses a reduction operation to sum corner masses to point mass 
     runtime->execute_index_space(ctx, launchscf);
 
     // 4a. apply boundary conditions
     IndexLauncher launchafbc(TID_APPLYFIXEDBC, dompc, ta, am);
     for (int i = 0; i < bcs.size(); ++i) {
+      // 
         double2 afbcargs[1] = { bcs[i]->vfix };
         launchafbc.global_arg =
                 TaskArgument(afbcargs, sizeof(afbcargs));
@@ -672,6 +712,7 @@ void Hydro::doCycle(
                         READ_WRITE, EXCLUSIVE, lrp));
         launchafbc.add_field(2, FID_PF);
         launchafbc.add_field(2, FID_PU0);
+        // this task updates point values both private and ghosted (using master partition) 
         runtime->execute_index_space(ctx, launchafbc);
     }
 
@@ -698,6 +739,8 @@ void Hydro::doCycle(
                 RegionRequirement(lppcurr, 0,
                         WRITE_DISCARD, EXCLUSIVE, lrp));
         launchca.add_field(1, FID_PAP);
+        // this updates point acceleration values on private and master
+        //   partitions 
         runtime->execute_index_space(ctx, launchca);
 
         // ===== Corrector step =====
@@ -714,6 +757,8 @@ void Hydro::doCycle(
                         WRITE_DISCARD, EXCLUSIVE, lrp));
         launchapf.add_field(1, FID_PX);
         launchapf.add_field(1, FID_PU);
+        // this updates point coordintate and velocity on private
+        //   and master partitions 
         runtime->execute_index_space(ctx, launchapf);
     }  // for part
 
@@ -727,6 +772,7 @@ void Hydro::doCycle(
     launchcc.add_field(3, FID_PX);
     launchcc.add_field(4, FID_EX);
     launchcc.add_field(5, FID_ZX);
+    // requires read access to ghost points, updates private zones and sides 
     runtime->execute_index_space(ctx, launchcc);
 
     for (int r = 1; r < 6; ++r) {
@@ -740,6 +786,7 @@ void Hydro::doCycle(
     launchcv.add_field(4, FID_SVOL);
     launchcv.add_field(5, FID_ZAREA);
     launchcv.add_field(5, FID_ZVOL);
+    // requires read access to ghost points, updates private zones and sides 
     mesh->fmapcv = runtime->execute_index_space(ctx, launchcv);
 
     // 7. compute work
@@ -771,6 +818,7 @@ void Hydro::doCycle(
     launchcw.add_region_requirement(
             RegionRequirement(lpz, 0, READ_WRITE, EXCLUSIVE, lrz));
     launchcw.add_field(4, FID_ZETOT);
+    // requires read access to ghost points, updates private zones and sides 
     runtime->execute_index_space(ctx, launchcw);
 
     double cwrargs[] = { dt };
@@ -785,6 +833,7 @@ void Hydro::doCycle(
     launchcwr.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcwr.add_field(1, FID_ZWRATE);
+    // no ghost access required 
     runtime->execute_index_space(ctx, launchcwr);
 
     // 8. update state variables
@@ -796,6 +845,7 @@ void Hydro::doCycle(
     launchce.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchce.add_field(1, FID_ZE);
+    // no ghost access required 
     runtime->execute_index_space(ctx, launchce);
 
     // reuse launcher from earlier, with corrector-step fields
@@ -806,6 +856,7 @@ void Hydro::doCycle(
     launchcr.add_field(0, FID_ZM);
     launchcr.add_field(0, FID_ZVOL);
     launchcr.add_field(1, FID_ZR);
+    // no ghost access required 
     runtime->execute_index_space(ctx, launchcr);
 
     // 9.  compute timestep for next cycle
@@ -819,11 +870,13 @@ void Hydro::doCycle(
     launchcdt.add_field(0, FID_ZSS);
     launchcdt.add_field(0, FID_ZVOL);
     launchcdt.add_field(0, FID_ZVOL0);
+    // no ghost access required 
     fmapcdt = runtime->execute_index_space(ctx, launchcdt);
 
     runtime->end_trace(ctx, 123);
 
     // check for negative volumes on corrector step
+    // this checks the return values from the CALCVOLSTASK
     mesh->checkBadSides();
 }
 
@@ -833,6 +886,18 @@ void Hydro::getFinalState() {
     mesh->getField(mesh->lrz, FID_ZP, zp, mesh->numz);
     mesh->getField(mesh->lrz, FID_ZE, ze, mesh->numz);
     mesh->getField(mesh->lrz, FID_ZR, zr, mesh->numz);
+}
+
+void Hydro::SPMDtask(
+  const Task *task,
+  const std::vector<PhysicalRegion> &regions,
+  Context ctx,
+  HighLevelRuntime *runtime) {
+  // Unmap all the regions we were given since, we don't use them in this task
+  runtime->unmap_all_regions(ctx);
+  SPMDArgs *args = (SPMDArgs*)task->args;
+  
+  
 }
 
 
@@ -891,7 +956,7 @@ void Hydro::calcRhoTask(
 }
 
 
-void Hydro::calcCrnrMassTask(
+void Hydro::calcCrnrMassTask( // This updates ghosts (2. compute point masses) 
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
@@ -912,8 +977,10 @@ void Hydro::calcCrnrMassTask(
         get_accessor<double>(regions[1], FID_ZAREAP);
     MyAccessor<double> acc_pmas_prv =
         get_accessor<double>(regions[2], FID_PMASWT);
+    // the next region has simultaneous access, using a
+    //   reduction to sum corner masses to point mass 
     MyReductionAccessor<SumOp<double> > acc_pmas_shr =
-        get_reduction_accessor<SumOp<double> >(regions[3]);
+      get_reduction_accessor<SumOp<double> >(regions[3]);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
 
@@ -937,7 +1004,7 @@ void Hydro::calcCrnrMassTask(
 }
 
 
-void Hydro::sumCrnrForceTask(
+void Hydro::sumCrnrForceTask( // this updates ghosts (4. compute point forces) 
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
