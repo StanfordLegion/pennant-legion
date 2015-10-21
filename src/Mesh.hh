@@ -112,7 +112,8 @@ enum MeshTaskID {
   TID_CALCVOLS,
   TID_CALCSURFVECS,
   TID_CALCEDGELEN,
-  TID_CALCCHARLEN
+  TID_CALCCHARLEN,
+  TID_SPMD_TASK
 };
 
 enum MeshOpID {
@@ -183,14 +184,102 @@ public:
 
 struct SPMDArgs{
 public:
-  int num_waiters; /* this is the number of ghosts for my master regions  */ 
-  int num_notifiers; /* this is the number of masters for which I have ghosts */ 
-  LegionRuntime::HighLevel::PhaseBarrier notify_ready[MAX_NEIGHBOR_DEGREE];
-  LegionRuntime::HighLevel::PhaseBarrier notify_empty[MAX_NEIGHBOR_DEGREE];
-  LegionRuntime::HighLevel::PhaseBarrier wait_ready[MAX_NEIGHBOR_DEGREE];
-  LegionRuntime::HighLevel::PhaseBarrier wait_empty[MAX_NEIGHBOR_DEGREE];
+  // int num_waiters; /* this is the number of ghosts for my master regions  */ 
+  // int num_notifiers; /* this is the number of masters for which I have ghosts */ 
+  std::map<int, LegionRuntime::HighLevel::PhaseBarrier> notify_ready;
+  std::map<int, LegionRuntime::HighLevel::PhaseBarrier> notify_empty;
+  std::map<int, LegionRuntime::HighLevel::PhaseBarrier> wait_ready; 
+  std::map<int, LegionRuntime::HighLevel::PhaseBarrier> wait_empty;
+  template<typename S>
+  friend  bool operator <<(S& s, const SPMDArgs& t){
+    size_t notify_ready_len = t.notify_ready.size();
+    if(!(s << notify_ready_len)) return false;
+    size_t notify_empty_len = t.notify_empty.size();
+    if(!(s << notify_empty_len)) return false;
+    size_t wait_ready_len = t.wait_ready.size();
+    if(!(s << wait_ready_len)) return false;
+    size_t wait_empty_len = t.wait_empty.size();
+    if(!(s << wait_empty_len)) return false;
+    typedef std::map<int, LegionRuntime::HighLevel::PhaseBarrier>::const_iterator my_iter; 
+    for(my_iter it = t.notify_ready.begin(); it != t.notify_ready.end(); it++) {
+      if(!(s << it->first)) return false;
+      if(!(s << it->second)) return false;
+    }
+
+    for(my_iter it = t.notify_empty.begin();
+        it != t.notify_empty.end(); it++) {
+      if(!(s << it->first)) return false;
+      if(!(s << it->second)) return false;
+    }
+    for(my_iter it = t.wait_ready.begin();
+        it != t.wait_ready.end(); it++) {
+      if(!(s << it->first)) return false;
+      if(!(s << it->second)) return false;
+    }
+    for(my_iter it = t.wait_empty.begin();
+        it != t.wait_empty.end(); it++) {
+      if(!(s << it->first)) return false;
+      if(!(s << it->second)) return false;
+    }
+
+    return true;
+  }
+  template<typename S>
+  friend bool operator >>(S& s, SPMDArgs& t){
+    size_t notify_ready_len;
+    if(!(s >> notify_ready_len)) return false;
+    size_t notify_empty_len;
+    if(!(s >> notify_empty_len)) return false;
+    size_t wait_ready_len;
+    if(!(s >> wait_ready_len)) return false;
+    size_t wait_empty_len;
+    if(!(s >> wait_empty_len)) return false;
+    t.notify_ready.clear();
+    for(size_t i = 0; i < notify_ready_len; i++){
+      int k;
+      LegionRuntime::HighLevel::PhaseBarrier v;
+      if(!(s >> k)) return false;
+      if(!(s >> v)) return false;
+      t.notify_ready[k]=v;
+    }
+    t.notify_empty.clear();
+    for(size_t i = 0; i < notify_empty_len; i++){
+      int k;
+      LegionRuntime::HighLevel::PhaseBarrier v;
+      if(!(s >> k)) return false;
+      if(!(s >> v)) return false;
+      t.notify_empty[k]=v;
+    }
+    t.wait_ready.clear();
+    for(size_t i = 0; i < wait_ready_len; i++){
+      int k;
+      LegionRuntime::HighLevel::PhaseBarrier v;
+      if(!(s >> k)) return false;
+      if(!(s >> v)) return false;
+      t.wait_ready[k]=v;
+    }
+    t.wait_empty.clear();
+    for(size_t i = 0; i < wait_empty_len; i++){
+      int k;
+      LegionRuntime::HighLevel::PhaseBarrier v;
+      if(!(s >> k)) return false;
+      if(!(s >> v)) return false;
+      t.wait_empty[k]=v;
+    }
+
+    return true;
+  } 
+    
 };
+
+struct SPMDArgsSerialized{
+public: 
+//  int num_elements;
+  size_t my_size;
+  char my_data[1024]; // GMS: Hack, need to fix this.. 
   
+};
+
 class Mesh {
 public:
 
@@ -325,6 +414,12 @@ public:
     std::vector<int>& pchbfirst,
     std::vector<int>& pchblast);
 
+  static void SPMDtask(
+    const LegionRuntime::HighLevel::Task *task,
+    const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
+    LegionRuntime::HighLevel::Context ctx,
+    LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+  
   template<typename T>
   static void copyFieldTask(
     const LegionRuntime::HighLevel::Task *task,
