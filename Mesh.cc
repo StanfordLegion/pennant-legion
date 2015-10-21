@@ -35,6 +35,10 @@ using namespace LegionRuntime::Accessor;
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
+  HighLevelRuntime::register_legion_task<Mesh::SPMDtask>(
+    TID_SPMD_TASK, Processor::LOC_PROC, true, true,
+    AUTO_GENERATE_ID, TaskConfigOptions(true), "SPMDtask"); 
+  
     HighLevelRuntime::register_legion_task<Mesh::copyFieldTask<double> >(
             TID_COPYFIELDDBL, Processor::LOC_PROC, true, true,
             AUTO_GENERATE_ID, TaskConfigOptions(true), "copyfielddbl");
@@ -410,7 +414,6 @@ void Mesh::init() {
         p0 = p1;
     }
 
-    std::vector<SPMDArgs> args(numpcs); 
 
     int nshared_points = 0;
     char buf[32]; 
@@ -454,6 +457,9 @@ void Mesh::init() {
 
     for(my_map_set::iterator it = map_master_to_slave.begin(); it != map_master_to_slave.end(); it++) {
       DEBUG("Master is: " << it->first << " slave(s) are: ");
+      // Create two phase barriers for each intersection of colors, one for
+      //  master to tell slaves when the new point values are available and
+      //  another for slaves to tell masters when it is safe to update points in ghost 
       for(my_set::iterator its = it->second.begin(); its != it->second.end(); its++){
         ready_barriers[it->first][*its] = runtime->create_phase_barrier(ctx, 1);
         empty_barriers[it->first][*its] = runtime->create_phase_barrier(ctx, 1);
@@ -504,8 +510,10 @@ void Mesh::init() {
     lppshr = runtime->get_logical_partition_by_tree(
             ctx, ippshr, fsp, lrp.get_tree_id());
     
-
-
+    
+    // We only need to setup the the ghost regions at the top level task
+    //  this will ensure that we can setup simulataneous coherence for these
+    //  logical regions allowing masters to update ghosts 
     IndexPartition ippslaveghost = runtime->create_index_partition(
       ctx, isp, colorpslaveghost, false);
     lppslaveghost = runtime->get_logical_partition_by_tree(
@@ -611,8 +619,69 @@ void Mesh::init() {
       }
     }
     DEBUG("Done creating index spaces and corresponding logical regions for each ghost" << std::endl);
+    MustEpochLauncher must_epoch_launcher;
 
-    
+    std::vector<SPMDArgsSerialized> args_s(numpcs);
+    // loop through and setup all my SPMD tasks with proper region requirements for
+    //   ghosting 
+    for (int color = 0; color < numpcs; ++color){
+      SPMDArgs  args; 
+      TaskLauncher spmd_launcher(TID_SPMD_TASK, 
+                               TaskArgument(&args_s[color], sizeof(SPMDArgsSerialized)));
+      // loop through all ghost regions for which color is master and add them
+      //  to the region requirements of the spmd task with READ_WRITE perms
+      int idx = 0; 
+      for(std::map<int, LegionRuntime::HighLevel::LogicalRegion>::iterator its = master_ghost_regions[color].begin(); its != master_ghost_regions[color].end(); ++its) {
+        spmd_launcher.add_region_requirement(
+          RegionRequirement(its->second, READ_WRITE,
+                            SIMULTANEOUS, its->second));
+        spmd_launcher.add_field(idx, FID_PXP_GHOST);
+        spmd_launcher.add_field(idx, FID_PU_GHOST);
+        spmd_launcher.add_field(idx, FID_PU0_GHOST);
+        spmd_launcher.add_field(idx, FID_PMASWT_GHOST);
+        spmd_launcher.add_field(idx, FID_PF_GHOST);
+        
+        // I'm the master, need to notify my slaves 
+        args.notify_ready[its->first] = ready_barriers[color][its->first];
+        //  Master must wait on slave to empty ghosts 
+        args.wait_empty[its->first] = empty_barriers[color][its->first];
+        idx++;
+      }
+      // now for ghost regions for which color is slave but with READ_ONLY 
+      for(std::map<int, LegionRuntime::HighLevel::LogicalRegion>::iterator its = slave_ghost_regions[color].begin(); its != slave_ghost_regions[color].end(); its++) {
+        spmd_launcher.add_region_requirement(
+          RegionRequirement(its->second, READ_ONLY,
+                            SIMULTANEOUS, its->second));
+        // I'm a slave waiting on master for point updates 
+        args.wait_ready[its->first] = ready_barriers[its->first][color];
+        // Master is waiting on me to empty my ghosts 
+        args.notify_empty[its->first] = empty_barriers[its->first][color];
+        spmd_launcher.add_field(idx, FID_PXP_GHOST);
+        spmd_launcher.add_field(idx, FID_PU_GHOST);
+        spmd_launcher.add_field(idx, FID_PU0_GHOST);
+        spmd_launcher.add_field(idx, FID_PMASWT_GHOST);
+        spmd_launcher.add_field(idx, FID_PF_GHOST);
+        
+        idx++;
+      }
+      
+      Realm::Serialization::DynamicBufferSerializer dbs(0);
+      dbs << args;
+      args_s[color].my_size = dbs.bytes_used();
+      memcpy(args_s[color].my_data, dbs.detach_buffer(), args_s[color].my_size);
+      
+      spmd_launcher.add_index_requirement(IndexSpaceRequirement(isp, NO_MEMORY, isp));
+      
+      DomainPoint point(color);
+      must_epoch_launcher.add_single_task(point, spmd_launcher);
+      DEBUG("Finished setting up SPMD task for color: " << color
+            << " arg size is: " << args_s[color].my_size << std::endl);
+      
+    }
+    DEBUG("Launching SPMD tasks using must epoch" << std::endl);
+    FutureMap fm = runtime->execute_must_epoch(ctx, must_epoch_launcher);
+    fm.wait_all_results();
+    DEBUG("SPMD tasks complete" << std::endl);
     
     vector<ptr_t> lgmapsp1(&mapsp1[0], &mapsp1[nums]);
     vector<ptr_t> lgmapsp2(&mapsp2[0], &mapsp2[nums]);
@@ -811,6 +880,28 @@ void Mesh::getPlaneChunks(
 
 }
 
+
+void Mesh::SPMDtask(
+  const Task *task,
+  const std::vector<PhysicalRegion> &regions,
+  Context ctx,
+  HighLevelRuntime *runtime) {
+  // Unmap all the regions we were given since, we don't use them in this task
+  runtime->unmap_all_regions(ctx);
+  SPMDArgsSerialized *serial_args = (SPMDArgsSerialized*) task->args;
+  Realm::Serialization::FixedBufferDeserializer fdb(serial_args->my_data, serial_args->my_size);
+  SPMDArgs args;
+  bool ok = fdb >> args;
+  if(!ok) {
+    std::cerr << "ERROR in SPMDTask, can't deserialize!" << std::endl;
+  } else {
+    std::cout << "In SPMDTask with notify_ready: " << args.notify_ready.size()
+          << " notify_empty: " << args.notify_empty.size()
+          << " wait_ready: " << args.wait_ready.size()
+          << " wait_empty: " << args.wait_empty.size() << std::endl;
+  }
+  
+}
 
 template <typename T>
 void Mesh::copyFieldTask(

@@ -38,9 +38,6 @@ using namespace LegionRuntime::Accessor;
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
-  HighLevelRuntime::register_legion_task<Hydro::SPMDtask>(
-    TID_SPMD_TASK, Processor::LOC_PROC, true, true,
-    AUTO_GENERATE_ID, TaskConfigOptions(true), "SPMDtask"); 
   
     HighLevelRuntime::register_legion_task<Hydro::advPosHalfTask>(
             TID_ADVPOSHALF, Processor::LOC_PROC, true, true,
@@ -888,17 +885,6 @@ void Hydro::getFinalState() {
     mesh->getField(mesh->lrz, FID_ZR, zr, mesh->numz);
 }
 
-void Hydro::SPMDtask(
-  const Task *task,
-  const std::vector<PhysicalRegion> &regions,
-  Context ctx,
-  HighLevelRuntime *runtime) {
-  // Unmap all the regions we were given since, we don't use them in this task
-  runtime->unmap_all_regions(ctx);
-  SPMDArgs *args = (SPMDArgs*)task->args;
-  
-  
-}
 
 
 void Hydro::advPosHalfTask(
