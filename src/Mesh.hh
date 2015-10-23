@@ -113,7 +113,8 @@ enum MeshTaskID {
   TID_CALCSURFVECS,
   TID_CALCEDGELEN,
   TID_CALCCHARLEN,
-  TID_SPMD_TASK
+  TID_SPMD_TASK,
+  TID_STENCIL
 };
 
 enum MeshOpID {
@@ -414,6 +415,12 @@ public:
     std::vector<int>& pchbfirst,
     std::vector<int>& pchblast);
 
+  static void stencilTask(
+    const LegionRuntime::HighLevel::Task *task,
+    const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
+    LegionRuntime::HighLevel::Context ctx,
+    LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+  
   static void SPMDtask(
     const LegionRuntime::HighLevel::Task *task,
     const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
