@@ -98,6 +98,11 @@ public:
             const int plast);
 
     void doCycle(const double dt);
+    void doCycle2(const double dt,
+                  LegionRuntime::HighLevel::LogicalRegion& lrp_private,
+                  LegionRuntime::HighLevel::LogicalRegion& lrp_master,
+                  LegionRuntime::HighLevel::LogicalRegion& lrs,
+                  LegionRuntime::HighLevel::LogicalRegion& lrz);
 
     void getFinalState();
 

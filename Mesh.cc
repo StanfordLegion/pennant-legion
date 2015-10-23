@@ -36,6 +36,10 @@ using namespace LegionRuntime::Accessor;
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
   HighLevelRuntime::register_legion_task<Mesh::SPMDtask>(
+    TID_STENCIL, Processor::LOC_PROC, true, true,
+    AUTO_GENERATE_ID, TaskConfigOptions(true), "stencilTask");
+  
+  HighLevelRuntime::register_legion_task<Mesh::SPMDtask>(
     TID_SPMD_TASK, Processor::LOC_PROC, true, true,
     AUTO_GENERATE_ID, TaskConfigOptions(true), "SPMDtask"); 
   
@@ -628,13 +632,108 @@ void Mesh::init() {
       SPMDArgs  args; 
       TaskLauncher spmd_launcher(TID_SPMD_TASK, 
                                TaskArgument(&args_s[color], sizeof(SPMDArgsSerialized)));
+
+      int idx=0;
+#if 1
+      // Add logical regions for private and master points, my zones, and my sides
+      spmd_launcher.add_region_requirement(
+        RegionRequirement(runtime->get_logical_subregion_by_color(ctx, lppprv, color),
+                          READ_WRITE, EXCLUSIVE, lrp));
+      spmd_launcher.add_field(idx, FID_PX);
+      spmd_launcher.add_field(idx, FID_PXP);
+      spmd_launcher.add_field(idx, FID_PX0);
+      spmd_launcher.add_field(idx, FID_PU);
+      spmd_launcher.add_field(idx, FID_PU0);
+      spmd_launcher.add_field(idx, FID_PMASWT);
+      spmd_launcher.add_field(idx, FID_PF);
+      spmd_launcher.add_field(idx, FID_PAP);
+
+      idx++;
+      spmd_launcher.add_region_requirement(
+        RegionRequirement(runtime->get_logical_subregion_by_color(ctx, lppmstr, color),
+                          READ_WRITE, EXCLUSIVE, lrp));
+      spmd_launcher.add_field(idx, FID_PX);
+      spmd_launcher.add_field(idx, FID_PXP);
+      spmd_launcher.add_field(idx, FID_PX0);
+      spmd_launcher.add_field(idx, FID_PU);
+      spmd_launcher.add_field(idx, FID_PU0);
+      spmd_launcher.add_field(idx, FID_PMASWT);
+      spmd_launcher.add_field(idx, FID_PF);
+      spmd_launcher.add_field(idx, FID_PAP);
+      idx++;
+      
+      spmd_launcher.add_region_requirement(
+        RegionRequirement(runtime->get_logical_subregion_by_color(ctx, lps, color),
+                          READ_WRITE, EXCLUSIVE, lrs));
+      spmd_launcher.add_field(idx, FID_MAPSP1);
+      spmd_launcher.add_field(idx, FID_MAPSP2);
+      spmd_launcher.add_field(idx, FID_MAPSZ);
+      spmd_launcher.add_field(idx, FID_MAPSS3);
+      spmd_launcher.add_field(idx, FID_MAPSS4);
+      spmd_launcher.add_field(idx, FID_MAPSP1REG);
+      spmd_launcher.add_field(idx, FID_MAPSP2REG);
+      spmd_launcher.add_field(idx, FID_EX);
+      spmd_launcher.add_field(idx, FID_EXP);
+      spmd_launcher.add_field(idx, FID_SAREA);
+      spmd_launcher.add_field(idx, FID_SVOL);
+      spmd_launcher.add_field(idx, FID_SAREAP);
+      spmd_launcher.add_field(idx, FID_SVOLP);
+      spmd_launcher.add_field(idx, FID_SSURFP);
+      spmd_launcher.add_field(idx, FID_ELEN);
+      spmd_launcher.add_field(idx, FID_SMF);
+      spmd_launcher.add_field(idx, FID_SFP);
+      spmd_launcher.add_field(idx, FID_SFQ);
+      spmd_launcher.add_field(idx, FID_SFT);
+      spmd_launcher.add_field(idx, FID_CAREA);
+      spmd_launcher.add_field(idx, FID_CEVOL);
+      spmd_launcher.add_field(idx, FID_CDU);
+      spmd_launcher.add_field(idx, FID_CDIV);
+      spmd_launcher.add_field(idx, FID_CCOS);
+      spmd_launcher.add_field(idx, FID_CQE1);
+      spmd_launcher.add_field(idx, FID_CQE2);
+      spmd_launcher.add_field(idx, FID_CRMU);
+      spmd_launcher.add_field(idx, FID_CW);
+      idx++;
+      
+      
+      spmd_launcher.add_region_requirement(
+        RegionRequirement(runtime->get_logical_subregion_by_color(ctx, lpz, color),
+                          READ_WRITE, EXCLUSIVE, lrz));
+      spmd_launcher.add_field(idx, FID_ZNUMP);
+      spmd_launcher.add_field(idx, FID_ZX);
+      spmd_launcher.add_field(idx, FID_ZXP);
+      spmd_launcher.add_field(idx, FID_ZAREA);
+      spmd_launcher.add_field(idx, FID_ZVOL);
+      spmd_launcher.add_field(idx, FID_ZAREAP);
+      spmd_launcher.add_field(idx, FID_ZVOLP);
+      spmd_launcher.add_field(idx, FID_ZVOL0);
+      spmd_launcher.add_field(idx, FID_ZDL);
+      spmd_launcher.add_field(idx, FID_ZM);
+      spmd_launcher.add_field(idx, FID_ZR);
+      spmd_launcher.add_field(idx, FID_ZRP);
+      spmd_launcher.add_field(idx, FID_ZE);
+      spmd_launcher.add_field(idx, FID_ZETOT);
+      spmd_launcher.add_field(idx, FID_ZW);
+      spmd_launcher.add_field(idx, FID_ZWRATE);
+      spmd_launcher.add_field(idx, FID_ZP);
+      spmd_launcher.add_field(idx, FID_ZSS);
+      spmd_launcher.add_field(idx, FID_ZDU);
+      spmd_launcher.add_field(idx, FID_ZUC);
+      spmd_launcher.add_field(idx, FID_ZTMP);
+      idx++;
+      
       // loop through all ghost regions for which color is master and add them
       //  to the region requirements of the spmd task with READ_WRITE perms
-      int idx = 0; 
+      //  need to start at idx 4 as we addthe other (0-3rd) region requirements above
+      //  that way we add the fields to the right region requirement 
+#endif
+#if 1  
       for(std::map<int, LegionRuntime::HighLevel::LogicalRegion>::iterator its = master_ghost_regions[color].begin(); its != master_ghost_regions[color].end(); ++its) {
         spmd_launcher.add_region_requirement(
           RegionRequirement(its->second, READ_WRITE,
                             SIMULTANEOUS, its->second));
+        DEBUG("Adding master ghost to region requirements with colors: " << color << ":" <<
+              its->first << std::endl);
         spmd_launcher.add_field(idx, FID_PXP_GHOST);
         spmd_launcher.add_field(idx, FID_PU_GHOST);
         spmd_launcher.add_field(idx, FID_PU0_GHOST);
@@ -652,19 +751,22 @@ void Mesh::init() {
         spmd_launcher.add_region_requirement(
           RegionRequirement(its->second, READ_ONLY,
                             SIMULTANEOUS, its->second));
-        // I'm a slave waiting on master for point updates 
-        args.wait_ready[its->first] = ready_barriers[its->first][color];
-        // Master is waiting on me to empty my ghosts 
-        args.notify_empty[its->first] = empty_barriers[its->first][color];
+        DEBUG("Adding slave ghost to region requirements with colors: " << color << ":" <<
+              its->first << std::endl);
+     
         spmd_launcher.add_field(idx, FID_PXP_GHOST);
         spmd_launcher.add_field(idx, FID_PU_GHOST);
         spmd_launcher.add_field(idx, FID_PU0_GHOST);
         spmd_launcher.add_field(idx, FID_PMASWT_GHOST);
         spmd_launcher.add_field(idx, FID_PF_GHOST);
+        // I'm a slave waiting on master for point updates 
+        args.wait_ready[its->first] = ready_barriers[its->first][color];
+        // Master is waiting on me to empty my ghosts 
+        args.notify_empty[its->first] = empty_barriers[its->first][color];
         
         idx++;
       }
-      
+#endif
       Realm::Serialization::DynamicBufferSerializer dbs(0);
       dbs << args;
       args_s[color].my_size = dbs.bytes_used();
@@ -675,7 +777,9 @@ void Mesh::init() {
       DomainPoint point(color);
       must_epoch_launcher.add_single_task(point, spmd_launcher);
       DEBUG("Finished setting up SPMD task for color: " << color
-            << " arg size is: " << args_s[color].my_size << std::endl);
+            << " arg size is: " << args_s[color].my_size
+            << " number of region requirements is: " << spmd_launcher.region_requirements.size()
+            << std::endl);
       
     }
     DEBUG("Launching SPMD tasks using must epoch" << std::endl);
@@ -880,6 +984,14 @@ void Mesh::getPlaneChunks(
 
 }
 
+void Mesh::stencilTask(
+  const Task *task,
+  const std::vector<PhysicalRegion> & regions,
+  Context ctx,
+  HighLevelRuntime *runtime) {
+  
+  
+}
 
 void Mesh::SPMDtask(
   const Task *task,
@@ -900,6 +1012,16 @@ void Mesh::SPMDtask(
           << " wait_ready: " << args.wait_ready.size()
           << " wait_empty: " << args.wait_empty.size() << std::endl;
   }
+
+  /* now let's pull out our logical regions that will be needed for the stencil */
+  LogicalRegion lrp_private = task->regions[0].region; 
+  LogicalRegion lrp_master = task->regions[1].region;
+  LogicalRegion lrs = task->regions[2].region;
+  LogicalRegion lrz = task->regions[3].region;
+  
+//  LogicalRegion& lrglb = ; 
+    
+  
   
 }
 
@@ -912,14 +1034,14 @@ void Mesh::copyFieldTask(
   // determine which fields to use in the copy
     FieldID fid_src = *(task->regions[0].instance_fields.begin());
     FieldID fid_dst = *(task->regions[1].instance_fields.begin());
-    LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_src;
-    acc_src = regions[0].get_field_accessor(fid_src).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
+    //LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_src;
+    //acc_src = regions[0].get_field_accessor(fid_src).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
       
-    //MyAccessor<T> acc_src = get_accessor<T>(regions[0], fid_src); //regions[0].get_field_accessor(fid_src).typeify<T>().convert<AccessorType::SOA>();
-    LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_dst;
-    acc_dst = regions[1].get_field_accessor(fid_dst).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
-//    MyAccessor<T> acc_dst =
-//        get_accessor<T>(regions[1], fid_dst);
+    MyAccessor<T> acc_src = get_accessor<T>(regions[0], fid_src); //regions[0].get_field_accessor(fid_src).typeify<T>().convert<AccessorType::SOA>();
+    //LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_dst;
+    //acc_dst = regions[1].get_field_accessor(fid_dst).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
+    MyAccessor<T> acc_dst =
+      get_accessor<T>(regions[1], fid_dst);
 
     const IndexSpace& is = task->regions[0].region.get_index_space();
     for (IndexIterator itr(runtime, ctx, is); itr.has_next(); )

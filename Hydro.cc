@@ -174,38 +174,6 @@ void Hydro::init() {
             fill(&pu[pfirst], &pu[plast], double2(0., 0.));
     }  // for pch
 
-    // FIXME: This doesn't work, the fields won't appear in this tasks
-    // region requirements.
-    // FieldSpace fsp = mesh->lrp.get_field_space();
-    // FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
-    // fap.allocate_field(sizeof(double2), FID_PU);
-    // fap.allocate_field(sizeof(double2), FID_PU0);
-    // fap.allocate_field(sizeof(double), FID_PMASWT);
-    // fap.allocate_field(sizeof(double2), FID_PF);
-    // fap.allocate_field(sizeof(double2), FID_PAP);
-
-    // FieldSpace fsz = mesh->lrz.get_field_space();
-    // FieldAllocator faz = runtime->create_field_allocator(ctx, fsz);
-    // faz.allocate_field(sizeof(double), FID_ZM);
-    // faz.allocate_field(sizeof(double), FID_ZR);
-    // faz.allocate_field(sizeof(double), FID_ZRP);
-    // faz.allocate_field(sizeof(double), FID_ZE);
-    // faz.allocate_field(sizeof(double), FID_ZETOT);
-    // faz.allocate_field(sizeof(double), FID_ZW);
-    // faz.allocate_field(sizeof(double), FID_ZWRATE);
-    // faz.allocate_field(sizeof(double), FID_ZP);
-    // faz.allocate_field(sizeof(double), FID_ZSS);
-    // faz.allocate_field(sizeof(double), FID_ZDU);
-
-    // FieldSpace fss = mesh->lrs.get_field_space();
-    // FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
-    // fas.allocate_field(sizeof(double2), FID_SFP);
-    // fas.allocate_field(sizeof(double2), FID_SFQ);
-    // fas.allocate_field(sizeof(double2), FID_SFT);
-
-    // FieldSpace fsglb = mesh->lrglb.get_field_space();
-    // FieldAllocator faglb = runtime->create_field_allocator(ctx, fsglb);
-    // faglb.allocate_field(sizeof(double), FID_DTREC);
 
     LogicalRegion& lrp = mesh->lrp;
     LogicalRegion& lrz = mesh->lrz;
@@ -874,6 +842,588 @@ void Hydro::doCycle(
 
     // check for negative volumes on corrector step
     // this checks the return values from the CALCVOLSTASK
+    mesh->checkBadSides();
+}
+
+
+void Hydro::doCycle2(const double dt,
+                     LogicalRegion& lrp_private,
+                     LogicalRegion& lrp_master,
+                     LogicalRegion& lrs,
+                     LogicalRegion& lrz) {
+
+//    LogicalRegion& lrglb = mesh->lrglb;
+//    Domain& dompc = mesh->dompc;
+
+    TaskArgument ta;
+    ArgumentMap am;
+
+    runtime->begin_trace(ctx, 123);
+
+    TaskLauncher launchcfd(TID_COPYFIELDDBL, ta);
+    launchcfd.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchcfd.add_field(0, FID_ZVOL);
+    launchcfd.add_region_requirement(
+            RegionRequirement(lrz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+    launchcfd.add_field(1, FID_ZVOL0);
+    runtime->execute_task(ctx, launchcfd);
+    
+    // begin hydro cycle
+    TaskLauncher launchcfd2(TID_COPYFIELDDBL2, ta);
+    double ffdargs[] = { 0. };
+    TaskLauncher launchffd(TID_FILLFIELDDBL, TaskArgument(ffdargs, sizeof(ffdargs)));
+    double2 ffd2args[] = { double2(0., 0.) };
+    TaskLauncher launchffd2(TID_FILLFIELDDBL2, TaskArgument(ffd2args, sizeof(ffd2args)));
+    double aphargs[] = { dt };
+    TaskLauncher launchaph(TID_ADVPOSHALF, TaskArgument(aphargs, sizeof(aphargs)));
+    // do point routines twice, once each for private and master
+    // partitions
+    for (int part = 0; part < 2; ++part) {
+        LogicalRegion& lrp_curr = (part == 0 ? lrp_private : lrp_master);
+        launchcfd2.region_requirements.clear();
+        launchcfd2.add_region_requirement(
+          RegionRequirement(lrp_curr, 0,
+                            READ_ONLY, EXCLUSIVE, lrp_curr));
+        launchcfd2.add_field(0, FID_PX);
+        launchcfd2.add_region_requirement(
+                RegionRequirement(lrp_curr, 0,
+                        WRITE_DISCARD, EXCLUSIVE, lrp_curr));
+        launchcfd2.add_field(1, FID_PX0);
+        // save off point variable values from previous step (FID_PX -> FID_PX0)
+        //   - no shared point updates to slave.. 
+        runtime->execute_task(ctx, launchcfd2);
+
+        // reuse copy launcher for different field
+        launchcfd2.region_requirements[0].privilege_fields.clear();
+        launchcfd2.region_requirements[0].instance_fields.clear();
+        launchcfd2.add_field(0, FID_PU);
+        launchcfd2.region_requirements[1].privilege_fields.clear();
+        launchcfd2.region_requirements[1].instance_fields.clear();
+        launchcfd2.add_field(1, FID_PU0);
+        // save off point variable values from previous step (FID_PU -> FID_PU0)
+        //   - no shared point updates to slave.. 
+        runtime->execute_task(ctx, launchcfd2);
+
+        launchffd.region_requirements.clear();
+        launchffd.add_region_requirement(
+                RegionRequirement(lrp_curr, 0,
+                        WRITE_DISCARD, EXCLUSIVE, lrp_curr));
+        launchffd.add_field(0, FID_PMASWT);
+
+        // fill point (FID_PMASWT) with 0..
+        runtime->execute_task(ctx, launchffd);
+
+        
+        launchffd2.region_requirements.clear();
+        launchffd2.add_region_requirement(
+                RegionRequirement(lrp_curr, 0,
+                        WRITE_DISCARD, EXCLUSIVE, lrp_curr));
+        launchffd2.add_field(0, FID_PF);
+
+        // fill point (FID_PF) with 0..
+        runtime->execute_task(ctx, launchffd2);
+
+        launchaph.region_requirements.clear();
+        launchaph.add_region_requirement(
+                RegionRequirement(lrp_curr, 0,
+                        READ_ONLY, EXCLUSIVE, lrp_curr));
+        launchaph.add_field(0, FID_PX0);
+        launchaph.add_field(0, FID_PU0);
+        launchaph.add_region_requirement(
+                RegionRequirement(lrp_curr, 0,
+                        WRITE_DISCARD, EXCLUSIVE, lrp_curr));
+        launchaph.add_field(1, FID_PXP);
+        // ======= Predictor step ======
+        // 1. Advance mesh to center of time step
+        //  updates master and private points, note that the tasks below
+        //  will access ghost versions of these points, so an update of ghosts is required here. 
+        runtime->execute_task(ctx, launchaph);
+    }  // for part
+
+    // 1.a Computer new mesh geometry 
+    TaskLauncher launchcc(TID_CALCCTRS, ta);
+    launchcc.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchcc.add_field(0, FID_MAPSP1);
+    launchcc.add_field(0, FID_MAPSP2);
+    launchcc.add_field(0, FID_MAPSZ);
+    launchcc.add_field(0, FID_MAPSP1REG);
+    launchcc.add_field(0, FID_MAPSP2REG);
+    launchcc.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchcc.add_field(1, FID_ZNUMP);
+    launchcc.add_region_requirement(
+            RegionRequirement(lrp_private, 0, READ_ONLY, EXCLUSIVE, lrp_private));
+    launchcc.add_field(2, FID_PXP);
+    launchcc.add_region_requirement(
+            RegionRequirement(lrp_master, 0, READ_ONLY, EXCLUSIVE, lrp_master));
+    launchcc.add_field(3, FID_PXP);
+    launchcc.add_region_requirement(
+            RegionRequirement(lrs, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+    launchcc.add_field(4, FID_EXP);
+    launchcc.add_region_requirement(
+            RegionRequirement(lrz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+    launchcc.add_field(5, FID_ZXP);
+    // requires read access to ghost points, updates private zones and sides 
+    runtime->execute_task(ctx, launchcc);
+
+    TaskLauncher launchcv(TID_CALCVOLS,  ta);
+    launchcv.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchcv.add_field(0, FID_MAPSP1);
+    launchcv.add_field(0, FID_MAPSP2);
+    launchcv.add_field(0, FID_MAPSZ);
+    launchcv.add_field(0, FID_MAPSP1REG);
+    launchcv.add_field(0, FID_MAPSP2REG);
+    launchcv.add_region_requirement(
+            RegionRequirement(lrp_private, 0, READ_ONLY, EXCLUSIVE, lrp_private));
+    launchcv.add_field(1, FID_PXP);
+    launchcv.add_region_requirement(
+            RegionRequirement(lrp_master, 0, READ_ONLY, EXCLUSIVE, lrp_master));
+    launchcv.add_field(2, FID_PXP);
+    launchcv.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchcv.add_field(3, FID_ZXP);
+    launchcv.add_region_requirement(
+            RegionRequirement(lrs, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+    launchcv.add_field(4, FID_SAREAP);
+    launchcv.add_field(4, FID_SVOLP);
+    launchcv.add_region_requirement(
+            RegionRequirement(lrz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+    launchcv.add_field(5, FID_ZAREAP);
+    launchcv.add_field(5, FID_ZVOLP);
+    // requires read access to ghost points, updates private zones and sides 
+    //mesh->fmapcv = runtime->execute_task(ctx, launchcv);
+    // GMS: FIXME! 
+    runtime->execute_task(ctx, launchcv); 
+    TaskLauncher launchcsv(TID_CALCSURFVECS,  ta);
+    launchcsv.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchcsv.add_field(0, FID_MAPSZ);
+    launchcsv.add_field(0, FID_EXP);
+    launchcsv.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchcsv.add_field(1, FID_ZXP);
+    launchcsv.add_region_requirement(
+            RegionRequirement(lrs, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+    launchcsv.add_field(2, FID_SSURFP);
+    // no ghost access required (all private partitions) 
+    runtime->execute_task(ctx, launchcsv);
+
+    TaskLauncher launchcel(TID_CALCEDGELEN, ta);
+    launchcel.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchcel.add_field(0, FID_MAPSP1);
+    launchcel.add_field(0, FID_MAPSP2);
+    launchcel.add_field(0, FID_MAPSP1REG);
+    launchcel.add_field(0, FID_MAPSP2REG);
+    launchcel.add_region_requirement(
+            RegionRequirement(lrp_private, 0, READ_ONLY, EXCLUSIVE, lrp_private));
+    launchcel.add_field(1, FID_PXP);
+    launchcel.add_region_requirement(
+            RegionRequirement(lrp_master, 0, READ_ONLY, EXCLUSIVE, lrp_master));
+    launchcel.add_field(2, FID_PXP);
+    launchcel.add_region_requirement(
+            RegionRequirement(lrs, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+    launchcel.add_field(3, FID_ELEN);
+    // requires read access to ghost points and write access to private edges 
+    runtime->execute_task(ctx, launchcel);
+
+    TaskLauncher launchccl(TID_CALCCHARLEN, ta);
+    launchccl.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchccl.add_field(0, FID_MAPSZ);
+    launchccl.add_field(0, FID_SAREAP);
+    launchccl.add_field(0, FID_ELEN);
+    launchccl.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchccl.add_field(1, FID_ZNUMP);
+    launchccl.add_region_requirement(
+            RegionRequirement(lrz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+    launchccl.add_field(2, FID_ZDL);
+    // no ghost access required (all private partitions) 
+    runtime->execute_task(ctx, launchccl);
+
+    // 2. compute point masses 
+    TaskLauncher launchcr(TID_CALCRHO, ta);
+    launchcr.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchcr.add_field(0, FID_ZM);
+    launchcr.add_field(0, FID_ZVOLP);
+    launchcr.add_region_requirement(
+            RegionRequirement(lrz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+    launchcr.add_field(1, FID_ZRP);
+    // no ghost access required (all private partitions) 
+    runtime->execute_task(ctx, launchcr);
+    
+    TaskLauncher launchccm(TID_CALCCRNRMASS, ta);
+    launchccm.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchccm.add_field(0, FID_MAPSP1);
+    launchccm.add_field(0, FID_MAPSP1REG);
+    launchccm.add_field(0, FID_MAPSS3);
+    launchccm.add_field(0, FID_MAPSZ);
+    launchccm.add_field(0, FID_SMF);
+    launchccm.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchccm.add_field(1, FID_ZRP);
+    launchccm.add_field(1, FID_ZAREAP);
+    launchccm.add_region_requirement(
+            RegionRequirement(lrp_private, 0, READ_WRITE, EXCLUSIVE, lrp_private));
+    launchccm.add_field(2, FID_PMASWT);
+    launchccm.add_region_requirement(
+            RegionRequirement(lrp_master, 0, OPID_SUMDBL,
+                    SIMULTANEOUS, lrp_master));
+    launchccm.add_field(3, FID_PMASWT);
+    // requires read / write access to private and shared (ghosted) points
+    //   uses a reduction operation to sum corner masses to point mass 
+    runtime->execute_task(ctx, launchccm);
+
+    // 3. compute material state (half-advanced) 
+    double cshargs[] = { pgas->gamma, pgas->ssmin, dt };
+    TaskLauncher launchcsh(TID_CALCSTATEHALF, TaskArgument(cshargs, sizeof(cshargs)));
+    launchcsh.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchcsh.add_field(0, FID_ZR);
+    launchcsh.add_field(0, FID_ZVOLP);
+    launchcsh.add_field(0, FID_ZVOL0);
+    launchcsh.add_field(0, FID_ZE);
+    launchcsh.add_field(0, FID_ZWRATE);
+    launchcsh.add_field(0, FID_ZM);
+    launchcsh.add_region_requirement(
+            RegionRequirement(lrz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+    launchcsh.add_field(1, FID_ZP);
+    launchcsh.add_field(1, FID_ZSS);
+    // no ghost access required (all private partitions) 
+    runtime->execute_task(ctx, launchcsh);
+
+    // 4. compute forces 
+    TaskLauncher launchcfp(TID_CALCFORCEPGAS, ta);
+    launchcfp.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchcfp.add_field(0, FID_MAPSZ);
+    launchcfp.add_field(0, FID_SSURFP);
+    launchcfp.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchcfp.add_field(1, FID_ZP);
+    launchcfp.add_region_requirement(
+            RegionRequirement(lrs, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+    launchcfp.add_field(2, FID_SFP);
+    // no ghost access required (all private partitions) 
+    runtime->execute_task(ctx, launchcfp);
+
+    double cftargs[] = { tts->alfa, tts->ssmin };
+    TaskLauncher launchcft(TID_CALCFORCETTS, TaskArgument(cftargs, sizeof(cftargs)));
+    launchcft.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchcft.add_field(0, FID_MAPSZ);
+    launchcft.add_field(0, FID_SAREAP);
+    launchcft.add_field(0, FID_SMF);
+    launchcft.add_field(0, FID_SSURFP);
+    launchcft.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchcft.add_field(1, FID_ZAREAP);
+    launchcft.add_field(1, FID_ZRP);
+    launchcft.add_field(1, FID_ZSS);
+    launchcft.add_region_requirement(
+            RegionRequirement(lrs, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+    launchcft.add_field(2, FID_SFT);
+    // no ghost access required (all private partitions) 
+    runtime->execute_task(ctx, launchcft);
+
+    TaskLauncher launchscd(TID_SETCORNERDIV, ta);
+    launchscd.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchscd.add_field(0, FID_MAPSZ);
+    launchscd.add_field(0, FID_MAPSP1);
+    launchscd.add_field(0, FID_MAPSP2);
+    launchscd.add_field(0, FID_MAPSS3);
+    launchscd.add_field(0, FID_MAPSP1REG);
+    launchscd.add_field(0, FID_MAPSP2REG);
+    launchscd.add_field(0, FID_EXP);
+    launchscd.add_field(0, FID_ELEN);
+    launchscd.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchscd.add_field(1, FID_ZNUMP);
+    launchscd.add_field(1, FID_ZXP);
+    launchscd.add_region_requirement(
+            RegionRequirement(lrp_private, 0, READ_ONLY, EXCLUSIVE, lrp_private));
+    launchscd.add_field(2, FID_PXP);
+    launchscd.add_field(2, FID_PU0);
+    launchscd.add_region_requirement(
+      RegionRequirement(lrp_master, 0, READ_ONLY, EXCLUSIVE, lrp_master));
+    launchscd.add_field(3, FID_PXP);
+    launchscd.add_field(3, FID_PU0);
+    launchscd.add_region_requirement(
+            RegionRequirement(lrz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+    launchscd.add_field(4, FID_ZUC);
+    launchscd.add_region_requirement(
+            RegionRequirement(lrs, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+    launchscd.add_field(5, FID_CAREA);
+    launchscd.add_field(5, FID_CCOS);
+    launchscd.add_field(5, FID_CDIV);
+    launchscd.add_field(5, FID_CEVOL);
+    launchscd.add_field(5, FID_CDU);
+    // requires read only access to shared (ghost) and private point data 
+    runtime->execute_task(ctx, launchscd);
+
+    double sqcfargs[] = { qcs->qgamma, qcs->q1, qcs->q2 };
+    TaskLauncher launchsqcf(TID_SETQCNFORCE, 
+            TaskArgument(sqcfargs, sizeof(sqcfargs)));
+    launchsqcf.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchsqcf.add_field(0, FID_MAPSZ);
+    launchsqcf.add_field(0, FID_MAPSP1);
+    launchsqcf.add_field(0, FID_MAPSP2);
+    launchsqcf.add_field(0, FID_MAPSS3);
+    launchsqcf.add_field(0, FID_MAPSP1REG);
+    launchsqcf.add_field(0, FID_MAPSP2REG);
+    launchsqcf.add_field(0, FID_ELEN);
+    launchsqcf.add_field(0, FID_CDIV);
+    launchsqcf.add_field(0, FID_CDU);
+    launchsqcf.add_field(0, FID_CEVOL);
+    launchsqcf.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchsqcf.add_field(1, FID_ZRP);
+    launchsqcf.add_field(1, FID_ZSS);
+    launchsqcf.add_region_requirement(
+            RegionRequirement(lrp_private, 0, READ_ONLY, EXCLUSIVE, lrp_private));
+    launchsqcf.add_field(2, FID_PU0);
+    launchsqcf.add_region_requirement(
+            RegionRequirement(lrp_master, 0, READ_ONLY, EXCLUSIVE, lrp_master));
+    launchsqcf.add_field(3, FID_PU0);
+    launchsqcf.add_region_requirement(
+            RegionRequirement(lrs, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+    launchsqcf.add_field(4, FID_CRMU);
+    launchsqcf.add_field(4, FID_CQE1);
+    launchsqcf.add_field(4, FID_CQE2);
+    // requires read only access to shared (ghost) and private point data 
+    runtime->execute_task(ctx, launchsqcf);
+
+    TaskLauncher launchsfq(TID_SETFORCEQCS, ta);
+    launchsfq.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchsfq.add_field(0, FID_MAPSS4);
+    launchsfq.add_field(0, FID_CAREA);
+    launchsfq.add_field(0, FID_CQE1);
+    launchsfq.add_field(0, FID_CQE2);
+    launchsfq.add_field(0, FID_ELEN);
+    launchsfq.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_WRITE, EXCLUSIVE, lrs));
+    launchsfq.add_field(1, FID_CCOS);
+    launchsfq.add_region_requirement(
+            RegionRequirement(lrs, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+    launchsfq.add_field(2, FID_CW);
+    launchsfq.add_field(2, FID_SFQ);
+    // no ghost data required 
+    runtime->execute_task(ctx, launchsfq);
+
+    double svdargs[] = { qcs->q1, qcs->q2 };
+    TaskLauncher launchsvd(TID_SETVELDIFF,
+                           TaskArgument(svdargs, sizeof(svdargs)));
+    launchsvd.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchsvd.add_field(0, FID_MAPSZ);
+    launchsvd.add_field(0, FID_MAPSP1);
+    launchsvd.add_field(0, FID_MAPSP2);
+    launchsvd.add_field(0, FID_MAPSP1REG);
+    launchsvd.add_field(0, FID_MAPSP2REG);
+    launchsvd.add_field(0, FID_ELEN);
+    launchsvd.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchsvd.add_field(1, FID_ZSS);
+    launchsvd.add_region_requirement(
+            RegionRequirement(lrp_private, 0, READ_ONLY, EXCLUSIVE, lrp_private));
+    launchsvd.add_field(2, FID_PXP);
+    launchsvd.add_field(2, FID_PU0);
+    launchsvd.add_region_requirement(
+            RegionRequirement(lrp_master, 0, READ_ONLY, EXCLUSIVE, lrp_master));
+    launchsvd.add_field(3, FID_PXP);
+    launchsvd.add_field(3, FID_PU0);
+    launchsvd.add_region_requirement(
+            RegionRequirement(lrz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+    launchsvd.add_field(4, FID_ZTMP);
+    launchsvd.add_field(4, FID_ZDU);
+    // requires read only access to shared (ghost) and private point data 
+    runtime->execute_task(ctx, launchsvd);
+
+    // this sums corner forces to points 
+    TaskLauncher launchscf(TID_SUMCRNRFORCE, ta);
+    launchscf.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchscf.add_field(0, FID_MAPSP1);
+    launchscf.add_field(0, FID_MAPSP1REG);
+    launchscf.add_field(0, FID_MAPSS3);
+    launchscf.add_field(0, FID_SFP);
+    launchscf.add_field(0, FID_SFQ);
+    launchscf.add_field(0, FID_SFT);
+    launchscf.add_region_requirement(
+            RegionRequirement(lrp_private, 0, READ_WRITE, EXCLUSIVE, lrp_private));
+    launchscf.add_field(1, FID_PF);
+    launchscf.add_region_requirement(
+      RegionRequirement(lrp_master, 0, OPID_SUMDBL2,
+                    SIMULTANEOUS, lrp_master));
+    launchscf.add_field(2, FID_PF);
+    // requires read / write access to private and shared (ghosted) points
+    //   uses a reduction operation to sum corner masses to point mass 
+    runtime->execute_task(ctx, launchscf);
+
+    // 4a. apply boundary conditions
+    // GMS: need to think hard about this one..
+    //      likely use the ghost and master partitions 
+    TaskLauncher launchafbc(TID_APPLYFIXEDBC, ta);
+    for (int i = 0; i < bcs.size(); ++i) {
+      // 
+        double2 afbcargs[1] = { bcs[i]->vfix };
+        launchafbc.argument =
+                TaskArgument(afbcargs, sizeof(afbcargs));
+        launchafbc.region_requirements.clear();
+        launchafbc.add_region_requirement(
+                RegionRequirement(bcs[i]->lpb, 0,
+                        READ_ONLY, EXCLUSIVE, bcs[i]->lrb));
+        launchafbc.add_field(0, FID_MAPBP);
+        launchafbc.add_field(0, FID_MAPBPREG);
+        launchafbc.add_region_requirement(
+                RegionRequirement(lrp_private, 0,
+                        READ_WRITE, EXCLUSIVE, lrp_private));
+        launchafbc.add_field(1, FID_PF);
+        launchafbc.add_field(1, FID_PU0);
+        launchafbc.add_region_requirement(
+                RegionRequirement(lrp_master, 0,
+                        READ_WRITE, EXCLUSIVE, lrp_master));
+        launchafbc.add_field(2, FID_PF);
+        launchafbc.add_field(2, FID_PU0);
+        // this task updates point values both private and ghosted (using master partition) 
+        runtime->execute_task(ctx, launchafbc);
+    }
+
+    // check for negative volumes on predictor step
+    // This should only check local sides, not remote..
+    //   do we even need to accumulate to a single value? 
+    mesh->checkBadSides();
+
+    TaskLauncher launchca(TID_CALCACCEL, ta);
+    double apfargs[] = { dt };
+    TaskLauncher launchapf(TID_ADVPOSFULL, TaskArgument(apfargs, sizeof(apfargs)));
+    // do point routines twice, once each for private and master
+    // partitions
+    for (int part = 0; part < 2; ++part) {
+        LogicalRegion& lrp_curr = (part == 0 ? lrp_private : lrp_master);
+
+        // 5. compute accelerations
+        launchca.region_requirements.clear();
+        launchca.add_region_requirement(
+                RegionRequirement(lrp_curr, 0,
+                        READ_ONLY, EXCLUSIVE, lrp_curr));
+        launchca.add_field(0, FID_PF);
+        launchca.add_field(0, FID_PMASWT);
+        launchca.add_region_requirement(
+                RegionRequirement(lrp_curr, 0,
+                        WRITE_DISCARD, EXCLUSIVE, lrp_curr));
+        launchca.add_field(1, FID_PAP);
+        // this updates point acceleration values on private and master
+        //   partitions 
+        runtime->execute_task(ctx, launchca);
+
+        // ===== Corrector step =====
+        // 6. advance mesh to end of time step
+        launchapf.region_requirements.clear();
+        launchapf.add_region_requirement(
+                RegionRequirement(lrp_curr, 0,
+                        READ_ONLY, EXCLUSIVE, lrp_curr));
+        launchapf.add_field(0, FID_PX0);
+        launchapf.add_field(0, FID_PU0);
+        launchapf.add_field(0, FID_PAP);
+        launchapf.add_region_requirement(
+                RegionRequirement(lrp_curr, 0,
+                        WRITE_DISCARD, EXCLUSIVE, lrp_curr));
+        launchapf.add_field(1, FID_PX);
+        launchapf.add_field(1, FID_PU);
+        // this updates point coordintate and velocity on private
+        //   and master partitions 
+        runtime->execute_task(ctx, launchapf);
+    }  // for part
+
+    // 6a. compute new mesh geometry
+    // reuse launchers from earlier, with corrector-step fields
+    for (int r = 2; r < 6; ++r) {
+        launchcc.region_requirements[r].privilege_fields.clear();
+        launchcc.region_requirements[r].instance_fields.clear();
+    }
+    launchcc.add_field(2, FID_PX);
+    launchcc.add_field(3, FID_PX);
+    launchcc.add_field(4, FID_EX);
+    launchcc.add_field(5, FID_ZX);
+    // requires read access to ghost points, updates private zones and sides 
+    runtime->execute_task(ctx, launchcc);
+
+    for (int r = 1; r < 6; ++r) {
+        launchcv.region_requirements[r].privilege_fields.clear();
+        launchcv.region_requirements[r].instance_fields.clear();
+    }
+    launchcv.add_field(1, FID_PX);
+    launchcv.add_field(2, FID_PX);
+    launchcv.add_field(3, FID_ZX);
+    launchcv.add_field(4, FID_SAREA);
+    launchcv.add_field(4, FID_SVOL);
+    launchcv.add_field(5, FID_ZAREA);
+    launchcv.add_field(5, FID_ZVOL);
+    // requires read access to ghost points, updates private zones and sides 
+    // mesh->fmapcv =
+    // GMS: fix me!, need to return a future? 
+    runtime->execute_task(ctx, launchcv);
+
+    // 7. compute work
+    double cwargs[] = { dt };
+    TaskLauncher launchcw(TID_CALCWORK, TaskArgument(cwargs, sizeof(cwargs)));
+    launchcw.add_region_requirement(
+            RegionRequirement(lrs, 0, READ_ONLY, EXCLUSIVE, lrs));
+    launchcw.add_field(0, FID_MAPSP1);
+    launchcw.add_field(0, FID_MAPSP2);
+    launchcw.add_field(0, FID_MAPSZ);
+    launchcw.add_field(0, FID_MAPSP1REG);
+    launchcw.add_field(0, FID_MAPSP2REG);
+    launchcw.add_field(0, FID_SFP);
+    launchcw.add_field(0, FID_SFQ);
+    launchcw.add_field(0, FID_ZM);
+    launchcw.add_region_requirement(
+            RegionRequirement(lrz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+    launchcw.add_field(1, FID_ZE);
+    // no ghost access required 
+    runtime->execute_task(ctx, launchcw);
+
+    // reuse launcher from earlier, with corrector-step fields
+    for (int r = 0; r < 2; ++r) {
+        launchcr.region_requirements[r].privilege_fields.clear();
+        launchcr.region_requirements[r].instance_fields.clear();
+    }
+    launchcr.add_field(0, FID_ZM);
+    launchcr.add_field(0, FID_ZVOL);
+    launchcr.add_field(1, FID_ZR);
+    // no ghost access required 
+    runtime->execute_task(ctx, launchcr);
+
+    // 9.  compute timestep for next cycle
+    double cdtargs[] = { cfl, cflv, dt };
+    TaskLauncher launchcdt(TID_CALCDT, TaskArgument(cdtargs, sizeof(cdtargs)));
+    launchcdt.add_region_requirement(
+            RegionRequirement(lrz, 0, READ_ONLY, EXCLUSIVE, lrz));
+    launchcdt.add_field(0, FID_ZDL);
+    launchcdt.add_field(0, FID_ZDU);
+    launchcdt.add_field(0, FID_ZSS);
+    launchcdt.add_field(0, FID_ZVOL);
+    launchcdt.add_field(0, FID_ZVOL0);
+    // no ghost access required 
+//    fmapcdt =
+    // GMS: fix me, need to return future? 
+    runtime->execute_task(ctx, launchcdt);
+
+    runtime->end_trace(ctx, 123);
+
+    // check for negative volumes on corrector step
+    // this checks the return values from the CALCVOLSTASK
+    // GMS: again, this global reduction may be unnecessary 
     mesh->checkBadSides();
 }
 
