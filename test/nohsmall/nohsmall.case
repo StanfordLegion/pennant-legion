@@ -1,0 +1,11 @@
+#
+# Created by PENNANT
+#
+FORMAT
+type: ensight gold
+GEOMETRY
+model: ./test/nohsmall/nohsmall.geo
+VARIABLE
+scalar per element: zr ./test/nohsmall/nohsmall.zr
+scalar per element: ze ./test/nohsmall/nohsmall.ze
+scalar per element: zp ./test/nohsmall/nohsmall.zp
