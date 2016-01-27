@@ -29,6 +29,7 @@ MyMapper::MyMapper(
         Processor p)
         : DefaultMapper(m, rt, p) {}
 
+
 bool MyMapper::map_task(Task *task)
 {
     DefaultMapper::map_task(task);
@@ -41,6 +42,10 @@ bool MyMapper::map_task(Task *task)
     return true;
 }
 
+void select_task_options(LegionRuntime::HighLevel::Task *task) {
+  task->map_locally = true;
+  return; 
+}
 bool MyMapper::rank_copy_targets(
         const Mappable *mappable,
         LogicalRegion rebuild_region,
