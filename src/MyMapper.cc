@@ -42,7 +42,7 @@ bool MyMapper::map_task(Task *task)
     return true;
 }
 
-void select_task_options(LegionRuntime::HighLevel::Task *task) {
+void MyMapper::select_task_options(LegionRuntime::HighLevel::Task *task) {
   task->map_locally = true;
   return; 
 }

@@ -19,7 +19,7 @@
 SRCDIR := src
 
 #LG_RT_DIR := ${HOME}/Documents/legion/legion-fork/runtime
-LG_RT_DIR := ${HOME}/packages/legion/runtime
+LG_RT_DIR := ${HOME}/local/src/legion/runtime
 #ifndef LG_RT_DIR
 #$(error LG_RT_DIR variable is not defined, aborting build)
 #endif
@@ -32,13 +32,13 @@ OUTPUT_LEVEL=LEVEL_DEBUG  # Compile time print level
 #SHARED_LOWLEVEL=1	  # Use the shared low level
 SHARED_LOWLEVEL=0
 USE_CUDA=0
-GASNET_ROOT= ${HOME}/packages/gasnet
+GASNET_ROOT= ${HOME}/local
+HDF_ROOT = ${HOME}/local
 #GASNET_ROOT=/users/cferenba/gasnet/1.24.0/build-mustang-gnu48
 #GASNET_ROOT=/users/cferenba/gasnet/1.24.0/build-mustang-intel14
 GASNET=$(GASNET_ROOT)
 #CONDUIT=udp
-#CONDUIT=ibv
-CONDUIT=udp
+CONDUIT=ibv
 #ALT_MAPPERS=1		  # Compile the alternative mappers
 USE_HDF   =1
 USE_GASNET=1
@@ -50,15 +50,15 @@ GEN_SRC         := $(wildcard $(SRCDIR)/*.cc)
 GEN_GPU_SRC	:=				# .cu files
 
 # You can modify these variables, some will be appended to by the runtime makefile
-INC_FLAGS	:= -I$(SRCDIR) -I$(GASNET)/include  -I$(GASNET)/include/udp-conduit  -I$(HOME)/packages/trunk/hdf5/include
+INC_FLAGS	:= -I$(SRCDIR) 
 #CC_FLAGS	:=
 #CC_FLAGS 	:= -DPRIVILEGE_CHECKS
-CC_FLAGS	:= -DPRIVILEGE_CHECKS -DBOUNDS_CHECK 
+CC_FLAGS	:= -DPRIVILEGE_CHECKS -DBOUNDS_CHECK -std=c++11 -Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-unused-variable
 #CC_FLAGS	:= -DLEGION_PROF -DNODE_LOGGING
 NVCC_FLAGS	:=
 GASNET_FLAGS	:=
 #LD_FLAGS	:=
-LD_FLAGS := -L$(GASNET)/lib -L$(HOME)/packages/trunk/hdf5/lib -lhdf5 -L$(HOME)/packages/zlib-1.2.8/lib -lz
+LD_FLAGS := 
 
 ###########################################################################
 #

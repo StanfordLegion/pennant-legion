@@ -27,7 +27,7 @@ public:
         LegionRuntime::HighLevel::HighLevelRuntime *rt,
         LegionRuntime::HighLevel::Processor local);
 public:
-  virtual void select_task_options(LegionRutnime::HighLevel::Task *task);
+  virtual void select_task_options(LegionRuntime::HighLevel::Task *task);
   virtual bool map_task(LegionRuntime::HighLevel::Task *task);
   virtual bool rank_copy_targets(
         const LegionRuntime::HighLevel::Mappable *mappable,
