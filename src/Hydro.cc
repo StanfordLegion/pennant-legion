@@ -119,7 +119,7 @@ void Hydro::init() {
     const int numzch = mesh->numzch;
     const int nump = mesh->nump;
     const int numz = mesh->numz;
-    const int nums = mesh->nums;
+//    const int nums = mesh->nums;
 
     const double2* zx = mesh->zx;
     const double* zvol = mesh->zvol;
@@ -145,7 +145,7 @@ void Hydro::init() {
         const vector<double>& subrgn = mesh->subregion;
         if (!subrgn.empty()) {
             const double eps = 1.e-12;
-            #pragma ivdep
+//            #pragma ivdep
             for (int z = zfirst; z < zlast; ++z) {
                 if (zx[z].x > (subrgn[0] - eps) &&
                     zx[z].x < (subrgn[1] + eps) &&
@@ -157,7 +157,7 @@ void Hydro::init() {
             }
         }
 
-        #pragma ivdep
+//        #pragma ivdep
         for (int z = zfirst; z < zlast; ++z) {
             zm[z] = zr[z] * zvol[z];
             zetot[z] = ze[z] * zm[z];
@@ -225,7 +225,7 @@ void Hydro::initRadialVel(
     const double2* px = mesh->px;
     const double eps = 1.e-12;
 
-    #pragma ivdep
+//    #pragma ivdep
     for (int p = pfirst; p < plast; ++p) {
         double pmag = length(px[p]);
         if (pmag > eps)
@@ -244,12 +244,13 @@ void Hydro::doCycle(
     LogicalRegion& lrp = mesh->lrp;
     LogicalRegion& lrs = mesh->lrs;
     LogicalRegion& lrz = mesh->lrz;
+    
     LogicalPartition& lppprv = mesh->lppprv;
     LogicalPartition& lppmstr = mesh->lppmstr;
     LogicalPartition& lppshr = mesh->lppshr;
     LogicalPartition& lps = mesh->lps;
     LogicalPartition& lpz = mesh->lpz;
-    LogicalRegion& lrglb = mesh->lrglb;
+//    LogicalRegion& lrglb = mesh->lrglb;
     Domain& dompc = mesh->dompc;
 
     TaskArgument ta;

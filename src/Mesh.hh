@@ -227,6 +227,7 @@ public:
     std::vector<int> zchzfirst;    // start/stop index for zone chunks
     std::vector<int> zchzlast;
 
+    int num_h; // number of history "checkpoints" to keep
     std::vector<int> nodecolors;
     colormap nodemcolors;
     LegionRuntime::HighLevel::Context ctx;
@@ -240,6 +241,7 @@ public:
     LegionRuntime::HighLevel::FutureMap fmapcv;
                                    // future map for calcVolsTask
 
+  LegionRuntime::HighLevel::LogicalRegion p_lrp, p_lrz, p_lrs; 
     Mesh(
             const InputFile* inp,
             const int numpcsa,

@@ -17,6 +17,8 @@
 #include <algorithm>
 
 #include "legion.h"
+#include "legion_io.h"
+
 
 #include "MyLegion.hh"
 #include "Vec2.hh"
@@ -232,7 +234,76 @@ void Mesh::init() {
     fap.allocate_field(sizeof(double2), FID_PAP);
     lrp = runtime->create_logical_region(ctx, isp, fsp);
     runtime->attach_name(lrp, "lrp");
-
+    num_h = 1; // GMS HACK
+    int num_elements = nump * num_h; 
+    IndexSpace p_isp = runtime->create_index_space(ctx, num_elements);
+    IndexAllocator p_iap = runtime->create_index_allocator(ctx, p_isp);
+    p_iap.alloc(num_elements); 
+    p_lrp = runtime->create_logical_region(ctx, p_isp, fsp);
+    runtime->attach_name(p_lrp, "persistent points LR");
+    int num_subregions = 4; // GMS HACK 
+    IndexPartition ipp;
+    Coloring hdf_parts;
+    int num_per_part = num_elements / num_subregions;
+    IndexIterator itr(runtime, ctx, p_isp); 
+    const int lower_bound = num_elements / num_subregions;
+    const int upper_bound = lower_bound+1;
+    const int number_small = num_subregions - (num_elements % num_subregions); 
+    for(int color = 0; color < num_subregions; color++) {
+      int cur_num_elements = color < number_small ? lower_bound : upper_bound; 
+      for(int elem = 0; elem < cur_num_elements; elem++) { 
+        assert(itr.has_next());
+        ptr_t point_ptr = itr.next();
+        hdf_parts[color].points.insert(point_ptr);
+      }
+    }
+    ipp = runtime->create_index_partition(ctx, p_isp, hdf_parts, true); 
+    
+    // if ((num_elements % num_subregions) != 0) {
+    //   // Not evenly divisible
+    //   const int lower_bound = num_elements/num_subregions;
+    //   const int upper_bound = lower_bound+1;
+    //   const int number_small = num_subregions - (num_elements % num_subregions);
+    //   DomainColoring coloring;
+    //   int index = 0;
+    //   for (int color = 0; color < num_subregions; color++) {
+        
+    //     int num_elmts = color < number_small ? lower_bound : upper_bound;
+    //     assert((index+num_elmts) <= num_elements);
+    //     Rect<1> subrect(Point<1>(index),Point<1>(index+num_elmts-1));
+    //     coloring[color] = Domain::from_rect<1>(subrect);
+    //     index += num_elmts;
+    //   }
+    //   ipp = runtime->create_index_partition(ctx, p_isp, color_domain,
+    //                                         coloring, true/*disjoint*/);
+    // } else {
+    //   Blockify<1> coloring(num_elements/num_subregions);
+    //   ipp = runtime->create_index_partition(ctx, p_isp, coloring);
+    // }
+    
+    
+    LogicalPartition p_lpp =
+      runtime->get_logical_partition(ctx, p_lrp, ipp); 
+                                                                    
+                                                                  
+    PersistentRegion points_pr = PersistentRegion(runtime);
+    std::map<FieldID, std::string> field_string_map;
+    field_string_map.insert(std::make_pair(FID_PX, "bam/px"));
+    field_string_map.insert(std::make_pair(FID_PXP, "bam/pxp"));
+    field_string_map.insert(std::make_pair(FID_PX0, "bam/px0"));
+    field_string_map.insert(std::make_pair(FID_PU, "bam/pu"));
+    field_string_map.insert(std::make_pair(FID_PU0, "bam/pu0"));
+    field_string_map.insert(std::make_pair(FID_PMASWT, "bam/pmaswt"));
+    field_string_map.insert(std::make_pair(FID_PF, "bam/pf"));
+    field_string_map.insert(std::make_pair(FID_PAP, "bam/pap"));
+    
+    
+    points_pr.create_persistent_subregions(ctx, "points_pr.hdf5",
+                                           p_lrp, p_lpp, hdf_parts,
+                                           field_string_map);
+    
+    
+    
     IndexSpace isz = runtime->create_index_space(ctx, numz);
     IndexAllocator iaz = runtime->create_index_allocator(ctx, isz);
     iaz.alloc(numz);
@@ -312,11 +383,12 @@ void Mesh::init() {
     // create domain over pieces
     Rect<1> task_rect(Point<1>(0), Point<1>(numpcs-1));
     dompc  = Domain::from_rect<1>(task_rect);
-    IndexSpace ispc = runtime->create_index_space(ctx, dompc);
+    
     
 #if 0 
-    
+    IndexSpace ispc = runtime->create_index_space(ctx, dompc);
     {
+      
       IndexAllocator allocator = runtime->create_index_allocator(ctx, ispc);
       allocator.alloc(numpcs);
     }
@@ -976,7 +1048,7 @@ void Mesh::calcSideFracs(
         const int sfirst,
         const int slast) {
 
-    #pragma ivdep
+//    #pragma ivdep
     for (int s = sfirst; s < slast; ++s) {
         int z = mapsz[s];
         smf[s] = sarea[s] / zarea[z];
