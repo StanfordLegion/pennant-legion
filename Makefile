@@ -56,7 +56,7 @@ INC_FLAGS	:= -I$(SRCDIR)
 #CC_FLAGS	:=
 #CC_FLAGS 	:= -DPRIVILEGE_CHECKS
 #CC_FLAGS	:= -DPRIVILEGE_CHECKS -DBOUNDS_CHECK -std=c++11 -Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-unused-variable
-CC_FLAGS	:= -DLEGIONIO_SERIALIZE -DLEGIONIO_VERBOSE  -DPRIVILEGE_CHECKS -DBOUNDS_CHECK -std=c++11 -Wno-sign-compare -Wno-unused-variable -Wno-deprecated-register -Wno-unknown-pragmas -Wno-format
+CC_FLAGS	:= -DLEGIONIO_SERIALIZE -DLEGIONIO_VERBOSE -DLEGIONIO_SETUP_LINKS -DPRIVILEGE_CHECKS -DBOUNDS_CHECK -std=c++11 -Wno-sign-compare -Wno-unused-variable -Wno-deprecated-register -Wno-unknown-pragmas -Wno-format
 #CC_FLAGS	:= -DLEGION_PROF -DNODE_LOGGING
 NVCC_FLAGS	:=
 GASNET_FLAGS	:=

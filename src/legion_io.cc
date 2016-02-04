@@ -506,7 +506,9 @@ void PersistentRegion::create_persistent_subregions(Context ctx,
 {
   hid_t link_file_id, shard_group_id, shard_ds_id, dataspace_id, dtype_id, shard_file_id, attr_ds_id, link_group_id, link_group_2_id;
   herr_t status;
+#ifdef LEGIONIO_SETUP_LINKS 
   link_file_id = H5Fcreate(name, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+#endif
   dtype_id  = H5Tcopy (H5T_NATIVE_DOUBLE);
 
   this->lp = lp;
@@ -549,12 +551,10 @@ void PersistentRegion::create_persistent_subregions(Context ctx,
     int *shard_dims;
     std::ostringstream ds_name_stream;
     
-    ds_name_stream <<  pieces[i].color << "-" << pieces[i].dp;
+    ds_name_stream <<  pieces[i].color; 
     sprintf(pieces[i].shard_name, "%d-%d-%s",
             x_min, x_max, name); 
     
-    x_max = pieces[i].dp[1];
-
 #ifdef LEGIONIO_VERBOSE 
     std::cout << "domain (unstructured) is: [" << x_min << "," << x_max
               << "]" << std::endl; 
@@ -603,13 +603,27 @@ void PersistentRegion::create_persistent_subregions(Context ctx,
                                  H5P_DEFAULT);
       }
 #ifdef LEGIONIO_SETUP_LINKS
-      if(H5Lexists(link_file_id, gp, H5P_DEFAULT) && H5Lexists(link_file_id, iterator->second.c_str(), H5P_DEFAULT)) {
-        link_group_2_id = H5Gopen2(link_file_id, iterator->second.c_str(), H5P_DEFAULT);
-      } else {
+      if(H5Lexists(link_file_id, gp, H5P_DEFAULT)) {
+#ifdef LEGIONIO_VERBOSE
+        std::cout << "Group " << gp << " exists in link file " << std::endl; 
+#endif
+        link_group_id = H5Gopen2(link_file_id, gp, H5P_DEFAULT);
+      } else { 
+#ifdef LEGIONIO_VERBOSE
+        std::cout << "Creating group in link file " << gp << std::endl;
+#endif
         link_group_id = H5Gcreate2(link_file_id, gp, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        link_group_2_id = H5Gcreate2(link_group_id, ds, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        H5Gclose(link_group_id);
       }
+      if(H5Lexists(link_file_id, iterator->second.c_str(), H5P_DEFAULT)){
+        link_group_2_id = H5Gopen2(link_group_id, ds, H5P_DEFAULT);
+      } else {
+#ifdef LEGIONIO_VERBOSE
+        std::cout << "Creating another group in the link file " << ds << std::endl;
+#endif
+        link_group_2_id = H5Gcreate2(link_group_id, ds, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        
+      }
+      H5Gclose(link_group_id);
       
       hid_t attr_id = H5Acreate2(shard_ds_id, "dims", H5T_NATIVE_INT, attr_ds_id,
                                  H5P_DEFAULT, H5P_DEFAULT);
@@ -633,7 +647,9 @@ void PersistentRegion::create_persistent_subregions(Context ctx,
     
     i++;
   }
+#ifdef LEGIONIO_SETUP_LINKS 
   H5Fclose(link_file_id);
+#endif
   
 #ifdef LEGIONIO_PHASER_TIMERS
   // Create phase barriers used for timing info 
