@@ -107,7 +107,8 @@ void Driver::run() {
         } // if cycle...
 
     } // while cycle...
-
+    mesh->checkpoint();
+    
     // get stopping timestamp
     struct timeval send;
     gettimeofday(&send, NULL);

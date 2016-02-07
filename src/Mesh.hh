@@ -18,6 +18,8 @@
 #include <algorithm>
 
 #include "legion.h"
+#include "legion_io.h"
+
 
 #include "Vec2.hh"
 #include "GenMesh.hh"
@@ -241,7 +243,9 @@ public:
     LegionRuntime::HighLevel::FutureMap fmapcv;
                                    // future map for calcVolsTask
 
-  LegionRuntime::HighLevel::LogicalRegion p_lrp, p_lrz, p_lrs; 
+  LegionRuntime::HighLevel::LogicalRegion p_lrp, p_lrz, p_lrs;
+  LegionRuntime::HighLevel::LogicalPartition p_lpp, p_lpp_src;
+  PersistentRegion* points_pr; 
     Mesh(
             const InputFile* inp,
             const int numpcsa,
@@ -382,6 +386,8 @@ public:
             const int sfirst,
             const int slast);
 
+  // checkpoint mesh elements
+  void checkpoint(); 
 }; // class Mesh
 
 

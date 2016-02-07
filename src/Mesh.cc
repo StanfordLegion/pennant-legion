@@ -17,7 +17,6 @@
 #include <algorithm>
 
 #include "legion.h"
-#include "legion_io.h"
 
 
 #include "MyLegion.hh"
@@ -139,7 +138,8 @@ Mesh::Mesh(
     gmesh = new GenMesh(inp);
     wxy = new WriteXY(this);
     egold = new ExportGold(this);
-
+    points_pr = new PersistentRegion(runtime);
+    
     init();
 }
 
@@ -148,6 +148,7 @@ Mesh::~Mesh() {
     delete gmesh;
     delete wxy;
     delete egold;
+    delete points_pr;
 }
 
 
@@ -223,7 +224,10 @@ void Mesh::init() {
     IndexAllocator iap = runtime->create_index_allocator(ctx, isp);
     iap.alloc(nump);
     FieldSpace fsp = runtime->create_field_space(ctx);
+    FieldSpace fsp_p = runtime->create_field_space(ctx);
     FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
+    FieldAllocator fap_p = runtime->create_field_allocator(ctx, fsp_p); 
+
     fap.allocate_field(sizeof(double2), FID_PX);
     fap.allocate_field(sizeof(double2), FID_PXP);
     fap.allocate_field(sizeof(double2), FID_PX0);
@@ -232,20 +236,32 @@ void Mesh::init() {
     fap.allocate_field(sizeof(double), FID_PMASWT);
     fap.allocate_field(sizeof(double2), FID_PF);
     fap.allocate_field(sizeof(double2), FID_PAP);
+
+    fap_p.allocate_field(sizeof(double2), FID_PX);
+    fap_p.allocate_field(sizeof(double2), FID_PXP);
+    fap_p.allocate_field(sizeof(double2), FID_PX0);
+    fap_p.allocate_field(sizeof(double2), FID_PU);
+    fap_p.allocate_field(sizeof(double2), FID_PU0);
+    fap_p.allocate_field(sizeof(double), FID_PMASWT);
+    fap_p.allocate_field(sizeof(double2), FID_PF);
+    fap_p.allocate_field(sizeof(double2), FID_PAP);
+    
     lrp = runtime->create_logical_region(ctx, isp, fsp);
     runtime->attach_name(lrp, "lrp");
     num_h = 1; // GMS HACK
     int num_elements = nump * num_h; 
-    IndexSpace p_isp = runtime->create_index_space(ctx, num_elements);
-    IndexAllocator p_iap = runtime->create_index_allocator(ctx, p_isp);
-    p_iap.alloc(num_elements); 
-    p_lrp = runtime->create_logical_region(ctx, p_isp, fsp);
+    //IndexSpace p_isp = runtime->create_index_space(ctx, num_elements);
+    //IndexAllocator p_iap = runtime->create_index_allocator(ctx, p_isp);
+    //p_iap.alloc(num_elements); 
+    //p_lrp = runtime->create_logical_region(ctx, p_isp, fsp);
+    p_lrp = runtime->create_logical_region(ctx, isp, fsp_p);
     runtime->attach_name(p_lrp, "persistent points LR");
     int num_subregions = 4; // GMS HACK 
     IndexPartition ipp;
     Coloring hdf_parts;
     int num_per_part = num_elements / num_subregions;
-    IndexIterator itr(runtime, ctx, p_isp); 
+    //IndexIterator itr(runtime, ctx, p_isp);
+    IndexIterator itr(runtime, ctx, isp); 
     const int lower_bound = num_elements / num_subregions;
     const int upper_bound = lower_bound+1;
     const int number_small = num_subregions - (num_elements % num_subregions); 
@@ -254,10 +270,11 @@ void Mesh::init() {
       for(int elem = 0; elem < cur_num_elements; elem++) { 
         assert(itr.has_next());
         ptr_t point_ptr = itr.next();
+        std::cout << "Adding point: " << elem << " to hdf_parts color: " << color << std::endl;
         hdf_parts[color].points.insert(point_ptr);
       }
     }
-    ipp = runtime->create_index_partition(ctx, p_isp, hdf_parts, true); 
+    ipp = runtime->create_index_partition(ctx, isp, hdf_parts, true); 
     
     // if ((num_elements % num_subregions) != 0) {
     //   // Not evenly divisible
@@ -281,12 +298,12 @@ void Mesh::init() {
     //   ipp = runtime->create_index_partition(ctx, p_isp, coloring);
     // }
     
-    
-    LogicalPartition p_lpp =
-      runtime->get_logical_partition(ctx, p_lrp, ipp); 
+
+    p_lpp_src = runtime->get_logical_partition(ctx, lrp, ipp); 
+    p_lpp = runtime->get_logical_partition(ctx, p_lrp, ipp); 
                                                                     
                                                                   
-    PersistentRegion points_pr = PersistentRegion(runtime);
+    
     std::map<FieldID, std::string> field_string_map;
     field_string_map.insert(std::make_pair(FID_PX, "bam/px"));
     field_string_map.insert(std::make_pair(FID_PXP, "bam/pxp"));
@@ -298,7 +315,7 @@ void Mesh::init() {
     field_string_map.insert(std::make_pair(FID_PAP, "bam/pap"));
     
     
-    points_pr.create_persistent_subregions(ctx, "points_pr.hdf5",
+    points_pr->create_persistent_subregions(ctx, "points_pr.hdf5",
                                            p_lrp, p_lpp, hdf_parts,
                                            field_string_map);
     
@@ -1056,4 +1073,8 @@ void Mesh::calcSideFracs(
 }
 
 
-
+void Mesh::checkpoint() {
+  std::cout << "Mesh::checkpoint() called" << std::endl; 
+  points_pr->write_persistent_subregions(ctx, lrp, p_lpp_src);
+    
+}

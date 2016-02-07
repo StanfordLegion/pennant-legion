@@ -88,13 +88,16 @@ void copy_values_task(const Task *task,
   assert(task->regions.size() == 2);
   assert(piece.child_lr == regions[0].get_logical_region());
   
+#ifdef LEGIONIO_VERBOSE
+  std::cout << "copy_values_task " <<  std::endl;
+#endif
+ 
 #ifdef LEGIONIO_TIMERS 
   struct timespec ts;
   current_utc_time(&ts);   
   char hostname[128];
   gethostname(hostname, sizeof hostname);
   if(task_args.copy_write) {
-    
     std::cout << hostname << " domain point: " << piece.dp
               << "; write begins at:  seconds: " << ts.tv_sec
               << " nanos: " << ts.tv_nsec << std::endl; 
@@ -201,6 +204,13 @@ void PersistentRegion::write_persistent_subregions(Context ctx, LogicalRegion sr
 #ifdef LEGIONIO_SERIALIZE
   task_args.field_map_size = this->field_map_size;
   memcpy(task_args.field_map_serial, this->field_map_serial, this->field_map_size);
+#endif
+
+#ifdef LEGIONIO_VERBOSE
+  std::cout << "write_persistent_subregions called with fieldmap_size of " <<
+    task_args.field_map_size << std::endl;
+  std::cout << "write_persistent_subregions dom is [" << dom.get_rect<1>().lo.x[0]
+            << "," << dom.get_rect<1>().lo.x[1] << "]" << std::endl; 
 #endif 
 
 #ifdef LEGIONIO_PHASER_TIMERS
@@ -218,13 +228,14 @@ void PersistentRegion::write_persistent_subregions(Context ctx, LogicalRegion sr
   TaskArgument(&task_args, sizeof(task_args)), 
 #endif
   arg_map);
-  
+
+#if 0
   for(std::vector<Piece>::iterator itr = this->pieces.begin(); 
       itr != this->pieces.end(); itr++) {
     Piece piece = *itr;
     arg_map.set_point(piece.dp, TaskArgument(&piece, sizeof(Piece)));
   }
-
+#endif 
   
 #ifdef LEGIONIO_PHASER_TIMERS
   timer_launcher_start.add_arrival_barrier(this->pb_timer);
@@ -246,11 +257,12 @@ void PersistentRegion::write_persistent_subregions(Context ctx, LogicalRegion sr
   /* setup region requirements using field map */ 
   for(std::map<FieldID, std::string>::iterator iterator = this->field_map.begin(); iterator != this->field_map.end(); iterator++) {
     FieldID fid = iterator->first;
+    std::cout << "write_persistent_subregions: adding field : " << fid << std::endl;
     write_launcher.region_requirements[0].add_field(fid, false /* no instance required */);
     write_launcher.region_requirements[1].add_field(fid);
   }
   runtime->execute_index_space(ctx, write_launcher);
-
+  
 #ifdef LEGIONIO_PHASER_TIMERS
   this->pb_write = runtime->advance_phase_barrier(ctx, this->pb_write);
   timer_launcher_end.add_wait_barrier(this->pb_write);
@@ -514,7 +526,8 @@ void PersistentRegion::create_persistent_subregions(Context ctx,
   this->lp = lp;
   this->parent_lr = parent_lr;
   this->field_map = field_map;
-//  this->dom = dom; 
+  Rect<1> launch_rect(Point<1>(0), Point<1>(hdf_parts.size()-1));
+  this->dom = Domain::from_rect<1>(launch_rect);
   
 #ifdef LEGIONIO_SERIALIZE
   std::map<FieldID, std::string> field_map_des;
@@ -532,6 +545,7 @@ void PersistentRegion::create_persistent_subregions(Context ctx,
 
   int i = 0;
   int x_min_current = 0;
+  
   for(unsigned int color = 0; color < hdf_parts.size(); color++){
     pieces.push_back(Piece());
     pieces[i].color = color;
