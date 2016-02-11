@@ -81,6 +81,13 @@ void copy_values_task(const Task *task,
                       const std::vector<PhysicalRegion> &regions,
                       Context ctx, HighLevelRuntime *runtime)
 {
+#ifdef LEGIONIO_VERBOSE
+  std::cout << "copy_values_task: index_point dim is "
+            <<  task->index_point.dim << " [" <<  task->index_point[0]
+            << "," << task->index_point[1] << ","
+            << task->index_point[2] << "]" << std::endl;
+#endif
+
   Piece piece = * ((Piece*) task->local_args);
   struct task_args_t task_args = *(struct task_args_t*) task->args;
   
@@ -88,9 +95,6 @@ void copy_values_task(const Task *task,
   assert(task->regions.size() == 2);
   assert(piece.child_lr == regions[0].get_logical_region());
   
-#ifdef LEGIONIO_VERBOSE
-  std::cout << "copy_values_task " <<  std::endl;
-#endif
  
 #ifdef LEGIONIO_TIMERS 
   struct timespec ts;
@@ -111,14 +115,22 @@ void copy_values_task(const Task *task,
   std::map<FieldID, std::string> field_string_map;
 #ifdef LEGIONIO_SERIALIZE
   Realm::Serialization::FixedBufferDeserializer fdb(task_args.field_map_serial,
-      task_args.field_map_size);
+                                                    task_args.field_map_size);
 
   bool ok  = fdb >> field_string_map;
   if(!ok) {
     std::cout << "ERROR in copy_values_task, can't deserialize " << std::endl;
   }
 #else 
-  field_string_map.insert(std::make_pair(FID_TEMP, "bam/baz"));
+  field_string_map.insert(std::make_pair(FID_PX, "bam/px"));
+  field_string_map.insert(std::make_pair(FID_PXP, "bam/pxp"));
+  field_string_map.insert(std::make_pair(FID_PX0, "bam/px0"));
+  field_string_map.insert(std::make_pair(FID_PU, "bam/pu"));
+  field_string_map.insert(std::make_pair(FID_PU0, "bam/pu0"));
+  field_string_map.insert(std::make_pair(FID_PMASWT, "bam/pmaswt"));
+  field_string_map.insert(std::make_pair(FID_PF, "bam/pf"));
+  field_string_map.insert(std::make_pair(FID_PAP, "bam/pap"));
+
 #endif
 
 #ifdef LEGIONIO_VERBOSE
@@ -139,22 +151,9 @@ void copy_values_task(const Task *task,
   
 
 #ifdef LEGIONIO_VERBOSE
-  Domain dom = runtime->get_index_space_domain(ctx,
-      piece.child_lr.get_index_space());
-
   std::cout << "In write_values_task and found my piece!" << std::endl;
   std::cout<< "In write_value_task "  << std::endl;
   
-  int x_min = 0, y_min = 0, 
-    x_max = 0, y_max = 0;
-  x_min = dom.get_rect<2>().lo.x[0];
-  y_min = dom.get_rect<2>().lo.x[1];
-  x_max = dom.get_rect<2>().hi.x[0];
-  y_max = dom.get_rect<2>().hi.x[1];
-  
-  std::cout << "domain rect is: [[" << x_min << "," << y_min
-            << "],[" << x_max  << "," << y_max << "]] writing to file "
-            << piece.shard_name << std::endl; 
 #endif
 
   runtime->unmap_region(ctx, regions[0]);
@@ -229,13 +228,13 @@ void PersistentRegion::write_persistent_subregions(Context ctx, LogicalRegion sr
 #endif
   arg_map);
 
-#if 0
   for(std::vector<Piece>::iterator itr = this->pieces.begin(); 
       itr != this->pieces.end(); itr++) {
     Piece piece = *itr;
+    std::cout << "Inserting piece as argument to domain point: [" <<
+      piece.dp[0] << "," << piece.dp[1] << "]" << std::endl; 
     arg_map.set_point(piece.dp, TaskArgument(&piece, sizeof(Piece)));
   }
-#endif 
   
 #ifdef LEGIONIO_PHASER_TIMERS
   timer_launcher_start.add_arrival_barrier(this->pb_timer);
@@ -553,9 +552,11 @@ void PersistentRegion::create_persistent_subregions(Context ctx,
     pieces[i].parent_lr = parent_lr;
     FieldSpace fs = pieces[i].child_lr.get_field_space();
     pieces[i].dp = DomainPoint();
-    int x_min = pieces[i].dp[0] = x_min_current;
+    pieces[i].dp.dim = 1; 
+    int x_min  = x_min_current;
+    pieces[i].dp[0] = i; 
     x_min_current  += hdf_parts[color].points.size();
-    pieces[i].dp[1] = x_min_current;
+    //pieces[i].dp[1] = x_min_current;
     int x_max = x_min_current;
     x_min_current ++; 
       

@@ -15,6 +15,7 @@
 #include <iostream>
 
 #include "legion.h"
+#include "legion_io.h"
 
 #include "MyMapper.hh"
 #include "InputFile.hh"
@@ -107,7 +108,8 @@ int main(int argc, char **argv)
       AUTO_GENERATE_ID, TaskConfigOptions(), "main");
 
     HighLevelRuntime::set_registration_callback(registerMappers);
-
+    PersistentRegion_init();
+      
     return HighLevelRuntime::start(argc, argv);
 }
 
