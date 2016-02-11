@@ -151,9 +151,7 @@ void copy_values_task(const Task *task,
   
 
 #ifdef LEGIONIO_VERBOSE
-  std::cout << "In write_values_task and found my piece!" << std::endl;
-  std::cout<< "In write_value_task "  << std::endl;
-  
+  std::cout << "In copy_values_task and found my piece!" << std::endl;
 #endif
 
   runtime->unmap_region(ctx, regions[0]);
@@ -176,19 +174,29 @@ void copy_values_task(const Task *task,
       RegionRequirement(regions[1].get_logical_region(),
                         READ_ONLY, EXCLUSIVE,
                         regions[1].get_logical_region()),
-      RegionRequirement(piece.child_lr, WRITE_DISCARD,
+      RegionRequirement(piece.child_lr, READ_WRITE,
                         EXCLUSIVE, piece.child_lr));
   } else {
     copy_launcher.add_copy_requirements(
       RegionRequirement(piece.child_lr, READ_ONLY,
                         EXCLUSIVE, piece.child_lr),
       RegionRequirement(regions[1].get_logical_region(),
-                        WRITE_DISCARD, EXCLUSIVE,
+                        READ_WRITE, EXCLUSIVE,
                         regions[1].get_logical_region()));
   } 
   
-  copy_launcher.add_src_field(0, FID_TEMP);
-  copy_launcher.add_dst_field(0, FID_TEMP);
+  for (std::map<FieldID, std::string>::const_iterator it = field_string_map.begin();
+       it != field_string_map.end(); it++)
+  {
+    // add all fields we are passed into the copy launcher region requirements.
+    FieldID fid = it->first;
+    std::cout << "in copy_values_task and adding field " << fid
+              << " to copy_launcher " << std::endl; 
+    copy_launcher.add_src_field(0, fid);
+    copy_launcher.add_dst_field(0, fid);
+  
+  }
+
   runtime->issue_copy_operation(ctx, copy_launcher);
   
   runtime->detach_hdf5(ctx, pr);

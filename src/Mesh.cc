@@ -1076,5 +1076,6 @@ void Mesh::calcSideFracs(
 void Mesh::checkpoint() {
   std::cout << "Mesh::checkpoint() called" << std::endl; 
   points_pr->write_persistent_subregions(ctx, lrp, p_lpp_src);
+  
     
 }
