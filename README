@@ -1,3 +1,14 @@
+The PENNANT Mini-App
+
+Charles R. Ferenbaugh & Galen M. Shipman 
+Los Alamos National Laboratory
+cferenba@lanl.gov, gshipman@lanl.gov
+
+Version 2.0 -- March 2016
+LA-CC-12-021
+
+
+
 PENNANT is an unstructured mesh physics mini-app designed for advanced
 architecture research.  It contains mesh data structures and a few
 physics algorithms adapted from the LANL rad-hydro code FLAG, and gives
