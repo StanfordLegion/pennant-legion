@@ -106,7 +106,7 @@ void LogicalUnstructured::partition(Coloring map, bool disjoint)
     ipart = runtime->create_index_partition(ctx, ispace, map, disjoint);
     runtime->attach_name(ipart, "LogicalUnstruc::part");
     ipartID = new IndexPartitionID;
-    *ipartID = ipart.id;
+    *ipartID = ipart.get_id();
     lpart = runtime->get_logical_partition(ctx, lregion, ipart);
     lpartID = new RegionTreeID;
     *lpartID = lpart.get_tree_id();
