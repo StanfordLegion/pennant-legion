@@ -48,6 +48,8 @@ void GlobalMesh::init()
 
 	Coloring ghost_pts_map;
 
+        // This vector cannot be resized or we might double delete logical regions
+        halos_points.resize(inputParams.directs.ntasks, LogicalUnstructured(ctx, runtime));
 	for (int color=0; color < inputParams.directs.ntasks; ++color) {
 	    ghost_pts_map[color].points = std::set<ptr_t>(); // empty set
 		std::vector<int> master_colors, slave_colors;
@@ -57,7 +59,7 @@ void GlobalMesh::init()
 
 		LogicalUnstructured subspace(ctx, runtime, points.getSubspace(color));
 		subspace.partition(ghost_pts_map, true);
-		halos_points.push_back(LogicalUnstructured(ctx, runtime, subspace.getSubspace(color)));
+		halos_points[color] = LogicalUnstructured(ctx, runtime, subspace.getSubspace(color));
         halos_points[color].addField<double>(FID_GHOST_PMASWT);
         halos_points[color].addField<double2>(FID_GHOST_PF);
         halos_points[color].allocate();
