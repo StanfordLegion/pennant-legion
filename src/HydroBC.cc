@@ -21,15 +21,16 @@
 
 using namespace std;
 using namespace Memory;
-using namespace LegionRuntime::HighLevel;
+using namespace Legion;
 using namespace LegionRuntime::Accessor;
 
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
-    HighLevelRuntime::register_legion_task<HydroBC::applyFixedBCTask>(
-            TID_APPLYFIXEDBC, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "applyfixedbc");
+    TaskVariantRegistrar registrar(TID_APPLYFIXEDBC, "applyfixedbc");
+    registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+    registrar.set_leaf();
+    Runtime::preregister_task_variant<HydroBC::applyFixedBCTask>(registrar);
 }
 }; // namespace
 
@@ -46,7 +47,7 @@ HydroBC::HydroBC(
     mesh->getPlaneChunks(numb, mapbp, pchbfirst, pchblast);
 
     Context ctx = mesh->ctx;
-    HighLevelRuntime* runtime = mesh->runtime;
+    Runtime* runtime = mesh->runtime;
 
     // create index space for boundary points
     IndexSpace isb = runtime->create_index_space(ctx, numb);
@@ -94,7 +95,7 @@ void HydroBC::applyFixedBCTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     const double2* args = (const double2*) task->args;
     const double2 vfix = args[0];
     MyAccessor<ptr_t> acc_mapbp =

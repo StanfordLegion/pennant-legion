@@ -21,18 +21,24 @@
 #include "Mesh.hh"
 
 using namespace std;
-using namespace LegionRuntime::HighLevel;
+using namespace Legion;
 using namespace LegionRuntime::Accessor;
 
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
-    HighLevelRuntime::register_legion_task<PolyGas::calcStateHalfTask>(
-            TID_CALCSTATEHALF, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcstatehalf");
-    HighLevelRuntime::register_legion_task<PolyGas::calcForceTask>(
-            TID_CALCFORCEPGAS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcforcepgas");
+    {
+      TaskVariantRegistrar registrar(TID_CALCSTATEHALF, "calcstatehalf");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<PolyGas::calcStateHalfTask>(registrar);
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCFORCEPGAS, "calcforcepgas");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<PolyGas::calcForceTask>(registrar);
+    }
 }
 }; // namespace
 
@@ -47,7 +53,7 @@ void PolyGas::calcStateHalfTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     const double* args = (const double*) task->args;
     const double gamma = args[0];
     const double ssmin = args[1];
@@ -106,7 +112,7 @@ void PolyGas::calcForceTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     MyAccessor<ptr_t> acc_mapsz =
         get_accessor<ptr_t>(regions[0], FID_MAPSZ);
     MyAccessor<double2> acc_ssurf =

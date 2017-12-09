@@ -16,17 +16,18 @@
 #include <set>
 #include <vector>
 
-#include "legion_types.h"
+#include "legion.h"
 #include "default_mapper.h"
 
 
-class MyMapper : public LegionRuntime::HighLevel::DefaultMapper {
+class MyMapper : public Legion::Mapping::DefaultMapper {
 public:
   MyMapper(
-        LegionRuntime::HighLevel::Machine machine,
-        LegionRuntime::HighLevel::HighLevelRuntime *rt,
-        LegionRuntime::HighLevel::Processor local);
+        Legion::Machine machine,
+        Legion::Runtime *rt,
+        Legion::Processor local);
 public:
+#if 0
   virtual void select_task_options(LegionRuntime::HighLevel::Task *task);
   virtual bool map_task(LegionRuntime::HighLevel::Task *task);
   virtual bool rank_copy_targets(
@@ -39,6 +40,7 @@ public:
         std::vector<LegionRuntime::HighLevel::Memory> &to_create,
         bool &create_one,
         size_t &blocking_factor);
+#endif
 };
 
 

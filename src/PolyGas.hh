@@ -13,7 +13,7 @@
 #ifndef POLYGAS_HH_
 #define POLYGAS_HH_
 
-#include "legion_types.h"
+#include "legion.h"
 
 // forward declarations
 class InputFile;
@@ -39,16 +39,16 @@ public:
     ~PolyGas();
 
     static void calcStateHalfTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void calcForceTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
 };  // class PolyGas
 

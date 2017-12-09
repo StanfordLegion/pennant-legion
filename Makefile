@@ -19,10 +19,10 @@
 SRCDIR := src
 
 #LG_RT_DIR := ${HOME}/Documents/legion/legion-fork/runtime
-LG_RT_DIR := ${HOME}/local/src/legion/runtime
-#ifndef LG_RT_DIR
-#$(error LG_RT_DIR variable is not defined, aborting build)
-#endif
+#LG_RT_DIR := ${HOME}/local/src/legion/runtime
+ifndef LG_RT_DIR
+$(error LG_RT_DIR variable is not defined, aborting build)
+endif
 
 #Flags for directing the runtime makefile what to include
 #DEBUG=1                   # Include debugging symbols
@@ -40,8 +40,8 @@ GASNET=$(GASNET_ROOT)
 #CONDUIT=udp
 CONDUIT=ibv
 #ALT_MAPPERS=1		  # Compile the alternative mappers
-USE_HDF   =1
-USE_GASNET=1
+USE_HDF   =0
+USE_GASNET=0
 
 # Put the binary file name here
 OUTFILE         := pennant
@@ -53,7 +53,7 @@ GEN_GPU_SRC	:=				# .cu files
 INC_FLAGS	:= -I$(SRCDIR) 
 #CC_FLAGS	:=
 #CC_FLAGS 	:= -DPRIVILEGE_CHECKS
-CC_FLAGS	:= -DPRIVILEGE_CHECKS -DBOUNDS_CHECK -std=c++11 -Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-unused-variable
+CC_FLAGS	:= -std=c++11 -Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-unused-variable
 #CC_FLAGS	:= -DLEGION_PROF -DNODE_LOGGING
 NVCC_FLAGS	:=
 GASNET_FLAGS	:=

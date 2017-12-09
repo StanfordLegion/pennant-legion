@@ -21,7 +21,7 @@
 #include "Driver.hh"
 
 using namespace std;
-using namespace LegionRuntime::HighLevel;
+using namespace Legion;
 
 enum TaskID {
     TID_MAIN
@@ -30,7 +30,7 @@ enum TaskID {
 
 void registerMappers(
         Machine machine,
-        HighLevelRuntime *rt,
+        Runtime *rt,
         const std::set<Processor> &local_procs)
 {
     for (set<Processor>::const_iterator it = local_procs.begin();
@@ -44,9 +44,9 @@ void registerMappers(
 
 void mainTask(const Task *task,
               const std::vector<PhysicalRegion> &regions,
-              Context ctx, HighLevelRuntime *runtime)
+              Context ctx, Runtime*runtime)
 {
-    const InputArgs& iargs = HighLevelRuntime::get_input_args();
+    const InputArgs& iargs = Runtime::get_input_args();
 
     // skip over legion args if present
     int i = 1;
@@ -101,13 +101,15 @@ int main(int argc, char **argv)
 {
     // register main task only; other tasks have already been
     // registered by the classes that own them
-    HighLevelRuntime::set_top_level_task_id(TID_MAIN);
-    HighLevelRuntime::register_legion_task<mainTask>(
-      TID_MAIN, Processor::LOC_PROC, true, false,
-      AUTO_GENERATE_ID, TaskConfigOptions(), "main");
+    Runtime::set_top_level_task_id(TID_MAIN);
+    TaskVariantRegistrar registrar(TID_MAIN, "main");
+    registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+    registrar.set_idempotent();
+    registrar.set_replicable();
+    Runtime::preregister_task_variant<mainTask>(registrar);
 
-    HighLevelRuntime::set_registration_callback(registerMappers);
+    Runtime::add_registration_callback(registerMappers);
 
-    return HighLevelRuntime::start(argc, argv);
+    return Runtime::start(argc, argv);
 }
 

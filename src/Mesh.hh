@@ -97,11 +97,7 @@ enum QCSFieldID {
 };
 
 enum MeshTaskID {
-    TID_COPYFIELDDBL = 'M' * 100,
-    TID_COPYFIELDDBL2,
-    TID_FILLFIELDDBL,
-    TID_FILLFIELDDBL2,
-    TID_SUMTOPTSDBL,
+    TID_SUMTOPTSDBL = 'M' * 100,
     TID_CALCCTRS,
     TID_CALCVOLS,
     TID_CALCSURFVECS,
@@ -229,41 +225,41 @@ public:
 
     std::vector<int> nodecolors;
     colormap nodemcolors;
-    LegionRuntime::HighLevel::Context ctx;
-    LegionRuntime::HighLevel::HighLevelRuntime* runtime;
-    LegionRuntime::HighLevel::LogicalRegion lrp, lrz, lrs;
-    LegionRuntime::HighLevel::LogicalRegion lrglb;
-    LegionRuntime::HighLevel::LogicalPartition lppall, lpz, lps;
-    LegionRuntime::HighLevel::LogicalPartition lppprv, lppmstr, lppshr;
-    LegionRuntime::HighLevel::Domain dompc;
+    Legion::Context ctx;
+    Legion::Runtime* runtime;
+    Legion::LogicalRegion lrp, lrz, lrs;
+    Legion::LogicalRegion lrglb;
+    Legion::LogicalPartition lppall, lpz, lps;
+    Legion::LogicalPartition lppprv, lppmstr, lppshr;
+    Legion::Domain dompc;
                                    // domain of legion pieces
-    LegionRuntime::HighLevel::FutureMap fmapcv;
+    Legion::FutureMap fmapcv;
                                    // future map for calcVolsTask
 
     Mesh(
             const InputFile* inp,
             const int numpcsa,
-            LegionRuntime::HighLevel::Context ctxa,
-            LegionRuntime::HighLevel::HighLevelRuntime* runtimea);
+            Legion::Context ctxa,
+            Legion::Runtime* runtimea);
     ~Mesh();
 
     template<typename T>
     void getField(
-            LegionRuntime::HighLevel::LogicalRegion& lr,
-            const LegionRuntime::HighLevel::FieldID fid,
+            Legion::LogicalRegion& lr,
+            const Legion::FieldID fid,
             T* var,
             const int n);
 
     template<typename T>
     void setField(
-            LegionRuntime::HighLevel::LogicalRegion& lr,
-            const LegionRuntime::HighLevel::FieldID fid,
+            Legion::LogicalRegion& lr,
+            const Legion::FieldID fid,
             const T* var,
             const int n);
 
     template<typename Op>
     typename Op::LHS reduceFutureMap(
-            LegionRuntime::HighLevel::FutureMap& fmap);
+            Legion::FutureMap& fmap);
 
     void init();
 
@@ -299,55 +295,41 @@ public:
             std::vector<int>& pchbfirst,
             std::vector<int>& pchblast);
 
-    template<typename T>
-    static void copyFieldTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
-
-    template<typename T>
-    static void fillFieldTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
-
     static void sumToPointsTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void calcCtrsTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static int calcVolsTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void calcSurfVecsTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void calcEdgeLenTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void calcCharLenTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     // compute edge, zone centers
     void calcCtrs(
@@ -385,11 +367,11 @@ public:
 
 template<typename T>
 void Mesh::getField(
-        LegionRuntime::HighLevel::LogicalRegion& lr,
-        const LegionRuntime::HighLevel::FieldID fid,
+        Legion::LogicalRegion& lr,
+        const Legion::FieldID fid,
         T* var,
         const int n) {
-    using namespace LegionRuntime::HighLevel;
+    using namespace Legion;
     using namespace LegionRuntime::Accessor;
     RegionRequirement req(lr, READ_ONLY, EXCLUSIVE, lr);
     req.add_field(fid);
@@ -412,11 +394,11 @@ void Mesh::getField(
 
 template<typename T>
 void Mesh::setField(
-        LegionRuntime::HighLevel::LogicalRegion& lr,
-        const LegionRuntime::HighLevel::FieldID fid,
+        Legion::LogicalRegion& lr,
+        const Legion::FieldID fid,
         const T* var,
         const int n) {
-    using namespace LegionRuntime::HighLevel;
+    using namespace Legion;
     using namespace LegionRuntime::Accessor;
     RegionRequirement req(lr, WRITE_DISCARD, EXCLUSIVE, lr);
     req.add_field(fid);
@@ -439,8 +421,8 @@ void Mesh::setField(
 
 template<typename Op>
 typename Op::LHS Mesh::reduceFutureMap(
-        LegionRuntime::HighLevel::FutureMap& fmap) {
-    using namespace LegionRuntime::HighLevel;
+        Legion::FutureMap& fmap) {
+    using namespace Legion;
     typedef typename Op::LHS LHS;
     LHS val = Op::identity;
     for (Domain::DomainPointIterator itrpc(dompc); itrpc; itrpc++) {

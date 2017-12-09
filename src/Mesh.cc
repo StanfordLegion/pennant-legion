@@ -28,47 +28,50 @@
 
 using namespace std;
 using namespace Memory;
-using namespace LegionRuntime::HighLevel;
+using namespace Legion;
 using namespace LegionRuntime::Accessor;
 
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
-    HighLevelRuntime::register_legion_task<Mesh::copyFieldTask<double> >(
-            TID_COPYFIELDDBL, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "copyfielddbl");
-    HighLevelRuntime::register_legion_task<Mesh::copyFieldTask<double2> >(
-            TID_COPYFIELDDBL2, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "copyfielddbl2");
-    HighLevelRuntime::register_legion_task<Mesh::fillFieldTask<double> >(
-            TID_FILLFIELDDBL, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "fillfielddbl");
-    HighLevelRuntime::register_legion_task<Mesh::fillFieldTask<double2> >(
-            TID_FILLFIELDDBL2, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "fillfielddbl2");
-    HighLevelRuntime::register_legion_task<Mesh::calcCtrsTask>(
-            TID_CALCCTRS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcctrs");
-    HighLevelRuntime::register_legion_task<int, Mesh::calcVolsTask>(
-            TID_CALCVOLS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcvols");
-    HighLevelRuntime::register_legion_task<Mesh::calcSurfVecsTask>(
-            TID_CALCSURFVECS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcsurfvecs");
-    HighLevelRuntime::register_legion_task<Mesh::calcEdgeLenTask>(
-            TID_CALCEDGELEN, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcedgelen");
-    HighLevelRuntime::register_legion_task<Mesh::calcCharLenTask>(
-            TID_CALCCHARLEN, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calccharlen");
+    {
+      TaskVariantRegistrar registrar(TID_CALCCTRS, "calcctrs");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcCtrsTask>(registrar);
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCVOLS, "calcvols");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<int, Mesh::calcVolsTask>(registrar);
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCSURFVECS, "calcsurfvecs");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcSurfVecsTask>(registrar);
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCEDGELEN, "calcedgelen");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcEdgeLenTask>(registrar);
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCCHARLEN, "calccharlen");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcCharLenTask>(registrar);
+    }
 
-    HighLevelRuntime::register_reduction_op<SumOp<int> >(
+    Runtime::register_reduction_op<SumOp<int> >(
             OPID_SUMINT);
-    HighLevelRuntime::register_reduction_op<SumOp<double> >(
+    Runtime::register_reduction_op<SumOp<double> >(
             OPID_SUMDBL);
-    HighLevelRuntime::register_reduction_op<SumOp<double2> >(
+    Runtime::register_reduction_op<SumOp<double2> >(
             OPID_SUMDBL2);
-    HighLevelRuntime::register_reduction_op<MinOp<double> >(
+    Runtime::register_reduction_op<MinOp<double> >(
             OPID_MINDBL);
 }
 }; // namespace
@@ -123,7 +126,7 @@ Mesh::Mesh(
         const InputFile* inp,
         const int numpcsa,
         Context ctxa,
-        HighLevelRuntime* runtimea)
+        Runtime* runtimea)
         : gmesh(NULL),  wxy(NULL), egold(NULL),
           numpcs(numpcsa), ctx(ctxa), runtime(runtimea) {
 
@@ -311,11 +314,9 @@ void Mesh::init() {
 
     // create domain over pieces
     Rect<1> task_rect(Point<1>(0), Point<1>(numpcs-1));
-    dompc  = Domain::from_rect<1>(task_rect);
-    IndexSpace ispc = runtime->create_index_space(ctx, dompc);
-    
+    dompc  = Domain(task_rect);
 #if 0 
-    
+    IndexSpace ispc = runtime->create_index_space(ctx, dompc);
     {
       IndexAllocator allocator = runtime->create_index_allocator(ctx, ispc);
       allocator.alloc(numpcs);
@@ -592,66 +593,11 @@ void Mesh::getPlaneChunks(
 }
 
 
-template <typename T>
-void Mesh::copyFieldTask(
-        const Task *task,
-        const std::vector<PhysicalRegion> &regions,
-        Context ctx,
-        HighLevelRuntime *runtime) {
-  // determine which fields to use in the copy
-    FieldID fid_src = *(task->regions[0].instance_fields.begin());
-    FieldID fid_dst = *(task->regions[1].instance_fields.begin());
-    LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_src;
-    acc_src = regions[0].get_field_accessor(fid_src).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
-      
-    //MyAccessor<T> acc_src = get_accessor<T>(regions[0], fid_src); //regions[0].get_field_accessor(fid_src).typeify<T>().convert<AccessorType::SOA>();
-    LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_dst;
-    acc_dst = regions[1].get_field_accessor(fid_dst).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
-//    MyAccessor<T> acc_dst =
-//        get_accessor<T>(regions[1], fid_dst);
-
-    const IndexSpace& is = task->regions[0].region.get_index_space();
-    for (IndexIterator itr(runtime, ctx, is); itr.has_next(); )
-    {
-        ptr_t idx = itr.next();
-        acc_dst.write(idx, acc_src.read(idx));
-    }
-
-}
-
-
-template <typename T>
-void Mesh::fillFieldTask(
-        const Task *task,
-        const std::vector<PhysicalRegion> &regions,
-        Context ctx,
-        HighLevelRuntime *runtime) {
-    const T* args = (const T*) task->args;
-    const T val = args[0];
-
-    FieldID fid_var = task->regions[0].instance_fields[0];
-   LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_var;
-   acc_var = regions[0].get_field_accessor(fid_var).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
-      
-//     MyAccessor<T> acc_var =
-//        get_accessor<T>(regions[0], fid_var);
-
-    const IndexSpace& is = task->regions[0].region.get_index_space();
-    
-    for (IndexIterator itr(runtime, ctx, is); itr.has_next();)
-    {
-        ptr_t idx = itr.next();
-        acc_var.write(idx, val);
-    }
-
-}
-
-
 void Mesh::calcCtrsTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     MyAccessor<ptr_t> acc_mapsp1 =
         get_accessor<ptr_t>(regions[0], FID_MAPSP1);
     MyAccessor<ptr_t> acc_mapsp2 =
@@ -709,7 +655,7 @@ int Mesh::calcVolsTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     MyAccessor<ptr_t> acc_mapsp1 =
         get_accessor<ptr_t>(regions[0], FID_MAPSP1);
     MyAccessor<ptr_t> acc_mapsp2 =
@@ -788,7 +734,7 @@ void Mesh::calcSurfVecsTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     MyAccessor<ptr_t> acc_mapsz =
         get_accessor<ptr_t>(regions[0], FID_MAPSZ);
     MyAccessor<double2> acc_ex =
@@ -815,7 +761,7 @@ void Mesh::calcEdgeLenTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     MyAccessor<ptr_t> acc_mapsp1 =
         get_accessor<ptr_t>(regions[0], FID_MAPSP1);
     MyAccessor<ptr_t> acc_mapsp2 =
@@ -852,7 +798,7 @@ void Mesh::calcCharLenTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     MyAccessor<ptr_t> acc_mapsz =
         get_accessor<ptr_t>(regions[0], FID_MAPSZ);
     MyAccessor<double> acc_elen =

@@ -20,16 +20,17 @@
 #include "default_mapper.h"
 
 using namespace std;
-using namespace LegionRuntime::HighLevel;
+using namespace Legion;
 
 
 MyMapper::MyMapper(
         Machine m,
-        HighLevelRuntime *rt,
+        Runtime *rt,
         Processor p)
-        : DefaultMapper(m, rt, p) {}
+        : DefaultMapper(rt->get_mapper_runtime(), m, p) {}
 
 
+#if 0
 bool MyMapper::map_task(Task *task)
 {
     DefaultMapper::map_task(task);
@@ -74,4 +75,5 @@ bool MyMapper::rank_copy_targets(
     return true;
 #endif
 }
+#endif
 

@@ -38,8 +38,8 @@ template <typename T>
 // convenience function for getting accessors
 template <typename T>
 MyAccessor<T> get_accessor(
-        const LegionRuntime::HighLevel::PhysicalRegion& region,
-        const LegionRuntime::HighLevel::FieldID fid) {
+        const Legion::PhysicalRegion& region,
+        const Legion::FieldID fid) {
   //typename MyAccessor<T>::accessor_t my_accessor =
   return region.get_field_accessor(fid).typeify<T>().
     template convert<MyAccessorType<T>>();
@@ -51,8 +51,8 @@ MyAccessor<T> get_accessor(
 // convenience function for getting accessors
 // template <typename T>
 // typename MyAccessor<T>::accessor_t get_accessor(
-//         const LegionRuntime::HighLevel::PhysicalRegion& region,
-//         const LegionRuntime::HighLevel::FieldID fid) {
+//         const Legion::PhysicalRegion& region,
+//         const Legion::FieldID fid) {
 //   //typename MyAccessor<T>::accessor_t my_accessor =
 //   return region.get_field_accessor(fid).typeify<T>().
 //     template convert<typename MyAccessor<T>::accessor_type_t>();
@@ -76,7 +76,7 @@ struct MyReductionAccessor : public LegionRuntime::Accessor::RegionAccessor<Legi
 // convenience function for getting reduction accessors
 template <typename OP>
 typename MyReductionAccessor<OP>::accessor_t get_reduction_accessor(
-        const LegionRuntime::HighLevel::PhysicalRegion& region) {
+        const Legion::PhysicalRegion& region) {
     return region.get_accessor().typeify<typename OP::RHS>().
         template convert<typename MyReductionAccessor<OP>::accessor_type_t>();
 }

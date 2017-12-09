@@ -44,8 +44,8 @@ public:
     std::vector<int> pchbfirst;    // start/stop index for bdy pt chunks
     std::vector<int> pchblast;
 
-    LegionRuntime::HighLevel::LogicalRegion lrb;
-    LegionRuntime::HighLevel::LogicalPartition lpb;
+    Legion::LogicalRegion lrb;
+    Legion::LogicalPartition lpb;
 
     HydroBC(
             Mesh* msh,
@@ -55,10 +55,10 @@ public:
     ~HydroBC();
 
     static void applyFixedBCTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
 }; // class HydroBC
 

@@ -23,24 +23,36 @@
 #include "Hydro.hh"
 
 using namespace std;
-using namespace LegionRuntime::HighLevel;
+using namespace Legion;
 using namespace LegionRuntime::Accessor;
 
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
-    HighLevelRuntime::register_legion_task<QCS::setCornerDivTask>(
-            TID_SETCORNERDIV, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "setcornerdiv");
-    HighLevelRuntime::register_legion_task<QCS::setQCnForceTask>(
-            TID_SETQCNFORCE, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "setqcnforce");
-    HighLevelRuntime::register_legion_task<QCS::setForceTask>(
-            TID_SETFORCEQCS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "setforceqcs");
-    HighLevelRuntime::register_legion_task<QCS::setVelDiffTask>(
-            TID_SETVELDIFF, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "setveldiff");
+    {
+      TaskVariantRegistrar registrar(TID_SETCORNERDIV, "setcornerdiv");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<QCS::setCornerDivTask>(registrar);
+    }
+    {
+      TaskVariantRegistrar registrar(TID_SETQCNFORCE, "setqcnforce");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<QCS::setQCnForceTask>(registrar);
+    }
+    {
+      TaskVariantRegistrar registrar(TID_SETFORCEQCS, "setforceqcs");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<QCS::setForceTask>(registrar);
+    }
+    {
+      TaskVariantRegistrar registrar(TID_SETVELDIFF, "setveldiff");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<QCS::setVelDiffTask>(registrar);
+    }
 }
 }; // namespace
 
@@ -82,7 +94,7 @@ void QCS::setCornerDivTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     MyAccessor<ptr_t> acc_mapsz =
         get_accessor<ptr_t>(regions[0], FID_MAPSZ);
     MyAccessor<ptr_t> acc_mapsp1 =
@@ -232,7 +244,7 @@ void QCS::setQCnForceTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     const double* args = (const double*) task->args;
     const double qgamma = args[0];
     const double q1     = args[1];
@@ -333,7 +345,7 @@ void QCS::setForceTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     MyAccessor<ptr_t> acc_mapss4 =
         get_accessor<ptr_t>(regions[0], FID_MAPSS4);
     MyAccessor<double> acc_carea =
@@ -395,7 +407,7 @@ void QCS::setVelDiffTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     const double* args = (const double*) task->args;
     const double q1 = args[0];
     const double q2 = args[1];

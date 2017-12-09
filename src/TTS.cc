@@ -21,15 +21,16 @@
 #include "Hydro.hh"
 
 using namespace std;
-using namespace LegionRuntime::HighLevel;
+using namespace Legion;
 using namespace LegionRuntime::Accessor;
 
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
-    HighLevelRuntime::register_legion_task<TTS::calcForceTask>(
-            TID_CALCFORCETTS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcforcetts");
+    TaskVariantRegistrar registrar(TID_CALCFORCETTS, "calcforcetts");
+    registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+    registrar.set_leaf();
+    Runtime::preregister_task_variant<TTS::calcForceTask>(registrar);
 }
 }; // namespace
 
@@ -48,7 +49,7 @@ void TTS::calcForceTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     const double* args = (const double*) task->args;
     const double alfa  = args[0];
     const double ssmin = args[1];

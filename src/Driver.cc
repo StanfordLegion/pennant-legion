@@ -31,8 +31,8 @@ Driver::Driver(
         const InputFile* inp,
         const std::string& pname,
         const int numpcs,
-        LegionRuntime::HighLevel::Context ctx,
-        LegionRuntime::HighLevel::HighLevelRuntime* runtime)
+        Context ctx,
+        Runtime* runtime)
         : probname(pname) {
     cout << "********************" << endl;
     cout << "Running PENNANT v0.6" << endl;

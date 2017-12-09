@@ -15,7 +15,9 @@
 
 #include <string>
 
-#include "legion_types.h"
+#include "legion.h"
+
+using namespace Legion;
 
 // forward declarations
 class InputFile;
@@ -48,8 +50,8 @@ public:
             const InputFile* inp,
             const std::string& pname,
             const int numpcs,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime* runtime);
+            Context ctx,
+            Runtime* runtime);
     ~Driver();
 
     void run();
