@@ -22,15 +22,14 @@
 
 using namespace std;
 using namespace Legion;
-using namespace LegionRuntime::Accessor;
 
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
-    TaskVariantRegistrar registrar(TID_CALCFORCETTS, "calcforcetts");
+    TaskVariantRegistrar registrar(TID_CALCFORCETTS, "CPU calcforcetts");
     registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
     registrar.set_leaf();
-    Runtime::preregister_task_variant<TTS::calcForceTask>(registrar);
+    Runtime::preregister_task_variant<TTS::calcForceTask>(registrar, "calcforcetts");
 }
 }; // namespace
 
@@ -54,22 +53,14 @@ void TTS::calcForceTask(
     const double alfa  = args[0];
     const double ssmin = args[1];
 
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<double> acc_sarea =
-        get_accessor<double>(regions[0], FID_SAREAP);
-    MyAccessor<double> acc_smf =
-        get_accessor<double>(regions[0], FID_SMF);
-    MyAccessor<double2> acc_ssurf =
-        get_accessor<double2>(regions[0], FID_SSURFP);
-    MyAccessor<double> acc_zarea =
-        get_accessor<double>(regions[1], FID_ZAREAP);
-    MyAccessor<double> acc_zr =
-        get_accessor<double>(regions[1], FID_ZRP);
-    MyAccessor<double> acc_zss =
-        get_accessor<double>(regions[1], FID_ZSS);
-    MyAccessor<double2> acc_sf =
-        get_accessor<double2>(regions[2], FID_SFT);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double> acc_sarea(regions[0], FID_SAREAP);
+    const AccessorRO<double> acc_smf(regions[0], FID_SMF);
+    const AccessorRO<double2> acc_ssurf(regions[0], FID_SSURFP);
+    const AccessorRO<double> acc_zarea(regions[1], FID_ZAREAP);
+    const AccessorRO<double> acc_zr(regions[1], FID_ZRP);
+    const AccessorRO<double> acc_zss(regions[1], FID_ZSS);
+    const AccessorWD<double2> acc_sf(regions[2], FID_SFT);
 
     //  Side density:
     //    srho = sm/sv = zr (sm/zm) / (sv/zv)
@@ -84,24 +75,23 @@ void TTS::calcForceTask(
     //           svfac stores (sv/zv)
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next(); )
+    for (PointIterator its(runtime, iss); its(); its++)
     {
-        ptr_t s  = itrs.next();
-        ptr_t z  = acc_mapsz.read(s);
-        double sarea = acc_sarea.read(s);
-        double zarea = acc_zarea.read(z);
-        double vfacinv = zarea / sarea;
-        double r = acc_zr.read(z);
-        double mf = acc_smf.read(s);
-        double srho = r * mf * vfacinv;
-        double ss = acc_zss.read(z);
+        const Pointer s = *its;
+        const Pointer z = acc_mapsz[s];
+        const double sarea = acc_sarea[s];
+        const double zarea = acc_zarea[z];
+        const double vfacinv = zarea / sarea;
+        const double r = acc_zr[z];
+        const double mf = acc_smf[s];
+        const double srho = r * mf * vfacinv;
+        const double ss = acc_zss[z];
         double sstmp = max(ss, ssmin);
         sstmp = alfa * sstmp * sstmp;
-        double sdp = sstmp * (srho - r);
-        double2 surf = acc_ssurf.read(s);
-        double2 sqq = -sdp * surf;
-        acc_sf.write(s, sqq);
+        const double sdp = sstmp * (srho - r);
+        const double2 surf = acc_ssurf[s];
+        const double2 sqq = -sdp * surf;
+        acc_sf[s] = sqq;
     }
-
 }
 

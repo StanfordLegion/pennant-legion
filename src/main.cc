@@ -52,13 +52,14 @@ void mainTask(const Task *task,
     int i = 1;
     while (i < iargs.argc) {
         string arg(iargs.argv[i], 3);
-        if (arg != "-ll" && arg != "-hl" && arg != "-ca" && arg != "-le" && arg != "-dm") break;
+        if (arg != "-ll" && arg != "-lg" && arg != "-ca" && arg != "-le" && arg != "-dm") break;
         i += 2;
     }
     
     volatile bool debug = false;
     int numpcs = 1;
     const char* filename;
+    bool warn = true;
     while (i < iargs.argc) { 
       if (iargs.argv[i] == string("-f")) { 
         filename = iargs.argv[i+1];
@@ -73,9 +74,12 @@ void mainTask(const Task *task,
         i += 2;
       }
       else {
-        cerr << "Usage: pennant [legion args] "
-             << "[-n <numpcs>] <filename>" << endl;
-        exit(1);
+        if (warn) {
+          cerr << "Usage: pennant [legion args] "
+               << "[-n <numpcs>] <filename>" << endl;
+          warn = false;
+        }
+        i++;
       }
     }
 
@@ -105,8 +109,8 @@ int main(int argc, char **argv)
     TaskVariantRegistrar registrar(TID_MAIN, "main");
     registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
     registrar.set_idempotent();
-    registrar.set_replicable();
-    Runtime::preregister_task_variant<mainTask>(registrar);
+    //registrar.set_replicable();
+    Runtime::preregister_task_variant<mainTask>(registrar, "main");
 
     Runtime::add_registration_callback(registerMappers);
 

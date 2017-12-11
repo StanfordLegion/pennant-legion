@@ -15,71 +15,26 @@
 
 #include "legion.h"
 
-
-// // convenience class for accessors
-// // (this would be a template typedef if C++98 allowed it)
-// template <typename T>
-// struct MyAccessor : public LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)>, T> {
-//     typedef LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> accessor_type_t;
-//     typedef LegionRuntime::Accessor::RegionAccessor<accessor_type_t, T> accessor_t;
-
-//     MyAccessor(const accessor_t& rhs) : accessor_t(rhs) {}
-
-// };
-
-
-
 template <typename T>
-using MyAccessorType = typename LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)>;
-
+using AccessorRO = typename Legion::FieldAccessor<READ_ONLY,T,1,Legion::coord_t,
+                                Realm::AffineAccessor<T,1,Legion::coord_t> >;
 template <typename T>
-  using MyAccessor = typename LegionRuntime::Accessor::RegionAccessor<MyAccessorType<T> , T>;
-
-// convenience function for getting accessors
+using AccessorWD = typename Legion::FieldAccessor<WRITE_DISCARD,T,1,Legion::coord_t,
+                                Realm::AffineAccessor<T,1,Legion::coord_t> >;
 template <typename T>
-MyAccessor<T> get_accessor(
-        const Legion::PhysicalRegion& region,
-        const Legion::FieldID fid) {
-  //typename MyAccessor<T>::accessor_t my_accessor =
-  return region.get_field_accessor(fid).typeify<T>().
-    template convert<MyAccessorType<T>>();
-  //std::cout << &my_accessor << std::endl;
-  //return my_accessor; 
-}
+using AccessorRW = typename Legion::FieldAccessor<READ_WRITE,T,1,Legion::coord_t,
+                                Realm::AffineAccessor<T,1,Legion::coord_t> >;
+template <typename T>
+using AccessorRD = typename Legion::FieldAccessor<REDUCE,T,1,Legion::coord_t,
+                                Realm::AffineAccessor<T,1,Legion::coord_t> >;
 
+typedef Legion::Point<1,Legion::coord_t> Pointer;
 
-// convenience function for getting accessors
-// template <typename T>
-// typename MyAccessor<T>::accessor_t get_accessor(
-//         const Legion::PhysicalRegion& region,
-//         const Legion::FieldID fid) {
-//   //typename MyAccessor<T>::accessor_t my_accessor =
-//   return region.get_field_accessor(fid).typeify<T>().
-//     template convert<typename MyAccessor<T>::accessor_type_t>();
-//   //std::cout << &my_accessor << std::endl;
-//   //return my_accessor; 
-// }
-
-
-// convenience class for reduction accessors
-// (this would be a template typedef if C++98 allowed it)
-template <typename OP>
-struct MyReductionAccessor : public LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::ReductionFold<OP>, typename OP::RHS> {
-    typedef LegionRuntime::Accessor::AccessorType::ReductionFold<OP> accessor_type_t;
-    typedef LegionRuntime::Accessor::RegionAccessor<accessor_type_t, typename OP::RHS> accessor_t;
-
-    MyReductionAccessor(const accessor_t& rhs) : accessor_t(rhs) {}
-
+class PointIterator : public Legion::PointInDomainIterator<1,Legion::coord_t> {
+public:
+  inline PointIterator(Legion::Runtime *rt, Legion::IndexSpace is)
+    : Legion::PointInDomainIterator<1,Legion::coord_t>(
+        rt->get_index_space_domain(Legion::IndexSpaceT<1,Legion::coord_t>(is))) { }
 };
-
-
-// convenience function for getting reduction accessors
-template <typename OP>
-typename MyReductionAccessor<OP>::accessor_t get_reduction_accessor(
-        const Legion::PhysicalRegion& region) {
-    return region.get_accessor().typeify<typename OP::RHS>().
-        template convert<typename MyReductionAccessor<OP>::accessor_type_t>();
-}
-
 
 #endif /* MYLEGION_HH_ */

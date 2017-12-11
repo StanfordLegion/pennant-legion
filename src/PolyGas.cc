@@ -22,22 +22,21 @@
 
 using namespace std;
 using namespace Legion;
-using namespace LegionRuntime::Accessor;
 
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
     {
-      TaskVariantRegistrar registrar(TID_CALCSTATEHALF, "calcstatehalf");
+      TaskVariantRegistrar registrar(TID_CALCSTATEHALF, "CPU calcstatehalf");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      Runtime::preregister_task_variant<PolyGas::calcStateHalfTask>(registrar);
+      Runtime::preregister_task_variant<PolyGas::calcStateHalfTask>(registrar, "calcstatehalf");
     }
     {
-      TaskVariantRegistrar registrar(TID_CALCFORCEPGAS, "calcforcepgas");
+      TaskVariantRegistrar registrar(TID_CALCFORCEPGAS, "CPU calcforcepgas");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      Runtime::preregister_task_variant<PolyGas::calcForceTask>(registrar);
+      Runtime::preregister_task_variant<PolyGas::calcForceTask>(registrar, "calcforcepgas");
     }
 }
 }; // namespace
@@ -59,51 +58,41 @@ void PolyGas::calcStateHalfTask(
     const double ssmin = args[1];
     const double dt    = args[2];
 
-    MyAccessor<double> acc_zr =
-        get_accessor<double>(regions[0], FID_ZR);
-    MyAccessor<double> acc_zvolp =
-        get_accessor<double>(regions[0], FID_ZVOLP);
-    MyAccessor<double> acc_zvol0 =
-        get_accessor<double>(regions[0], FID_ZVOL0);
-    MyAccessor<double> acc_ze =
-        get_accessor<double>(regions[0], FID_ZE);
-    MyAccessor<double> acc_zwrate =
-        get_accessor<double>(regions[0], FID_ZWRATE);
-    MyAccessor<double> acc_zm =
-        get_accessor<double>(regions[0], FID_ZM);
-    MyAccessor<double> acc_zp =
-        get_accessor<double>(regions[1], FID_ZP);
-    MyAccessor<double> acc_zss =
-        get_accessor<double>(regions[1], FID_ZSS);
+    const AccessorRO<double> acc_zr(regions[0], FID_ZR);
+    const AccessorRO<double> acc_zvolp(regions[0], FID_ZVOLP);
+    const AccessorRO<double> acc_zvol0(regions[0], FID_ZVOL0);
+    const AccessorRO<double> acc_ze(regions[0], FID_ZE);
+    const AccessorRO<double> acc_zwrate(regions[0], FID_ZWRATE);
+    const AccessorRO<double> acc_zm(regions[0], FID_ZM);
+    const AccessorWD<double> acc_zp(regions[1], FID_ZP);
+    const AccessorWD<double> acc_zss(regions[1], FID_ZSS);
 
     const double dth = 0.5 * dt;
     const double gm1 = gamma - 1.;
     const double ssmin2 = max(ssmin * ssmin, 1.e-99);
     const IndexSpace& isz = task->regions[0].region.get_index_space();
-    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next(); )
+    for (PointIterator itz(runtime, isz); itz(); itz++)
     {
         // compute EOS at beginning of time step
-        ptr_t z = itrz.next();
-        double r = acc_zr.read(z);
-        double e = max(acc_ze.read(z), 0.);
-        double p = gm1 * r * e;
-        double pre = gm1 * e;
-        double per = gm1 * r;
-        double csqd = max(ssmin2, pre + per * p / (r * r));
-        double ss = sqrt(csqd);
+        const double r = acc_zr[*itz];
+        const double e = max(acc_ze[*itz], 0.);
+        const double p = gm1 * r * e;
+        const double pre = gm1 * e;
+        const double per = gm1 * r;
+        const double csqd = max(ssmin2, pre + per * p / (r * r));
+        const double ss = sqrt(csqd);
 
         // now advance pressure to the half-step
-        double minv = 1. / acc_zm.read(z);
-        double volp = acc_zvolp.read(z);
-        double vol0 = acc_zvol0.read(z);
-        double wrate = acc_zwrate.read(z);
-        double dv = (volp - vol0) * minv;
-        double bulk = r * csqd;
-        double denom = 1. + 0.5 * per * dv;
-        double src = wrate * dth * minv;
-        p += (per * src - r * bulk * dv) / denom;
-        acc_zp.write(z, p);
-        acc_zss.write(z, ss);
+        const double minv = 1. / acc_zm[*itz];
+        const double volp = acc_zvolp[*itz];
+        const double vol0 = acc_zvol0[*itz];
+        const double wrate = acc_zwrate[*itz];
+        const double dv = (volp - vol0) * minv;
+        const double bulk = r * csqd;
+        const double denom = 1. + 0.5 * per * dv;
+        const double src = wrate * dth * minv;
+        acc_zp[*itz] = p + (per * src - r * bulk * dv) / denom;
+        acc_zss[*itz] = ss;
     }
 }
 
@@ -113,26 +102,20 @@ void PolyGas::calcForceTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         Runtime *runtime) {
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<double2> acc_ssurf =
-        get_accessor<double2>(regions[0], FID_SSURFP);
-    MyAccessor<double> acc_zp =
-        get_accessor<double>(regions[1], FID_ZP);
-    MyAccessor<double2> acc_sf =
-        get_accessor<double2>(regions[2], FID_SFP);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double2> acc_ssurf(regions[0], FID_SSURFP);
+    const AccessorRO<double> acc_zp(regions[1], FID_ZP);
+    const AccessorWD<double2> acc_sf(regions[2], FID_SFP);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
 
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next(); )
+    for (PointIterator its(runtime, iss); its(); its++)
     {
-        ptr_t s  = itrs.next();
-        ptr_t z  = acc_mapsz.read(s);
-        double p = acc_zp.read(z);
-        double2 surf = acc_ssurf.read(s);
-        double2 sfx = -p * surf;
-        acc_sf.write(s, sfx);
+        const Pointer z = acc_mapsz[*its];
+        const double p = acc_zp[z];
+        const double2 surf = acc_ssurf[*its];
+        const double2 sfx = -p * surf;
+        acc_sf[*its] = sfx;
     }
-
 }
 

@@ -29,40 +29,39 @@
 using namespace std;
 using namespace Memory;
 using namespace Legion;
-using namespace LegionRuntime::Accessor;
 
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
     {
-      TaskVariantRegistrar registrar(TID_CALCCTRS, "calcctrs");
+      TaskVariantRegistrar registrar(TID_CALCCTRS, "CPU calcctrs");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      Runtime::preregister_task_variant<Mesh::calcCtrsTask>(registrar);
+      Runtime::preregister_task_variant<Mesh::calcCtrsTask>(registrar, "calcctrs");
     }
     {
-      TaskVariantRegistrar registrar(TID_CALCVOLS, "calcvols");
+      TaskVariantRegistrar registrar(TID_CALCVOLS, "CPU calcvols");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      Runtime::preregister_task_variant<int, Mesh::calcVolsTask>(registrar);
+      Runtime::preregister_task_variant<int, Mesh::calcVolsTask>(registrar, "calcvols");
     }
     {
-      TaskVariantRegistrar registrar(TID_CALCSURFVECS, "calcsurfvecs");
+      TaskVariantRegistrar registrar(TID_CALCSURFVECS, "CPU calcsurfvecs");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      Runtime::preregister_task_variant<Mesh::calcSurfVecsTask>(registrar);
+      Runtime::preregister_task_variant<Mesh::calcSurfVecsTask>(registrar, "calcsurfvecs");
     }
     {
-      TaskVariantRegistrar registrar(TID_CALCEDGELEN, "calcedgelen");
+      TaskVariantRegistrar registrar(TID_CALCEDGELEN, "CPU calcedgelen");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      Runtime::preregister_task_variant<Mesh::calcEdgeLenTask>(registrar);
+      Runtime::preregister_task_variant<Mesh::calcEdgeLenTask>(registrar, "calcedgelen");
     }
     {
-      TaskVariantRegistrar registrar(TID_CALCCHARLEN, "calccharlen");
+      TaskVariantRegistrar registrar(TID_CALCCHARLEN, "CPU calccharlen");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      Runtime::preregister_task_variant<Mesh::calcCharLenTask>(registrar);
+      Runtime::preregister_task_variant<Mesh::calcCharLenTask>(registrar, "calccharlen");
     }
 
     Runtime::register_reduction_op<SumOp<int> >(
@@ -221,8 +220,6 @@ void Mesh::init() {
 
     // create index spaces and fields for points, zones, sides
     IndexSpace isp = runtime->create_index_space(ctx, nump);
-    IndexAllocator iap = runtime->create_index_allocator(ctx, isp);
-    iap.alloc(nump);
     FieldSpace fsp = runtime->create_field_space(ctx);
     FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
     fap.allocate_field(sizeof(double2), FID_PX);
@@ -237,8 +234,6 @@ void Mesh::init() {
     runtime->attach_name(lrp, "lrp");
 
     IndexSpace isz = runtime->create_index_space(ctx, numz);
-    IndexAllocator iaz = runtime->create_index_allocator(ctx, isz);
-    iaz.alloc(numz);
     FieldSpace fsz = runtime->create_field_space(ctx);
     FieldAllocator faz = runtime->create_field_allocator(ctx, fsz);
     faz.allocate_field(sizeof(int), FID_ZNUMP);
@@ -266,15 +261,13 @@ void Mesh::init() {
     runtime->attach_name(lrz, "lrz");
 
     IndexSpace iss = runtime->create_index_space(ctx, nums);
-    IndexAllocator ias = runtime->create_index_allocator(ctx, iss);
-    ias.alloc(nums);
     FieldSpace fss = runtime->create_field_space(ctx);
     FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
-    fas.allocate_field(sizeof(ptr_t), FID_MAPSP1);
-    fas.allocate_field(sizeof(ptr_t), FID_MAPSP2);
-    fas.allocate_field(sizeof(ptr_t), FID_MAPSZ);
-    fas.allocate_field(sizeof(ptr_t), FID_MAPSS3);
-    fas.allocate_field(sizeof(ptr_t), FID_MAPSS4);
+    fas.allocate_field(sizeof(Pointer), FID_MAPSP1);
+    fas.allocate_field(sizeof(Pointer), FID_MAPSP2);
+    fas.allocate_field(sizeof(Pointer), FID_MAPSZ);
+    fas.allocate_field(sizeof(Pointer), FID_MAPSS3);
+    fas.allocate_field(sizeof(Pointer), FID_MAPSS4);
     fas.allocate_field(sizeof(int), FID_MAPSP1REG);
     fas.allocate_field(sizeof(int), FID_MAPSP2REG);
     fas.allocate_field(sizeof(double2), FID_EX);
@@ -303,8 +296,6 @@ void Mesh::init() {
 
     // create index spaces and fields for global vars
     IndexSpace isglb = runtime->create_index_space(ctx, 1);
-    IndexAllocator iaglb = runtime->create_index_allocator(ctx, isglb);
-    iaglb.alloc(1);
     FieldSpace fsglb = runtime->create_field_space(ctx);
     FieldAllocator faglb = runtime->create_field_allocator(ctx, fsglb);
     faglb.allocate_field(sizeof(int), FID_NUMSBAD);
@@ -317,10 +308,6 @@ void Mesh::init() {
     dompc  = Domain(task_rect);
 #if 0 
     IndexSpace ispc = runtime->create_index_space(ctx, dompc);
-    {
-      IndexAllocator allocator = runtime->create_index_allocator(ctx, ispc);
-      allocator.alloc(numpcs);
-    }
     dompc = runtime->get_index_space_domain(ctx, ispc);
 #endif 
     // create zone and side partitions
@@ -395,11 +382,11 @@ void Mesh::init() {
     lppshr = runtime->get_logical_partition_by_tree(
             ctx, ippshr, fsp, lrp.get_tree_id());
 
-    vector<ptr_t> lgmapsp1(&mapsp1[0], &mapsp1[nums]);
-    vector<ptr_t> lgmapsp2(&mapsp2[0], &mapsp2[nums]);
-    vector<ptr_t> lgmapsz (&mapsz [0], &mapsz [nums]);
-    vector<ptr_t> lgmapss3(&mapss3[0], &mapss3[nums]);
-    vector<ptr_t> lgmapss4(&mapss4[0], &mapss4[nums]);
+    vector<Pointer> lgmapsp1(&mapsp1[0], &mapsp1[nums]);
+    vector<Pointer> lgmapsp2(&mapsp2[0], &mapsp2[nums]);
+    vector<Pointer> lgmapsz (&mapsz [0], &mapsz [nums]);
+    vector<Pointer> lgmapss3(&mapss3[0], &mapss3[nums]);
+    vector<Pointer> lgmapss4(&mapss4[0], &mapss4[nums]);
 
     vector<int> lgmapsp1reg(nums), lgmapsp2reg(nums);
     for (int s = 0; s < nums; ++s) {
@@ -598,55 +585,40 @@ void Mesh::calcCtrsTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         Runtime *runtime) {
-    MyAccessor<ptr_t> acc_mapsp1 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP1);
-    MyAccessor<ptr_t> acc_mapsp2 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP2);
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<int> acc_mapsp1reg =
-        get_accessor<int>(regions[0], FID_MAPSP1REG);
-    MyAccessor<int> acc_mapsp2reg =
-        get_accessor<int>(regions[0], FID_MAPSP2REG);
-    MyAccessor<int> acc_znump =
-        get_accessor<int>(regions[1], FID_ZNUMP);
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
+    const AccessorRO<int> acc_znump(regions[1], FID_ZNUMP);
     FieldID fid_px = task->regions[2].instance_fields[0];
-    MyAccessor<double2> acc_px[2] = {
-        get_accessor<double2>(regions[2], fid_px),
-        get_accessor<double2>(regions[3], fid_px)
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[2], fid_px),
+        AccessorRO<double2>(regions[3], fid_px)
     };
     FieldID fid_ex = task->regions[4].instance_fields[0];
-    MyAccessor<double2> acc_ex =
-        get_accessor<double2>(regions[4], fid_ex);
+    const AccessorWD<double2> acc_ex(regions[4], fid_ex);
     FieldID fid_zx = task->regions[5].instance_fields[0];
-    MyAccessor<double2> acc_zx =
-        get_accessor<double2>(regions[5], fid_zx);
+    const AccessorWD<double2> acc_zx(regions[5], fid_zx);
 
     const IndexSpace& isz = task->regions[1].region.get_index_space();
-    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next();)
-    {
-        ptr_t z = itrz.next();
-        acc_zx.write(z, double2(0., 0.));
-
-    }
+    for (PointIterator itr(runtime, isz); itr(); itr++)
+      acc_zx[*itr] = double2(0., 0.);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx, iss); itrs.has_next(); )
+    for (PointIterator itr(runtime, iss); itr(); itr++)
     {
-        ptr_t s = itrs.next();
-        ptr_t p1 = acc_mapsp1.read(s);
-        int p1reg = acc_mapsp1reg.read(s);
-        ptr_t p2 = acc_mapsp2.read(s);
-        int p2reg = acc_mapsp2reg.read(s);
-        ptr_t z  = acc_mapsz.read(s);
-        double2 px1 = acc_px[p1reg].read(p1);
-        double2 px2 = acc_px[p2reg].read(p2);
-        double2 ex  = 0.5 * (px1 + px2);
-        acc_ex.write(s, ex);
-        double2 zx  = acc_zx.read(z);
-        int n = acc_znump.read(z);
-        zx += px1 / n;
-        acc_zx.write(z, zx);
+        const Pointer p1 = acc_mapsp1[*itr];
+        const int p1reg = acc_mapsp1reg[*itr];
+        const Pointer p2 = acc_mapsp2[*itr];
+        const int p2reg = acc_mapsp2reg[*itr];
+        const Pointer z = acc_mapsz[*itr];
+        const double2 px1 = acc_px[p1reg][p1];
+        const double2 px2 = acc_px[p2reg][p2];
+        const double2 ex  = 0.5 * (px1 + px2);
+        acc_ex[*itr] = ex;
+        const int n = acc_znump[z];
+        acc_zx[z] += px1 / n;
     }
 }
 
@@ -656,74 +628,59 @@ int Mesh::calcVolsTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         Runtime *runtime) {
-    MyAccessor<ptr_t> acc_mapsp1 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP1);
-    MyAccessor<ptr_t> acc_mapsp2 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP2);
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<int> acc_mapsp1reg =
-        get_accessor<int>(regions[0], FID_MAPSP1REG);
-    MyAccessor<int> acc_mapsp2reg =
-        get_accessor<int>(regions[0], FID_MAPSP2REG);
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
     FieldID fid_px = task->regions[1].instance_fields[0];
-    MyAccessor<double2> acc_px[2] = {
-        get_accessor<double2>(regions[1], fid_px),
-        get_accessor<double2>(regions[2], fid_px)
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[1], fid_px),
+        AccessorRO<double2>(regions[2], fid_px)
     };
     FieldID fid_zx = task->regions[3].instance_fields[0];
-    MyAccessor<double2> acc_zx =
-        get_accessor<double2>(regions[3], fid_zx);
+    const AccessorRO<double2> acc_zx(regions[3], fid_zx);
     FieldID fid_sarea = task->regions[4].instance_fields[0];
     FieldID fid_svol  = task->regions[4].instance_fields[1];
-    MyAccessor<double> acc_sarea =
-        get_accessor<double>(regions[4], fid_sarea);
-    MyAccessor<double> acc_svol =
-        get_accessor<double>(regions[4], fid_svol);
+    const AccessorWD<double> acc_sarea(regions[4], fid_sarea);
+    const AccessorWD<double> acc_svol(regions[4], fid_svol);
     FieldID fid_zarea = task->regions[5].instance_fields[0];
     FieldID fid_zvol  = task->regions[5].instance_fields[1];
-    MyAccessor<double> acc_zarea =
-        get_accessor<double>(regions[5], fid_zarea);
-    MyAccessor<double> acc_zvol =
-        get_accessor<double>(regions[5], fid_zvol);
+    const AccessorWD<double> acc_zarea(regions[5], fid_zarea);
+    const AccessorWD<double> acc_zvol(regions[5], fid_zvol);
 
     const IndexSpace& isz = task->regions[3].region.get_index_space();
-    for (IndexIterator itrz(runtime, ctx, isz); itrz.has_next(); )
+    for (PointIterator itr(runtime, isz); itr(); itr++)
     {
-        ptr_t z = itrz.next();
-        acc_zarea.write(z, 0.);
-        acc_zvol.write(z, 0.);
+        acc_zarea[*itr] = 0.;
+        acc_zvol[*itr] = 0.;
     }
 
     const double third = 1. / 3.;
     int count = 0;
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime, ctx, iss); itrs.has_next(); )
+    for (PointIterator itr(runtime, iss); itr(); itr++)
     {
-        ptr_t s = itrs.next();
-        ptr_t p1 = acc_mapsp1.read(s);
-        int p1reg = acc_mapsp1reg.read(s);
-        ptr_t p2 = acc_mapsp2.read(s);
-        int p2reg = acc_mapsp2reg.read(s);
-        ptr_t z  = acc_mapsz.read(s);
-        double2 px1 = acc_px[p1reg].read(p1);
-        double2 px2 = acc_px[p2reg].read(p2);
-        double2 zx  = acc_zx.read(z);
+        const Pointer p1 = acc_mapsp1[*itr];
+        const int p1reg = acc_mapsp1reg[*itr];
+        const Pointer p2 = acc_mapsp2[*itr];
+        const int p2reg = acc_mapsp2reg[*itr];
+        const Pointer z = acc_mapsz[*itr];
+        const double2 px1 = acc_px[p1reg][p1];
+        const double2 px2 = acc_px[p2reg][p2];
+        const double2 zx  = acc_zx[z];
 
         // compute side volumes, sum to zone
-        double sa = 0.5 * cross(px2 - px1, zx - px1);
-        double sv = third * sa * (px1.x + px2.x + zx.x);
-        acc_sarea.write(s, sa);
-        acc_svol.write(s, sv);
-        double za = acc_zarea.read(z);
-        za += sa;
-        acc_zarea.write(z, za);
-        double zv = acc_zvol.read(z);
-        zv += sv;
-        acc_zvol.write(z, zv);
+        const double sa = 0.5 * cross(px2 - px1, zx - px1);
+        const double sv = third * sa * (px1.x + px2.x + zx.x);
+        acc_sarea[*itr] = sa;
+        acc_svol[*itr] = sv;
+        acc_zarea[z] += sa;
+        acc_zvol[z] += sv;
 
         // check for negative side volumes
-        if (sv <= 0.) count += 1;
+        if (sv <= 0.) 
+          count += 1;
     }
 
     return count;
@@ -735,24 +692,19 @@ void Mesh::calcSurfVecsTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         Runtime *runtime) {
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<double2> acc_ex =
-        get_accessor<double2>(regions[0], FID_EXP);
-    MyAccessor<double2> acc_zx =
-        get_accessor<double2>(regions[1], FID_ZXP);
-    MyAccessor<double2> acc_ssurf =
-        get_accessor<double2>(regions[2], FID_SSURFP);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double2> acc_ex(regions[0], FID_EXP);
+    const AccessorRO<double2> acc_zx(regions[1], FID_ZXP);
+    const AccessorWD<double2> acc_ssurf(regions[2], FID_SSURFP);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next();)
+    for (PointIterator itr(runtime, iss); itr(); itr++)
     {
-        ptr_t s = itrs.next();
-        ptr_t z = acc_mapsz.read(s);
-        double2 ex = acc_ex.read(s);
-        double2 zx = acc_zx.read(z);
-        double2 ss = rotateCCW(ex - zx);
-        acc_ssurf.write(s, ss);
+        const Pointer z = acc_mapsz[*itr];
+        const double2 ex = acc_ex[*itr];
+        const double2 zx = acc_zx[z];
+        const double2 ss = rotateCCW(ex - zx);
+        acc_ssurf[*itr] = ss;
     }
 }
 
@@ -762,34 +714,28 @@ void Mesh::calcEdgeLenTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         Runtime *runtime) {
-    MyAccessor<ptr_t> acc_mapsp1 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP1);
-    MyAccessor<ptr_t> acc_mapsp2 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP2);
-    MyAccessor<int> acc_mapsp1reg =
-        get_accessor<int>(regions[0], FID_MAPSP1REG);
-    MyAccessor<int> acc_mapsp2reg =
-        get_accessor<int>(regions[0], FID_MAPSP2REG);
-    MyAccessor<double2> acc_px[2] = {
-        get_accessor<double2>(regions[1], FID_PXP),
-        get_accessor<double2>(regions[2], FID_PXP)
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[1], FID_PXP),
+        AccessorRO<double2>(regions[2], FID_PXP)
     };
-    MyAccessor<double> acc_elen =
-        get_accessor<double>(regions[3], FID_ELEN);
+    const AccessorWD<double> acc_elen(regions[3], FID_ELEN);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next(); )
+    for (PointIterator itr(runtime, iss); itr(); itr++)
     {
-        ptr_t s = itrs.next();
-        ptr_t p1 = acc_mapsp1.read(s);
-        int p1reg = acc_mapsp1reg.read(s);
-        ptr_t p2 = acc_mapsp2.read(s);
-        int p2reg = acc_mapsp2reg.read(s);
-        double2 px1 = acc_px[p1reg].read(p1);
-        double2 px2 = acc_px[p2reg].read(p2);
+        const Pointer p1 = acc_mapsp1[*itr];
+        const int p1reg = acc_mapsp1reg[*itr];
+        const Pointer p2 = acc_mapsp2[*itr];
+        const int p2reg = acc_mapsp2reg[*itr];
+        const double2 px1 = acc_px[p1reg][p1];
+        const double2 px2 = acc_px[p2reg][p2];
 
-        double elen = length(px2 - px1);
-        acc_elen.write(s, elen);
+        const double elen = length(px2 - px1);
+        acc_elen[*itr] = elen;
     }
 }
 
@@ -799,40 +745,29 @@ void Mesh::calcCharLenTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         Runtime *runtime) {
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<double> acc_elen =
-        get_accessor<double>(regions[0], FID_ELEN);
-    MyAccessor<double> acc_sarea =
-        get_accessor<double>(regions[0], FID_SAREAP);
-    MyAccessor<int> acc_znump =
-        get_accessor<int>(regions[1], FID_ZNUMP);
-    MyAccessor<double> acc_zdl =
-        get_accessor<double>(regions[2], FID_ZDL);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double> acc_elen(regions[0], FID_ELEN);
+    const AccessorRO<double> acc_sarea(regions[0], FID_SAREAP);
+    const AccessorRO<int> acc_znump(regions[1], FID_ZNUMP);
+    const AccessorWD<double> acc_zdl(regions[2], FID_ZDL);
 
     const IndexSpace& isz = task->regions[1].region.get_index_space();
-    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next();)
-    {
-        ptr_t z = itrz.next();
-        acc_zdl.write(z, 1.e99);
-        
-    }
+    for (PointIterator itr(runtime, isz); itr(); itr++)
+        acc_zdl[*itr] = 1.e99;
     
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next();)
+    for (PointIterator itr(runtime, iss); itr(); itr++)
     {
-        ptr_t s = itrs.next();
-        ptr_t z  = acc_mapsz.read(s);
-        double area = acc_sarea.read(s);
-        double base = acc_elen.read(s);
-        double zdl = acc_zdl.read(z);
-        int np = acc_znump.read(z);
-        double fac = (np == 3 ? 3. : 4.);
-        double sdl = fac * area / base;
-        zdl = min(zdl, sdl);
-        acc_zdl.write(z, zdl);
+        const Pointer z = acc_mapsz[*itr];
+        const double area = acc_sarea[*itr];
+        const double base = acc_elen[*itr];
+        const double zdl = acc_zdl[z];
+        const int np = acc_znump[z];
+        const double fac = (np == 3 ? 3. : 4.);
+        const double sdl = fac * area / base;
+        const double zdl2 = min(zdl, sdl);
+        acc_zdl[z] = zdl2;
     }
-
 }
 
 

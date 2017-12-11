@@ -52,9 +52,9 @@ GEN_GPU_SRC	:=				# .cu files
 # You can modify these variables, some will be appended to by the runtime makefile
 INC_FLAGS	:= -I$(SRCDIR) 
 #CC_FLAGS	:=
-#CC_FLAGS 	:= -DPRIVILEGE_CHECKS
 CC_FLAGS	:= -std=c++11 -Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-unused-variable
-#CC_FLAGS	:= -DLEGION_PROF -DNODE_LOGGING
+#CC_FLAGS	+= -DPRIVILEGE_CHECKS -DBOUNDS_CHECKS	
+#CC_FLAGS	+= -DLEGION_SPY
 NVCC_FLAGS	:=
 GASNET_FLAGS	:=
 #LD_FLAGS	:=

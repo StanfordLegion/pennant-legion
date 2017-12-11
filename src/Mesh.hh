@@ -372,22 +372,20 @@ void Mesh::getField(
         T* var,
         const int n) {
     using namespace Legion;
-    using namespace LegionRuntime::Accessor;
     RegionRequirement req(lr, READ_ONLY, EXCLUSIVE, lr);
     req.add_field(fid);
     InlineLauncher inl(req);
     PhysicalRegion pr = runtime->map_region(ctx, inl);
     pr.wait_until_valid();
-    RegionAccessor<AccessorType::Generic, T> acc =
-            pr.get_field_accessor(fid).typeify<T>();
+    FieldAccessor<READ_ONLY,T,1,coord_t,
+      Realm::AffineAccessor<T,1,coord_t> > acc(pr, fid);
     const IndexSpace& is = lr.get_index_space();
     
-    IndexIterator itr(runtime, ctx, is);
-    for (int i = 0; i < n; ++i)
-    {
-        ptr_t p = itr.next();
-        var[i] = acc.read(p);
-    }
+    int i = 0;
+    for (PointInDomainIterator<1,coord_t> itr(
+          runtime->get_index_space_domain(IndexSpaceT<1,coord_t>(is))); 
+          itr(); itr++, i++)
+      var[i] = acc[*itr];
     runtime->unmap_region(ctx, pr);
 }
 
@@ -399,22 +397,20 @@ void Mesh::setField(
         const T* var,
         const int n) {
     using namespace Legion;
-    using namespace LegionRuntime::Accessor;
     RegionRequirement req(lr, WRITE_DISCARD, EXCLUSIVE, lr);
     req.add_field(fid);
     InlineLauncher inl(req);
     PhysicalRegion pr = runtime->map_region(ctx, inl);
     pr.wait_until_valid();
-    RegionAccessor<AccessorType::Generic, T> acc =
-            pr.get_field_accessor(fid).typeify<T>();
+    FieldAccessor<WRITE_DISCARD,T,1,coord_t,
+      Realm::AffineAccessor<T,1,coord_t> > acc(pr, fid);
     const IndexSpace& is = lr.get_index_space();
 
-    IndexIterator itr(runtime, ctx, is);
-    for (int i = 0; i < n; ++i)
-    {
-        ptr_t p = itr.next();
-        acc.write(p, var[i]);
-    }
+    int i = 0;
+    for (PointInDomainIterator<1,coord_t> itr(
+          runtime->get_index_space_domain(IndexSpaceT<1,coord_t>(is)));
+          itr(); itr++, i++)
+      acc[*itr] = var[i];
     runtime->unmap_region(ctx, pr);
 }
 
