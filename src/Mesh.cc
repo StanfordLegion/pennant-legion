@@ -124,6 +124,7 @@ const double MinOp<double>::identity = 1.e99;
 Mesh::Mesh(
         const InputFile* inp,
         const int numpcsa,
+        const bool parallel,
         Context ctxa,
         Runtime* runtimea)
         : gmesh(NULL),  wxy(NULL), egold(NULL),
@@ -140,7 +141,10 @@ Mesh::Mesh(
     wxy = new WriteXY(this);
     egold = new ExportGold(this);
 
-    init();
+    if (parallel)
+        initParallel();
+    else
+        init();
 }
 
 
@@ -409,6 +413,204 @@ void Mesh::init() {
 
     setField(lrglb, FID_NUMSBAD, &numsbad, 1);
 
+}
+
+
+void Mesh::initParallel() {
+    // Create a space for the number of pieces that we will have
+    IndexSpace piece_is = runtime->create_index_space(ctx, Rect<1>(0, numpcs-1));
+    IndexPartition piece_ip = runtime->create_equal_partition(ctx, piece_is, piece_is);
+    // Create point index space and field spaces
+    IndexSpace isp = runtime->create_index_space(ctx, 
+                                      Rect<1>(0,gmesh->calcNumPoints(numpcs)-1));
+    FieldSpace fsp = runtime->create_field_space(ctx);
+    {
+      FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
+      fap.allocate_field(sizeof(double2), FID_PX);
+      fap.allocate_field(sizeof(double2), FID_PXP);
+      fap.allocate_field(sizeof(double2), FID_PX0);
+      fap.allocate_field(sizeof(double2), FID_PU);
+      fap.allocate_field(sizeof(double2), FID_PU0);
+      fap.allocate_field(sizeof(double), FID_PMASWT);
+      fap.allocate_field(sizeof(double2), FID_PF);
+      fap.allocate_field(sizeof(double2), FID_PAP);
+    }
+    // load fields into temp points with equal partition
+    LogicalRegion temp_points = runtime->create_logical_region(ctx, isp, fsp);
+    IndexPartition points_equal = runtime->create_equal_partition(ctx, isp, piece_is);
+    gmesh->generatePointsParallel(numpcs, runtime, ctx, temp_points, 
+                            runtime->get_logical_partition(temp_points, points_equal));
+    // equal partition zones
+    IndexSpace isz = runtime->create_index_space(ctx, 
+                        Rect<1>(0, gmesh->calcNumZones(numpcs)-1));
+    FieldSpace fsz = runtime->create_field_space(ctx);
+    {
+      FieldAllocator faz = runtime->create_field_allocator(ctx, fsz);
+      faz.allocate_field(sizeof(int), FID_ZNUMP);
+      faz.allocate_field(sizeof(double2), FID_ZX);
+      faz.allocate_field(sizeof(double2), FID_ZXP);
+      faz.allocate_field(sizeof(double), FID_ZAREA);
+      faz.allocate_field(sizeof(double), FID_ZVOL);
+      faz.allocate_field(sizeof(double), FID_ZAREAP);
+      faz.allocate_field(sizeof(double), FID_ZVOLP);
+      faz.allocate_field(sizeof(double), FID_ZVOL0);
+      faz.allocate_field(sizeof(double), FID_ZDL);
+      faz.allocate_field(sizeof(double), FID_ZM);
+      faz.allocate_field(sizeof(double), FID_ZR);
+      faz.allocate_field(sizeof(double), FID_ZRP);
+      faz.allocate_field(sizeof(double), FID_ZE);
+      faz.allocate_field(sizeof(double), FID_ZETOT);
+      faz.allocate_field(sizeof(double), FID_ZW);
+      faz.allocate_field(sizeof(double), FID_ZWRATE);
+      faz.allocate_field(sizeof(double), FID_ZP);
+      faz.allocate_field(sizeof(double), FID_ZSS);
+      faz.allocate_field(sizeof(double), FID_ZDU);
+      faz.allocate_field(sizeof(double2), FID_ZUC);
+      faz.allocate_field(sizeof(double), FID_ZTMP);
+    }
+    lrz = runtime->create_logical_region(ctx, isz, fsz);
+    runtime->attach_name(lrz, "lrz");
+    IndexPartition zones_equal = runtime->create_equal_partition(ctx, isz, piece_is);
+    lpz = runtime->get_logical_partition(ctx, lrz, zones_equal);
+    // Create temp side logical region
+    IndexSpace iss = runtime->create_index_space(ctx, 
+                          Rect<1>(0, gmesh->calcNumSides(numpcs)-1));
+    FieldSpace fss = runtime->create_field_space(ctx);
+    {
+      FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSP1);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSP2);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSZ);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSS3);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSS4);
+      fas.allocate_field(sizeof(int), FID_MAPSP1REG);
+      fas.allocate_field(sizeof(int), FID_MAPSP2REG);
+      fas.allocate_field(sizeof(double2), FID_EX);
+      fas.allocate_field(sizeof(double2), FID_EXP);
+      fas.allocate_field(sizeof(double), FID_SAREA);
+      fas.allocate_field(sizeof(double), FID_SVOL);
+      fas.allocate_field(sizeof(double), FID_SAREAP);
+      fas.allocate_field(sizeof(double), FID_SVOLP);
+      fas.allocate_field(sizeof(double2), FID_SSURFP);
+      fas.allocate_field(sizeof(double), FID_ELEN);
+      fas.allocate_field(sizeof(double), FID_SMF);
+      fas.allocate_field(sizeof(double2), FID_SFP);
+      fas.allocate_field(sizeof(double2), FID_SFQ);
+      fas.allocate_field(sizeof(double2), FID_SFT);
+      fas.allocate_field(sizeof(double), FID_CAREA);
+      fas.allocate_field(sizeof(double), FID_CEVOL);
+      fas.allocate_field(sizeof(double), FID_CDU);
+      fas.allocate_field(sizeof(double), FID_CDIV);
+      fas.allocate_field(sizeof(double), FID_CCOS);
+      fas.allocate_field(sizeof(double2), FID_CQE1);
+      fas.allocate_field(sizeof(double2), FID_CQE2);
+      fas.allocate_field(sizeof(double), FID_CRMU);
+      fas.allocate_field(sizeof(double), FID_CW);
+    }
+    lrs = runtime->create_logical_region(ctx, iss, fss);
+    runtime->attach_name(lrs, "lrs");
+    IndexPartition equal_sides = runtime->create_equal_partition(ctx, iss, piece_is);
+    lps = runtime->get_logical_partition(lrs, equal_sides);
+    // construct temp side maps with equal partition (iterate over zones and find sides)
+    gmesh->generateSideMapsParallel(numpcs, runtime, ctx, lrs, lps);
+    // Now we need to compact our points and generate our point partition tree
+    // First compute our owned points
+    IndexPartition owned_points = runtime->create_partition_by_field(ctx, lrp, lrp,
+                                                              FID_PIECE, piece_is);
+    runtime->attach_name(owned_points, "owned points");
+    // Now find the set of points that we can reach from our points through all our sides
+    IndexPartition owned_sides = runtime->create_partition_by_preimage(ctx, owned_points,
+                                                         lrs, lrs, FID_MAPSP1, piece_is);
+    IndexPartition reachable_points = runtime->create_partition_by_image(ctx, isp,
+            runtime->get_logical_partition(lrs, owned_sides), lrs, FID_MAPSP2, piece_is);
+    runtime->attach_name(reachable_points, "reachable points");
+    // Now we can make the temp ghost partition
+    IndexPartition temp_ghost_points = runtime->create_partition_by_difference(ctx,
+                                          isp, reachable_points, owned_points, piece_is);
+    runtime->attach_name(temp_ghost_points, "temporary ghost points");
+    // Now create a two-way partition of private versus shared
+    IndexSpace private_is = runtime->create_index_space(ctx, Rect<1>(0, 1));
+    IndexPartition private_all = runtime->create_pending_partition(ctx, iss, private_is);
+    // Fill in the two sub-regions of the ipp index space
+    IndexSpace all_shared = runtime->create_index_space_union(ctx, private_all,
+                                      Point<1>(1)/*color*/, temp_ghost_points);
+    std::vector<IndexSpace> diff_spaces(1, all_shared);
+    IndexSpace all_private = runtime->create_index_space_difference(ctx, private_all, 
+                                      Point<1>(0)/*color*/, isp, diff_spaces);
+    runtime->attach_name(private_all, "temporary private");
+    // create the private and shared partitions with cross product partitions
+    // There are only going to be two of them so we can get their names back
+    // right away without having to worry about scalability
+    std::map<IndexSpace,IndexPartition> partition_handles;
+    partition_handles[all_shared] = IndexPartition::NO_PART;
+    partition_handles[all_private] = IndexPartition::NO_PART;
+    runtime->create_cross_product_partitions(ctx, private_all, 
+                                owned_points, partition_handles);
+    IndexPartition temp_shared = partition_handles[all_shared];
+    IndexPartition temp_private = partition_handles[all_private];
+    // The problem with these partitions is that the sub-regions in them
+    // might not be dense, so we now need to make the actual dense partitions
+    // To do this we make a temporary region of the number of pieces and count
+    // how many points exist in private and shared and then use image partitions
+    // to compute them
+    FieldSpace fsc = runtime->create_field_space(ctx);
+    {
+      FieldAllocator fac = runtime->create_field_allocator(ctx, fsc); 
+      fac.allocate_field(sizeof(coord_t), FID_COUNT);
+      fac.allocate_field(sizeof(Rect<1>), FID_RANGE);
+    }
+    LogicalRegion lr_all_range = runtime->create_logical_region(ctx, private_is, fsc);
+    LogicalRegion lr_private_range = runtime->create_logical_region(ctx, piece_is, fsc);
+    LogicalPartition lp_private_range = 
+      runtime->get_logical_partition(lr_private_range, piece_ip);
+    LogicalRegion lr_shared_range = runtime->create_logical_region(ctx, piece_is, fsc);
+    LogicalPartition lp_shared_range = 
+      runtime->get_logical_partition(lr_shared_range, piece_ip);
+    computeRangesParallel(numpcs, runtime, ctx, lr_all_range,
+        lr_private_range, lp_private_range, lr_shared_range, lp_shared_range,
+        temp_private, temp_shared);
+    // Now we can compute the actual dense versions of the partition
+    IndexPartition private_ip = runtime->create_equal_partition(ctx, private_is, private_is);
+    IndexPartition ippall = runtime->create_partition_by_image_range(ctx, isp,
+        runtime->get_logical_partition(lr_all_range, private_ip), lr_all_range, 
+        FID_RANGE, private_is);
+    IndexSpace ispprv = runtime->get_index_subspace(ippall, DomainPoint(0));
+    IndexSpace ispshr = runtime->get_index_subspace(ippall, DomainPoint(1));
+    IndexPartition ippprv = runtime->create_partition_by_image_range(ctx, ispprv,
+        lp_private_range, lr_private_range, FID_RANGE, piece_is);
+    IndexPartition ippmstr = runtime->create_partition_by_image_range(ctx, ispshr,
+        lp_shared_range, lr_shared_range, FID_RANGE, piece_is);
+    // Now compute the actual ghost region by projecting through the sides
+    IndexPartition shared_sides = runtime->create_partition_by_preimage(ctx, ippmstr,
+                                                    lrs, lrs, FID_MAPSP1, piece_is);
+    IndexPartition reachable_ghost_points = runtime->create_partition_by_image(ctx, ispshr,
+            runtime->get_logical_partition(lrs, shared_sides), lrs, FID_MAPSP2, piece_is);
+    IndexPartition ippshr = runtime->create_partition_by_difference(ctx, ispshr,
+                                      reachable_ghost_points, ippmstr, piece_is);
+    // Now make the actual point logical region, get the partitions, and copy over data
+    LogicalRegion lrp = runtime->create_logical_region(ctx, isp, fsp);
+    runtime->attach_name(lrp, "lrp");
+    lppprv = runtime->get_logical_partition_by_tree(ippprv, fsp, lrp.get_tree_id());
+    runtime->attach_name(lppprv, "lppprv");
+    lppmstr = runtime->get_logical_partition_by_tree(ippmstr, fsp, lrp.get_tree_id());
+    runtime->attach_name(lppmstr, "lppmstr");
+    lppshr = runtime->get_logical_partition_by_tree(ippshr, fsp, lrp.get_tree_id());
+    runtime->attach_name(lppshr, "lppshr");
+    // Compact the points
+    compactPointsParallel(numpcs, runtime, ctx, temp_points, 
+        runtime->get_logical_partition_by_tree(ippprv, fsp, temp_points.get_tree_id()),
+        lrp, lppprv);
+    compactPointsParallel(numpcs, runtime, ctx, temp_points,
+        runtime->get_logical_partition_by_tree(ippmstr, fsp, temp_points.get_tree_id()),
+        lrp, lppmstr);
+
+    // Calculate centers, volumes, and side fractions
+
+    // Delete our temporary regions
+    runtime->destroy_logical_region(ctx, temp_points);
+    runtime->destroy_logical_region(ctx, lr_all_range);
+    runtime->destroy_logical_region(ctx, lr_private_range);
+    runtime->destroy_logical_region(ctx, lr_shared_range);
 }
 
 

@@ -16,6 +16,9 @@
 #include <string>
 #include <vector>
 #include <map>
+
+#include "legion.h"
+
 #include "Vec2.hh"
 
 // forward declarations
@@ -81,6 +84,26 @@ public:
             std::vector<int>& zonecolors);
 
     void calcNumPieces(const int numpc);
+
+    int calcNumPoints(const int numpc);
+
+    int calcNumZones(const int numpc);
+
+    int calcNumSides(const int numpc);
+
+    void generatePointsParallel(
+            const int numpcs,
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion points_lr,
+            Legion::LogicalPartition points_lp);
+
+    void generateSideMapsParallel(
+            const int numpcs,
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion sides_lr,
+            Legion::LogicalPartition sides_lp);
 
 }; // class GenMesh
 

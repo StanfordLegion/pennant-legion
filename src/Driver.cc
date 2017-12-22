@@ -31,6 +31,7 @@ Driver::Driver(
         const InputFile* inp,
         const std::string& pname,
         const int numpcs,
+        const bool parallel,
         Context ctx,
         Runtime* runtime)
         : probname(pname) {
@@ -53,7 +54,7 @@ Driver::Driver(
     dtreport = inp->getInt("dtreport", 10);
 
     // initialize mesh, hydro
-    mesh = new Mesh(inp, numpcs, ctx, runtime);
+    mesh = new Mesh(inp, numpcs, parallel, ctx, runtime);
     hydro = new Hydro(inp, mesh, ctx, runtime);
 
 }

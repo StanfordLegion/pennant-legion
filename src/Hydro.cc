@@ -201,39 +201,6 @@ void Hydro::init() {
             fill(&pu[pfirst], &pu[plast], double2(0., 0.));
     }  // for pch
 
-    // FIXME: This doesn't work, the fields won't appear in this tasks
-    // region requirements.
-    // FieldSpace fsp = mesh->lrp.get_field_space();
-    // FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
-    // fap.allocate_field(sizeof(double2), FID_PU);
-    // fap.allocate_field(sizeof(double2), FID_PU0);
-    // fap.allocate_field(sizeof(double), FID_PMASWT);
-    // fap.allocate_field(sizeof(double2), FID_PF);
-    // fap.allocate_field(sizeof(double2), FID_PAP);
-
-    // FieldSpace fsz = mesh->lrz.get_field_space();
-    // FieldAllocator faz = runtime->create_field_allocator(ctx, fsz);
-    // faz.allocate_field(sizeof(double), FID_ZM);
-    // faz.allocate_field(sizeof(double), FID_ZR);
-    // faz.allocate_field(sizeof(double), FID_ZRP);
-    // faz.allocate_field(sizeof(double), FID_ZE);
-    // faz.allocate_field(sizeof(double), FID_ZETOT);
-    // faz.allocate_field(sizeof(double), FID_ZW);
-    // faz.allocate_field(sizeof(double), FID_ZWRATE);
-    // faz.allocate_field(sizeof(double), FID_ZP);
-    // faz.allocate_field(sizeof(double), FID_ZSS);
-    // faz.allocate_field(sizeof(double), FID_ZDU);
-
-    // FieldSpace fss = mesh->lrs.get_field_space();
-    // FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
-    // fas.allocate_field(sizeof(double2), FID_SFP);
-    // fas.allocate_field(sizeof(double2), FID_SFQ);
-    // fas.allocate_field(sizeof(double2), FID_SFT);
-
-    // FieldSpace fsglb = mesh->lrglb.get_field_space();
-    // FieldAllocator faglb = runtime->create_field_allocator(ctx, fsglb);
-    // faglb.allocate_field(sizeof(double), FID_DTREC);
-
     LogicalRegion& lrp = mesh->lrp;
     LogicalRegion& lrz = mesh->lrz;
     mesh->setField(lrp, FID_PU, pu, nump);

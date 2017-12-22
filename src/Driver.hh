@@ -50,6 +50,7 @@ public:
             const InputFile* inp,
             const std::string& pname,
             const int numpcs,
+            const bool parallel,
             Context ctx,
             Runtime* runtime);
     ~Driver();

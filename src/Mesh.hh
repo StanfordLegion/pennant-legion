@@ -57,7 +57,10 @@ enum MeshFieldID {
     FID_SSURFP,
     FID_ELEN,
     FID_SMF,
-    FID_ZDL
+    FID_ZDL,
+    FID_PIECE,
+    FID_COUNT,
+    FID_RANGE
 };
 
 enum HydroFieldID {
@@ -239,6 +242,7 @@ public:
     Mesh(
             const InputFile* inp,
             const int numpcsa,
+            const bool parallel,
             Legion::Context ctxa,
             Legion::Runtime* runtimea);
     ~Mesh();
@@ -262,6 +266,14 @@ public:
             Legion::FutureMap& fmap);
 
     void init();
+    
+    void initParallel();
+
+    void initPoints();
+
+    void initZones();
+
+    void initSides();
 
     // populate mapping arrays
     void initSides(
@@ -361,6 +373,27 @@ public:
             double* smf,
             const int sfirst,
             const int slast);
+
+    void computeRangesParallel(
+            const int numpcs,
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_all_range,
+            Legion::LogicalRegion lr_private_range,
+            Legion::LogicalPartition lp_private_range,
+            Legion::LogicalRegion lr_shared_range,
+            Legion::LogicalPartition lp_shared_range,
+            Legion::IndexPartition ip_private,
+            Legion::IndexPartition ip_shared);
+
+    void compactPointsParallel(
+            const int numpcs,
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_temp_points,
+            Legion::LogicalPartition lp_temp_points,
+            Legion::LogicalRegion lr_points,
+            Legion::LogicalPartition lp_points);
 
 }; // class Mesh
 
