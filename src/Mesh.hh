@@ -31,12 +31,15 @@ class ExportGold;
 enum MeshFieldID {
     FID_NUMSBAD = 'M' * 100,
     FID_MAPSP1,
+    FID_MAPSP1TEMP, // map from sides to points after loading only
     FID_MAPSP2,
+    FID_MAPSP2TEMP, // map from sides to points after loading only
     FID_MAPSZ,
     FID_MAPSS3,
     FID_MAPSS4,
     FID_MAPSP1REG,
     FID_MAPSP2REG,
+    FID_MAPPTEMP2PDENSE, // map from load points to dense points
     FID_ZNUMP,
     FID_PX,
     FID_EX,
@@ -105,7 +108,10 @@ enum MeshTaskID {
     TID_CALCVOLS,
     TID_CALCSURFVECS,
     TID_CALCEDGELEN,
-    TID_CALCCHARLEN
+    TID_CALCCHARLEN,
+    TID_COUNTPOINTS,
+    TID_CALCRANGES,
+    TID_COMPACTPOINTS
 };
 
 enum MeshOpID {
@@ -384,7 +390,8 @@ public:
             Legion::LogicalRegion lr_shared_range,
             Legion::LogicalPartition lp_shared_range,
             Legion::IndexPartition ip_private,
-            Legion::IndexPartition ip_shared);
+            Legion::IndexPartition ip_shared,
+            Legion::IndexSpace is_piece);
 
     void compactPointsParallel(
             const int numpcs,
@@ -393,7 +400,26 @@ public:
             Legion::LogicalRegion lr_temp_points,
             Legion::LogicalPartition lp_temp_points,
             Legion::LogicalRegion lr_points,
-            Legion::LogicalPartition lp_points);
+            Legion::LogicalPartition lp_points,
+            Legion::IndexSpace is_piece);
+
+    static void countPointsTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void calcRangesTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void compactPointsTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
 }; // class Mesh
 
