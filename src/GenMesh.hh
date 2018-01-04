@@ -33,6 +33,7 @@ enum GenMeshTaskID {
     TID_GENPOINTS_RECT = 'G' * 100,
     TID_GENPOINTS_PIE,
     TID_GENPOINTS_HEX,
+    TID_GENZONES_PIE,
     TID_GENSIDES_RECT,
     TID_GENSIDES_PIE,
     TID_GENSIDES_HEX,
@@ -51,7 +52,17 @@ public:
       const int numpcx, numpcy;
       const double lenx, leny;
     };
+    struct GenZoneArgs {
+    public:
+      GenZoneArgs(GenMesh *gmesh)
+        : nzx(gmesh->nzx), nzy(gmesh->nzy),
+          numpcx(gmesh->numpcx), numpcy(gmesh->numpcy) { }
+    public:
+      const int nzx, nzy;
+      const int numpcx, numpcy;
+    };
     struct GenSideArgs {
+    public:
       GenSideArgs(GenMesh *gmesh)
         : nzx(gmesh->nzx), nzy(gmesh->nzy),
           numpcx(gmesh->numpcx), numpcy(gmesh->numpcy) { }
@@ -129,7 +140,15 @@ public:
             Legion::LogicalPartition points_lp,
             Legion::IndexSpace piece_is);
 
-    void generateSideMapsParallel(
+    void generateZonesParallel(
+            const int numpcs,
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion zones_lr,
+            Legion::LogicalPartition zones_lp,
+            Legion::IndexSpace piece_is);
+
+    void generateSidesParallel(
             const int numpcs,
             Legion::Runtime *runtime,
             Legion::Context ctx,
@@ -150,6 +169,12 @@ public:
             Legion::Runtime *runtime);
 
     static void genPointsHex(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void genZonesPie(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,

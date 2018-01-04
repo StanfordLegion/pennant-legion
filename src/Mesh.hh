@@ -106,6 +106,7 @@ enum MeshTaskID {
     TID_SUMTOPTSDBL = 'M' * 100,
     TID_CALCCTRS,
     TID_CALCVOLS,
+    TID_CALCSIDEFRACS,
     TID_CALCSURFVECS,
     TID_CALCEDGELEN,
     TID_CALCCHARLEN,
@@ -331,6 +332,12 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    static void calcSideFracsTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
     static void calcSurfVecsTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
@@ -401,6 +408,39 @@ public:
             Legion::LogicalPartition lp_temp_points,
             Legion::LogicalRegion lr_points,
             Legion::LogicalPartition lp_points,
+            Legion::IndexSpace is_piece);
+
+    void calcCtrsParallel(
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_sides,
+            Legion::LogicalPartition lp_sides,
+            Legion::LogicalRegion lr_zones,
+            Legion::LogicalPartition lp_zones,
+            Legion::LogicalRegion lr_points,
+            Legion::LogicalPartition lp_points_private,
+            Legion::LogicalPartition lp_points_master,
+            Legion::IndexSpace is_piece);
+
+    Legion::Future calcVolsParallel(
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_sides,
+            Legion::LogicalPartition lp_sides,
+            Legion::LogicalRegion lr_zones,
+            Legion::LogicalPartition lp_zones,
+            Legion::LogicalRegion lr_points,
+            Legion::LogicalPartition lp_points_private,
+            Legion::LogicalPartition lp_points_master,
+            Legion::IndexSpace is_piece);
+
+    void calcSideFracsParallel(
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_sides,
+            Legion::LogicalPartition lp_sides,
+            Legion::LogicalRegion lr_zones,
+            Legion::LogicalPartition lp_zones,
             Legion::IndexSpace is_piece);
 
     static void countPointsTask(

@@ -46,6 +46,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       Runtime::preregister_task_variant<int, Mesh::calcVolsTask>(registrar, "calcvols");
     }
     {
+      TaskVariantRegistrar registrar(TID_CALCSIDEFRACS, "CPU calcsidefracs");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcSideFracsTask>(registrar, "sidefracs");
+    }
+    {
       TaskVariantRegistrar registrar(TID_CALCSURFVECS, "CPU calcsurfvecs");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
@@ -440,8 +446,8 @@ void Mesh::initParallel() {
     IndexPartition ip_piece = runtime->create_equal_partition(ctx, is_piece, is_piece);
 
     // Create point index space and field spaces
-    IndexSpace isp = runtime->create_index_space(ctx, 
-                                      Rect<1>(0,gmesh->calcNumPoints(numpcs)-1));
+    nump = gmesh->calcNumPoints(numpcs);
+    IndexSpace isp = runtime->create_index_space(ctx, Rect<1>(0,nump-1));
     FieldSpace fsp = runtime->create_field_space(ctx);
     {
       FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
@@ -466,8 +472,8 @@ void Mesh::initParallel() {
                                   lr_temp_points, lp_points_equal, is_piece); 
 
     // equal partition zones
-    IndexSpace isz = runtime->create_index_space(ctx, 
-                        Rect<1>(0, gmesh->calcNumZones(numpcs)-1));
+    numz = gmesh->calcNumZones(numpcs);
+    IndexSpace isz = runtime->create_index_space(ctx, Rect<1>(0, numz-1));
     FieldSpace fsz = runtime->create_field_space(ctx);
     {
       FieldAllocator faz = runtime->create_field_allocator(ctx, fsz);
@@ -497,10 +503,13 @@ void Mesh::initParallel() {
     runtime->attach_name(lrz, "lrz");
     IndexPartition zones_equal = runtime->create_equal_partition(ctx, isz, is_piece);
     lpz = runtime->get_logical_partition(ctx, lrz, zones_equal);
+    // fill in the number of sides for each zone
+    gmesh->generateZonesParallel(numpcs, runtime, ctx, lrz, lpz, is_piece);
 
     // Create sides logical region
-    IndexSpace iss = runtime->create_index_space(ctx, 
-                          Rect<1>(0, gmesh->calcNumSides(numpcs)-1));
+    nums = gmesh->calcNumSides(numpcs);
+    numc = nums;
+    IndexSpace iss = runtime->create_index_space(ctx, Rect<1>(0, nums-1));
     FieldSpace fss = runtime->create_field_space(ctx);
     {
       FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
@@ -540,7 +549,7 @@ void Mesh::initParallel() {
     IndexPartition equal_sides = runtime->create_equal_partition(ctx, iss, is_piece);
     lps = runtime->get_logical_partition(lrs, equal_sides);
     // construct temp side maps with equal partition (iterate over zones and find sides)
-    gmesh->generateSideMapsParallel(numpcs, runtime, ctx, lrs, lps, is_piece);
+    gmesh->generateSidesParallel(numpcs, runtime, ctx, lrs, lps, is_piece);
 
     // Now we need to compact our points and generate our point partition tree
     // First compute our owned points
@@ -669,12 +678,36 @@ void Mesh::initParallel() {
     runtime->attach_name(lppshr, "lppshr");
 
     // Calculate centers, volumes, and side fractions
+    calcCtrsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppmstr, is_piece);
+    Future numsbad = 
+      calcVolsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppmstr, is_piece);
+    calcSideFracsParallel(runtime, ctx, lrs, lps, lrz, lpz, is_piece);
+
+    // create index spaces and fields for global vars
+    IndexSpace isglb = runtime->create_index_space(ctx, 1);
+    FieldSpace fsglb = runtime->create_field_space(ctx);
+    {
+      FieldAllocator faglb = runtime->create_field_allocator(ctx, fsglb);
+      faglb.allocate_field(sizeof(int), FID_NUMSBAD);
+      faglb.allocate_field(sizeof(double), FID_DTREC);
+    }
+    lrglb = runtime->create_logical_region(ctx, isglb, fsglb);
+    runtime->attach_name(lrglb, "lrglb");
+    {
+      FillLauncher fill(lrglb, lrglb, numsbad);
+      fill.add_field(FID_NUMSBAD);
+      runtime->fill_fields(ctx, fill);
+    }
 
     // Delete our temporary regions
     runtime->destroy_logical_region(ctx, lr_temp_points);
     runtime->destroy_logical_region(ctx, lr_all_range);
     runtime->destroy_logical_region(ctx, lr_private_range);
     runtime->destroy_logical_region(ctx, lr_shared_range);
+
+    // Ignore chunking for now
+
+    writeStats();
 }
 
 
@@ -846,6 +879,44 @@ void Mesh::getPlaneChunks(
 }
 
 
+void Mesh::calcCtrsParallel(
+            Runtime *runtime,
+            Context ctx,
+            LogicalRegion lr_sides,
+            LogicalPartition lp_sides,
+            LogicalRegion lr_zones,
+            LogicalPartition lp_zones,
+            LogicalRegion lr_points,
+            LogicalPartition lp_points_private,
+            LogicalPartition lp_points_master,
+            IndexSpace is_piece) {
+  IndexTaskLauncher launcher(TID_CALCCTRS, is_piece, TaskArgument(), ArgumentMap());
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_sides));
+  launcher.add_field(0/*index*/, FID_MAPSP1);
+  launcher.add_field(0/*index*/, FID_MAPSP2);
+  launcher.add_field(0/*index*/, FID_MAPSZ);
+  launcher.add_field(0/*index*/, FID_MAPSP1REG);
+  launcher.add_field(0/*index*/, FID_MAPSP1REG);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_zones, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_zones));
+  launcher.add_field(1/*index*/, FID_ZNUMP);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+  launcher.add_field(2/*index*/, FID_PX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_points_master, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+  launcher.add_field(3/*index*/, FID_PX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+  launcher.add_field(4/*index*/, FID_EX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_zones, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_zones));
+  launcher.add_field(5/*index*/, FID_ZX);
+  runtime->execute_index_space(ctx, launcher);
+}
+
+
 void Mesh::calcCtrsTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
@@ -888,6 +959,45 @@ void Mesh::calcCtrsTask(
     }
 }
 
+
+Future Mesh::calcVolsParallel(
+            Runtime *runtime,
+            Context ctx,
+            LogicalRegion lr_sides,
+            LogicalPartition lp_sides,
+            LogicalRegion lr_zones,
+            LogicalPartition lp_zones,
+            LogicalRegion lr_points,
+            LogicalPartition lp_points_private,
+            LogicalPartition lp_points_master,
+            IndexSpace is_piece) {
+  IndexTaskLauncher launcher(TID_CALCVOLS, is_piece, TaskArgument(), ArgumentMap());
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_sides));
+  launcher.add_field(0/*index*/, FID_MAPSP1);
+  launcher.add_field(0/*index*/, FID_MAPSP2);
+  launcher.add_field(0/*index*/, FID_MAPSZ);
+  launcher.add_field(0/*index*/, FID_MAPSP1REG);
+  launcher.add_field(0/*index*/, FID_MAPSP2REG);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+  launcher.add_field(1/*index*/, FID_PX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_points_master, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+  launcher.add_field(2/*index*/, FID_PX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_zones, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_zones));
+  launcher.add_field(3/*index*/, FID_ZX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+  launcher.add_field(4/*index*/, FID_SAREA);
+  launcher.add_field(4/*index*/, FID_SVOL);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_zones, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_zones));
+  launcher.add_field(5/*index*/, FID_ZAREA);
+  launcher.add_field(5/*index*/, FID_ZVOL);
+  return runtime->execute_index_space(ctx, launcher, OPID_SUMINT);
+}
 
 int Mesh::calcVolsTask(
         const Task *task,
@@ -947,9 +1057,53 @@ int Mesh::calcVolsTask(
         // check for negative side volumes
         if (sv <= 0.) 
           count += 1;
+        // we're not checking the result right now so include this assertion
+        assert(sv > 0.);
     }
 
     return count;
+}
+
+
+void Mesh::calcSideFracsParallel(
+            Runtime *runtime,
+            Context ctx,
+            LogicalRegion lr_sides,
+            LogicalPartition lp_sides,
+            LogicalRegion lr_zones,
+            LogicalPartition lp_zones,
+            IndexSpace is_piece) {
+  IndexTaskLauncher launcher(TID_CALCSIDEFRACS, is_piece, TaskArgument(), ArgumentMap());
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_sides));
+  launcher.add_field(0/*index*/, FID_SAREA);
+  launcher.add_field(0/*index*/, FID_MAPSZ);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_zones, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_zones));
+  launcher.add_field(1/*index*/, FID_ZAREA);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*idenity*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+  launcher.add_field(2/*index*/, FID_SMF);
+  runtime->execute_index_space(ctx, launcher);
+}
+
+
+void Mesh::calcSideFracsTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<double> acc_sarea(regions[0], FID_SAREA);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double> acc_zarea(regions[1], FID_ZAREA);
+    const AccessorWD<double> acc_smf(regions[2], FID_SMF);
+
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    for (PointIterator itr(runtime, iss); itr(); itr++)
+    {
+      const Pointer z = acc_mapsz[*itr];
+      acc_smf[*itr] = acc_sarea[*itr] / acc_zarea[z];
+    }
 }
 
 

@@ -46,6 +46,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       Runtime::preregister_task_variant<GenMesh::genPointsHex>(registrar, "Gen Points Hex");
     }
     {
+      TaskVariantRegistrar registrar(TID_GENZONES_PIE, "Gen Zones Pie");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<GenMesh::genZonesPie>(registrar, "Gen Zones Pie");
+    }
+    {
       TaskVariantRegistrar registrar(TID_GENSIDES_RECT, "Gen Sides Rect");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
@@ -564,7 +570,45 @@ void GenMesh::generatePointsParallel(
     }
 }
 
-void GenMesh::generateSideMapsParallel(
+void GenMesh::generateZonesParallel(
+            const int numpcs,
+            Runtime *runtime,
+            Context ctx,
+            LogicalRegion zones_lr,
+            LogicalPartition zones_lp,
+            IndexSpace piece_is)
+{
+    calcNumPieces(numpcs);
+    
+
+    if (meshtype == "rect") {
+      const int num_points = 4;
+      FillLauncher fill(zones_lr, zones_lr, 
+          TaskArgument(&num_points, sizeof(num_points)));
+      fill.add_field(FID_ZNUMP);
+      runtime->fill_fields(ctx, fill);
+    } else if (meshtype == "pie") {
+      RegionRequirement req(zones_lp, 0/*identity projection*/,
+                          WRITE_DISCARD, EXCLUSIVE, zones_lr);
+      req.add_field(FID_ZNUMP);
+      const GenZoneArgs args(this);
+      IndexTaskLauncher launcher(TID_GENZONES_PIE, piece_is,
+          TaskArgument(&args, sizeof(args)), ArgumentMap());
+      launcher.add_region_requirement(req);
+      runtime->execute_index_space(ctx, launcher);
+    } else if (meshtype == "hex") {
+      const int num_points = 6;
+      FillLauncher fill(zones_lr, zones_lr, 
+          TaskArgument(&num_points, sizeof(num_points)));
+      fill.add_field(FID_ZNUMP);
+      runtime->fill_fields(ctx, fill);
+    } else {
+      assert(false);
+    }
+}
+
+
+void GenMesh::generateSidesParallel(
             const int numpcs,
             Runtime *runtime,
             Context ctx,
@@ -706,6 +750,34 @@ void GenMesh::genPointsHex(
 #else
   assert(false); // TODO
 #endif
+}
+
+void GenMesh::genZonesPie(
+            const Task *task,
+            const std::vector<PhysicalRegion> &regions,
+            Context ctx,
+            Runtime *runtime)
+{
+  const GenZoneArgs *args = reinterpret_cast<const GenZoneArgs*>(task->args);
+
+  const int zones_per_piecex = args->nzx / args->numpcx;
+  const int zones_per_piecey = args->nzy / args->numpcy;
+  const int zones_per_piece = zones_per_piecex * zones_per_piecey;
+
+  const IndexSpace &isz = task->regions[0].region.get_index_space();
+  const AccessorWD<int> acc_nump(regions[0], FID_ZNUMP);
+  for (PointIterator itr(runtime, isz); itr(); itr++)
+  {
+    const int piece = itr[0] / zones_per_piece;
+    const int piece_zone = itr[0] % zones_per_piece;
+    // Get the x-y coorindate of our zone based on piece and piece_zone
+    const int piecey = piece / args->numpcx;
+
+    const int zidy = piecey * zones_per_piecey + 
+      (piece_zone / zones_per_piecey);
+    // Three points if it is at the bottom, otherwise four
+    acc_nump[*itr] = (zidy == 0) ? 3 : 4;
+  }
 }
 
 void GenMesh::genSidesRect(
