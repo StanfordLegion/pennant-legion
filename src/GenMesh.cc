@@ -627,8 +627,7 @@ void GenMesh::generateSidesParallel(
     req.add_field(FID_MAPSZ);
     req.add_field(FID_MAPSS3);
     req.add_field(FID_MAPSS4);
-    req.add_field(FID_MAPSP1REG);
-    req.add_field(FID_MAPSP2REG);
+    req.add_field(FID_PIECE);
     if (meshtype == "rect") {
       IndexTaskLauncher launcher(TID_GENSIDES_RECT, piece_is,
           TaskArgument(&args, sizeof(args)), ArgumentMap());
@@ -661,12 +660,12 @@ void GenMesh::genPointsRect(
   const double dx = args->lenx / (double) args->nzx;
   const double dy = args->leny / (double) args->nzy;
 
-  const int zones_per_piecex = args->nzx / args->numpcx;
-  const int zones_per_piecey = args->nzy / args->numpcy;
+  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
 
   const IndexSpace &isp = task->regions[0].region.get_index_space();
   const AccessorWD<double2> acc_px(regions[0], FID_PX);
-  const AccessorWD<int> acc_piece(regions[0], FID_PIECE);
+  const AccessorWD<coord_t> acc_piece(regions[0], FID_PIECE);
   for (PointIterator itr(runtime, isp); itr(); itr++)
   {
     // Figure out the physical location based on the logical ID
@@ -697,12 +696,12 @@ void GenMesh::genPointsPie(
   const double dth = args->lenx / (double) args->nzx;
   const double dr  = args->leny / (double) args->nzy;
 
-  const int zones_per_piecex = args->nzx / args->numpcx;
-  const int zones_per_piecey = args->nzy / args->numpcy;
+  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
 
   const IndexSpace &isp = task->regions[0].region.get_index_space();
   const AccessorWD<double2> acc_px(regions[0], FID_PX);
-  const AccessorWD<int> acc_piece(regions[0], FID_PIECE);
+  const AccessorWD<coord_t> acc_piece(regions[0], FID_PIECE);
   for (PointIterator itr(runtime, isp); itr(); itr++)
   {
     // Figure out the physical location based on the logical ID
@@ -760,21 +759,29 @@ void GenMesh::genZonesPie(
 {
   const GenZoneArgs *args = reinterpret_cast<const GenZoneArgs*>(task->args);
 
-  const int zones_per_piecex = args->nzx / args->numpcx;
-  const int zones_per_piecey = args->nzy / args->numpcy;
+  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
   const int zones_per_piece = zones_per_piecex * zones_per_piecey;
 
   const IndexSpace &isz = task->regions[0].region.get_index_space();
   const AccessorWD<int> acc_nump(regions[0], FID_ZNUMP);
   for (PointIterator itr(runtime, isz); itr(); itr++)
   {
-    const int piece = itr[0] / zones_per_piece;
-    const int piece_zone = itr[0] % zones_per_piece;
-    // Get the x-y coorindate of our zone based on piece and piece_zone
-    const int piecey = piece / args->numpcx;
+    const int piecey = itr[0] / (zones_per_piecey * args->nzx);
+    assert(piecey < args->numpcy);
+    const int remainder = itr[0] % (zones_per_piecey * args->nzx);
+    const int piecex = remainder / zones_per_piece;
+    assert(piecex < args->numpcx);
+    const int piece_zone = remainder % zones_per_piece;
 
-    const int zidy = piecey * zones_per_piecey + 
-      (piece_zone / zones_per_piecey);
+    const int local_zones_per_piecex =
+      piecex < (args->numpcx-1) ? zones_per_piecex : // not the last
+        ((args->nzx % args->numpcx) == 0) ? // last so see if evenly divisible 
+          zones_per_piecex : args->nzx % args->numpcx;
+
+    const int localy = piece_zone / local_zones_per_piecex;
+    const int zidy = piecey * zones_per_piecey + localy;
+
     // Three points if it is at the bottom, otherwise four
     acc_nump[*itr] = (zidy == 0) ? 3 : 4;
   }
@@ -788,8 +795,8 @@ void GenMesh::genSidesRect(
 {
   const GenSideArgs *args = reinterpret_cast<const GenSideArgs*>(task->args);
 
-  const int zones_per_piecex = args->nzx / args->numpcx;
-  const int zones_per_piecey = args->nzy / args->numpcy;
+  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
   const int zones_per_piece = zones_per_piecex * zones_per_piecey;
   
   const IndexSpace &iss = task->regions[0].region.get_index_space();
@@ -798,8 +805,7 @@ void GenMesh::genSidesRect(
   const AccessorWD<Pointer> acc_sz(regions[0], FID_MAPSZ);
   const AccessorWD<Pointer> acc_ss3(regions[0], FID_MAPSS3);
   const AccessorWD<Pointer> acc_ss4(regions[0], FID_MAPSS4);
-  const AccessorWD<int> acc_sp1reg(regions[0], FID_MAPSP1REG);
-  const AccessorWD<int> acc_sp2reg(regions[0], FID_MAPSP2REG);
+  const AccessorWD<Pointer> acc_piece(regions[0], FID_PIECE);
   for (PointIterator itr(runtime, iss); itr(); itr++)
   {
     // First we can compute our side pointers since they are easy
@@ -814,19 +820,30 @@ void GenMesh::genSidesRect(
       acc_ss4[*itr] = *itr - Pointer(1);
     // Now figure out which zone we're a part of
     // zones for a piece are all contiguous
-    const int piece = itr[0] / (4 * zones_per_piece);
-    const int piece_zone = itr[0] % (4 * zones_per_piece);
-    acc_sz[*itr] = piece * zones_per_piece + piece_zone;
-    // Get the x-y coorindate of our zone based on piece and piece_zone
-    const int piecex = piece % args->numpcx;
-    const int piecey = piece / args->numpcx;
-    
-    const int zidx = piecex * zones_per_piecex + 
-      (piece_zone % zones_per_piecex);
-    const int zidy = piecey * zones_per_piecey + 
-      (piece_zone / zones_per_piecey);
+    const int zone = itr[0] / 4; // 4 sides per zone
+    acc_sz[*itr] = zone;
+    // Get the simulation x-y coorindate of our zone
+    // This is tricky since there can be truncated zones on the edges
+    const int piecey = zone / (zones_per_piecey * args->nzx);
+    assert(piecey < args->numpcy);
+    const int remainder = zone % (zones_per_piecey * args->nzx);
+    const int piecex = remainder / zones_per_piece;
+    assert(piecex < args->numpcx);
+    acc_piece[*itr] = piecey * args->numpcx + piecex;
+    const int piece_zone = remainder % zones_per_piece; 
+    // Now figure out the local zone count in the x dimension
+    const int local_zones_per_piecex = 
+      piecex < (args->numpcx-1) ? zones_per_piecex : // not the last
+        ((args->nzx % args->numpcx) == 0) ? // last so see if evenly divisible
+          zones_per_piecex : args->nzx % args->numpcx;
+
+    const int localx = piece_zone % local_zones_per_piecex; 
+    const int localy = piece_zone / local_zones_per_piecex;
+
+    const int zidx = piecex * zones_per_piecex + localx;
+    const int zidy = piecey * zones_per_piecey + localy; 
     // Last we can figure out the indexes for our points
-    int pidx1, pidx2, pidy1, pidy2, p1shared, p2shared;
+    int pidx1, pidx2, pidy1, pidy2;
     switch (side)
     {
       case 0:
@@ -835,10 +852,6 @@ void GenMesh::genSidesRect(
           pidx2 = zidx + 1;
           pidy1 = zidy;
           pidy2 = zidy;
-          p1shared = (pidx1 == (piecex * zones_per_piecex)) ||
-                      (pidy1 == (piecey * zones_per_piecey));
-          p2shared = (pidx2 == ((piecex + 1) * zones_per_piecex)) ||
-                      (pidy2 == (piecey * zones_per_piecey));
           break;
         }
       case 1:
@@ -847,10 +860,6 @@ void GenMesh::genSidesRect(
           pidx2 = zidx + 1;
           pidy1 = zidy;
           pidy2 = zidy + 1;
-          p1shared = (pidx1 == ((piecex + 1) * zones_per_piecex)) ||
-                      (pidy1 == (piecey * zones_per_piecey));
-          p2shared = (pidx2 == ((piecex + 1) * zones_per_piecex)) ||
-                      (pidy2 == ((piecey + 1) * zones_per_piecey));
           break;
         }
       case 2:
@@ -859,10 +868,6 @@ void GenMesh::genSidesRect(
           pidx2 = zidx;
           pidy1 = zidy + 1;
           pidy2 = zidy + 1;
-          p1shared = (pidx1 == ((piecex + 1) * zones_per_piecex)) ||
-                      (pidy1 == ((piecey + 1) * zones_per_piecey));
-          p2shared = (pidx2 == (piecex * zones_per_piecex)) ||
-                      (pidy2 == ((piecey + 1) * zones_per_piecey));
           break;
         }
       case 3:
@@ -871,10 +876,6 @@ void GenMesh::genSidesRect(
           pidx2 = zidx;
           pidy1 = zidy + 1;
           pidy2 = zidy;
-          p1shared = (pidx1 == (piecex * zones_per_piecex)) ||
-                      (pidy1 == ((piecey + 1) * zones_per_piecey));
-          p2shared = (pidx2 == (piecex * zones_per_piecex)) ||
-                      (pidy2 == (piecey + zones_per_piecey));
           break;
         }
       default:
@@ -882,8 +883,6 @@ void GenMesh::genSidesRect(
     }
     acc_sp1[*itr] = Pointer(pidy1 * (args->nzx + 1) + pidx1);
     acc_sp2[*itr] = Pointer(pidy2 * (args->nzx + 1) + pidx2);
-    acc_sp1reg[*itr] = p1shared;
-    acc_sp2reg[*itr] = p2shared;
   }
 }
 
@@ -895,34 +894,41 @@ void GenMesh::genSidesPie(
 {
   const GenSideArgs *args = reinterpret_cast<const GenSideArgs*>(task->args);
 
-  const int zones_per_piecex = args->nzx / args->numpcx;
-  const int zones_per_piecey = args->nzy / args->numpcy;
+  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
   const int zones_per_piece = zones_per_piecex * zones_per_piecey;
   const int npx = args->nzx + 1;
   
   const IndexSpace &iss = task->regions[0].region.get_index_space();
-  const AccessorWD<Pointer> acc_sp1(regions[0], FID_MAPSP1);
-  const AccessorWD<Pointer> acc_sp2(regions[0], FID_MAPSP2);
+  const AccessorWD<Pointer> acc_sp1(regions[0], FID_MAPSP1TEMP);
+  const AccessorWD<Pointer> acc_sp2(regions[0], FID_MAPSP2TEMP);
   const AccessorWD<Pointer> acc_sz(regions[0], FID_MAPSZ);
   const AccessorWD<Pointer> acc_ss3(regions[0], FID_MAPSS3);
   const AccessorWD<Pointer> acc_ss4(regions[0], FID_MAPSS4);
-  const AccessorWD<int> acc_sp1reg(regions[0], FID_MAPSP1REG);
-  const AccessorWD<int> acc_sp2reg(regions[0], FID_MAPSP2REG);
+  const AccessorWD<Pointer> acc_piece(regions[0], FID_PIECE);
   for (PointIterator itr(runtime, iss); itr(); itr++)
   {
     // First figure out our piece and zone from our side
-    int piecex=-1, piecey=-1, piece_zonex=-1, piece_zoney=-1, side=-1;
+    int piecex=-1, piecey=-1, piece_zone=-1, piece_zonex=-1, piece_zoney=-1, side=-1;
     // We'll find this a dumb way for now
     bool found = false;
     int current_side = 0;
     for (int j1 = 0; (j1 < args->numpcy) && !found; j1++)
     {
-      // See how many sides we have in this piece
-      const int sides_in_this_piece = (j1 == 0) ? 
-        3 * zones_per_piecex + 4 * zones_per_piecey * (zones_per_piecex - 1) : 
-        4 * zones_per_piecex * zones_per_piecey;
+      const int local_zones_per_piecey = (j1 < (args->numpcy-1)) ? zones_per_piecey :
+        ((args->nzy % args->numpcy) == 0) ? // last so see if divisible
+          zones_per_piecey : args->nzy % args->numpcy;
+      
       for (int i1 = 0; (i1 < args->numpcx) && !found; i1++)
       {
+        const int local_zones_per_piecex = (i1 < (args->numpcx-1)) ? zones_per_piecex :
+          ((args->nzx % args->numpcx) == 0) ? // last so see if divisible
+            zones_per_piecex : args->nzx % args->numpcx;
+        // See how many sides we have in this piece
+        const int sides_in_this_piece = (j1 == 0) ? 
+          3 * local_zones_per_piecex + 4 * (local_zones_per_piecey - 1) * local_zones_per_piecex : 
+          4 * local_zones_per_piecex * local_zones_per_piecey;
+        
         if ((current_side + sides_in_this_piece) < itr[0])
           current_side += sides_in_this_piece;
         else
@@ -931,9 +937,9 @@ void GenMesh::genSidesPie(
           piecex = i1;
           piecey = j1;
           // Now we go looking for the zone in the piece
-          for (int j2 = 0; (j2 < zones_per_piecey) && !found; j2++)
+          for (int j2 = 0; (j2 < local_zones_per_piecey) && !found; j2++)
           {
-            for (int i2 = 0; (i2 < zones_per_piecex) && !found; i2++)
+            for (int i2 = 0; (i2 < local_zones_per_piecex) && !found; i2++)
             {
               if ((j1 == 0) && (j2 == 0))
               {
@@ -944,6 +950,7 @@ void GenMesh::genSidesPie(
                   // Found the zone
                   piece_zonex = i2;
                   piece_zoney = j2;
+                  piece_zone = j2 * local_zones_per_piecex + i2;
                   side = (itr[0] - current_side) % 3;
                   found = true;
                 }
@@ -957,6 +964,7 @@ void GenMesh::genSidesPie(
                   // Found the zone
                   piece_zonex = i2;
                   piece_zoney = j2;
+                  piece_zone = j2 * local_zones_per_piecex + i2;
                   side = (itr[0] - current_side) % 4;
                   found = true;
                 }
@@ -969,9 +977,9 @@ void GenMesh::genSidesPie(
     }
     assert(found);
     // Now we can assign our zone pointer
-    const int piece = piecey * args->numpcx + piecex;
-    const int piece_zone = piece_zoney * zones_per_piecex + piece_zonex;
-    acc_sz[*itr] = piece * zones_per_piece + piece_zone;
+    acc_sz[*itr] = piecey * zones_per_piecey * args->nzx + 
+                    piecex * zones_per_piece + piece_zone;
+    acc_piece[*itr] = piecey * args->numpcx + piecex;
     // Then figure out our zone coordinates
     const int zidx = piecex * zones_per_piecex + piece_zonex;
     const int zidy = piecey * zones_per_piecey + piece_zoney; 
@@ -994,28 +1002,18 @@ void GenMesh::genSidesPie(
           {
             acc_sp1[*itr] = 0;
             acc_sp2[*itr] = p0 + 1;
-            acc_sp1reg[*itr] = 1; // always on a boundary
-            acc_sp2reg[*itr] = ((zidx + 1) == (piecex + 1) * zones_per_piecex) ||
-                                ((zidy + 1) == (piecey + 1) * zones_per_piecey);
             break;
           }
         case 1:
           {
             acc_sp1[*itr] = p0 + 1;
             acc_sp2[*itr] = p0;
-            acc_sp1reg[*itr] = ((zidx + 1) == (piecex + 1) * zones_per_piecex) ||
-                                ((zidy + 1) == (piecey + 1) * zones_per_piecey);
-            acc_sp2reg[*itr] = (zidx == (piecex * zones_per_piecex)) ||
-                                ((zidy + 1) == (piecey + 1) * zones_per_piecey);
             break;
           }
         case 2:
           {
             acc_sp1[*itr] = p0;
             acc_sp2[*itr] = 0;
-            acc_sp1reg[*itr] = (zidx == (piecex * zones_per_piecex)) ||
-                                ((zidy + 1) == (piecey + 1) * zones_per_piecey);
-            acc_sp2reg[*itr] = 1; // always on a boundary
             break;
           }
         default:
@@ -1040,40 +1038,24 @@ void GenMesh::genSidesPie(
           {
             acc_sp1[*itr] = p0;
             acc_sp2[*itr] = p0 + 1;
-            acc_sp1reg[*itr] = (zidx == (piecex * zones_per_piecex)) ||
-                                (zidy == (piecey * zones_per_piecey));
-            acc_sp2reg[*itr] = ((zidx + 1) == ((piecex + 1) * zones_per_piecex)) ||
-                                (zidy == (piecey * zones_per_piecey));
             break;
           }
         case 1:
           {
             acc_sp1[*itr] = p0 + 1;
             acc_sp2[*itr] = p0 + npx + 1;
-            acc_sp1reg[*itr] = ((zidx + 1) == ((piecex + 1) * zones_per_piecex)) ||
-                                (zidy == (piecey * zones_per_piecey));
-            acc_sp2reg[*itr] = ((zidx + 1) == ((piecex + 1) * zones_per_piecex)) ||
-                                ((zidy + 1) == ((piecey + 1) * zones_per_piecey));
             break;
           }
         case 2:
           {
             acc_sp1[*itr] = p0 + npx + 1;
             acc_sp2[*itr] = p0 + npx;
-            acc_sp1reg[*itr] = ((zidx + 1) == ((piecex + 1) * zones_per_piecex)) ||
-                                ((zidy + 1) == ((piecey + 1) * zones_per_piecey));
-            acc_sp2reg[*itr] = (zidx == (piecex * zones_per_piecex)) ||
-                                ((zidy + 1) == (piecey + 1) * zones_per_piecey);
             break;
           }
         case 3:
           {
             acc_sp1[*itr] = p0 + npx;
             acc_sp2[*itr] = p0;
-            acc_sp1reg[*itr] = (zidx == (piecex * zones_per_piecex)) ||
-                                ((zidy + 1) == (piecey + 1) * zones_per_piecey);
-            acc_sp2reg[*itr] = (zidx == (piecex * zones_per_piecex)) ||
-                                (zidy == (piecey * zones_per_piecey));
             break;
           }
         default:

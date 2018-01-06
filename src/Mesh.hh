@@ -112,7 +112,9 @@ enum MeshTaskID {
     TID_CALCCHARLEN,
     TID_COUNTPOINTS,
     TID_CALCRANGES,
-    TID_COMPACTPOINTS
+    TID_COMPACTPOINTS,
+    TID_CALCOWNERS,
+    TID_TEMPGATHER
 };
 
 enum MeshOpID {
@@ -181,6 +183,16 @@ public:
 
 
 class Mesh {
+public:
+    struct CalcOwnersArgs {
+    public:
+        CalcOwnersArgs(Legion::IndexPartition priv, 
+                       Legion::IndexPartition shared)
+          : ip_private(priv), ip_shared(shared) { }
+    public:
+        Legion::IndexPartition ip_private;
+        Legion::IndexPartition ip_shared;
+    };
 public:
 
     // children
@@ -410,6 +422,15 @@ public:
             Legion::LogicalPartition lp_points,
             Legion::IndexSpace is_piece);
 
+    void calcOwnershipParallel(
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_sides,
+            Legion::LogicalPartition lp_sides,
+            Legion::IndexPartition ip_private,
+            Legion::IndexPartition ip_shared,
+            Legion::IndexSpace is_piece);
+
     void calcCtrsParallel(
             Legion::Runtime *runtime,
             Legion::Context ctx,
@@ -419,7 +440,7 @@ public:
             Legion::LogicalPartition lp_zones,
             Legion::LogicalRegion lr_points,
             Legion::LogicalPartition lp_points_private,
-            Legion::LogicalPartition lp_points_master,
+            Legion::LogicalPartition lp_points_shared,
             Legion::IndexSpace is_piece);
 
     Legion::Future calcVolsParallel(
@@ -431,7 +452,7 @@ public:
             Legion::LogicalPartition lp_zones,
             Legion::LogicalRegion lr_points,
             Legion::LogicalPartition lp_points_private,
-            Legion::LogicalPartition lp_points_master,
+            Legion::LogicalPartition lp_points_shared,
             Legion::IndexSpace is_piece);
 
     void calcSideFracsParallel(
@@ -456,6 +477,18 @@ public:
             Legion::Runtime *runtime);
 
     static void compactPointsTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void calcOwnersTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void tempGatherTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,

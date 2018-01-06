@@ -87,6 +87,18 @@ static void __attribute__ ((constructor)) registerTasks() {
       registrar.set_leaf();
       Runtime::preregister_task_variant<Mesh::compactPointsTask>(registrar, "compact points");
     }
+    {
+      TaskVariantRegistrar registrar(TID_CALCOWNERS, "CPU calc owners");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcOwnersTask>(registrar, "calc owners");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_TEMPGATHER, "CPU temp gather");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::tempGatherTask>(registrar, "temp gather");
+    }
 
     Runtime::register_reduction_op<SumOp<int> >(
             OPID_SUMINT);
@@ -459,7 +471,7 @@ void Mesh::initParallel() {
       fap.allocate_field(sizeof(double), FID_PMASWT);
       fap.allocate_field(sizeof(double2), FID_PF);
       fap.allocate_field(sizeof(double2), FID_PAP);
-      fap.allocate_field(sizeof(int), FID_PIECE);
+      fap.allocate_field(sizeof(coord_t), FID_PIECE);
       fap.allocate_field(sizeof(Pointer), FID_MAPPTEMP2PDENSE);
     }
 
@@ -502,9 +514,9 @@ void Mesh::initParallel() {
     lrz = runtime->create_logical_region(ctx, isz, fsz);
     runtime->attach_name(lrz, "lrz");
     IndexPartition zones_equal = runtime->create_equal_partition(ctx, isz, is_piece);
-    lpz = runtime->get_logical_partition(ctx, lrz, zones_equal);
     // fill in the number of sides for each zone
-    gmesh->generateZonesParallel(numpcs, runtime, ctx, lrz, lpz, is_piece);
+    gmesh->generateZonesParallel(numpcs, runtime, ctx, lrz, 
+        runtime->get_logical_partition(ctx, lrz, zones_equal), is_piece);
 
     // Create sides logical region
     nums = gmesh->calcNumSides(numpcs);
@@ -543,25 +555,32 @@ void Mesh::initParallel() {
       fas.allocate_field(sizeof(double2), FID_CQE2);
       fas.allocate_field(sizeof(double), FID_CRMU);
       fas.allocate_field(sizeof(double), FID_CW);
+      fas.allocate_field(sizeof(Pointer), FID_PIECE);
     }
     lrs = runtime->create_logical_region(ctx, iss, fss);
     runtime->attach_name(lrs, "lrs");
     IndexPartition equal_sides = runtime->create_equal_partition(ctx, iss, is_piece);
-    lps = runtime->get_logical_partition(lrs, equal_sides);
     // construct temp side maps with equal partition (iterate over zones and find sides)
-    gmesh->generateSidesParallel(numpcs, runtime, ctx, lrs, lps, is_piece);
+    gmesh->generateSidesParallel(numpcs, runtime, ctx, lrs, 
+        runtime->get_logical_partition(lrs, equal_sides), is_piece);
+
+    // Get the proper side and zone partitions for our pieces
+    IndexPartition side_pieces = 
+      runtime->create_partition_by_field(ctx, lrs, lrs, FID_PIECE, is_piece);
+    lps = runtime->get_logical_partition(lrs, side_pieces);
+    IndexPartition zone_pieces = 
+      runtime->create_partition_by_image(ctx, isz, lps, lrs, FID_MAPSZ, is_piece);
+    lpz = runtime->get_logical_partition(lrz, zone_pieces);
 
     // Now we need to compact our points and generate our point partition tree
     // First compute our owned points
-    IndexPartition ip_owned_points = runtime->create_partition_by_field(ctx, lrp, lrp,
-                                                              FID_PIECE, is_piece);
+    IndexPartition ip_owned_points = runtime->create_partition_by_field(ctx, 
+                                    lr_temp_points, lr_temp_points, FID_PIECE, is_piece);
     runtime->attach_name(ip_owned_points, "owned points");
     
     // Now find the set of points that we can reach from our points through all our sides
-    IndexPartition ip_owned_sides = runtime->create_partition_by_preimage(ctx, 
-                              ip_owned_points, lrs, lrs, FID_MAPSP1TEMP, is_piece);
     IndexPartition ip_reachable_points = runtime->create_partition_by_image(ctx, isp,
-      runtime->get_logical_partition(lrs, ip_owned_sides), lrs, FID_MAPSP2TEMP, is_piece);
+                                                  lps, lrs, FID_MAPSP1TEMP, is_piece);
     runtime->attach_name(ip_reachable_points, "reachable points");
 
     // Now we can make the temp ghost partition
@@ -572,7 +591,7 @@ void Mesh::initParallel() {
     // Now create a two-way partition of private versus shared
     IndexSpace is_private = runtime->create_index_space(ctx, Rect<1>(0, 1));
     IndexPartition ip_private_shared = 
-      runtime->create_pending_partition(ctx, iss, is_private);
+      runtime->create_pending_partition(ctx, isp, is_private);
 
     // Fill in the two sub-regions of the ipp index space
     IndexSpace is_all_shared = runtime->create_index_space_union(ctx, 
@@ -590,7 +609,7 @@ void Mesh::initParallel() {
     partition_handles[is_all_private] = IndexPartition::NO_PART;
     runtime->create_cross_product_partitions(ctx, ip_private_shared, 
                                 ip_owned_points, partition_handles);
-    IndexPartition ip_temp_shared = partition_handles[is_all_shared];
+    IndexPartition ip_temp_master = partition_handles[is_all_shared];
     IndexPartition ip_temp_private = partition_handles[is_all_private];
 
     // The problem with these partitions is that the sub-regions in them
@@ -613,7 +632,7 @@ void Mesh::initParallel() {
       runtime->get_logical_partition(lr_shared_range, ip_piece);
     computeRangesParallel(numpcs, runtime, ctx, lr_all_range,
         lr_private_range, lp_private_range, lr_shared_range, lp_shared_range,
-        ip_temp_private, ip_temp_shared, is_piece);
+        ip_temp_private, ip_temp_master, is_piece);
 
     // Now we can compute the actual dense versions of the partition
     IndexPartition private_ip = runtime->create_equal_partition(ctx, is_private, is_private);
@@ -637,13 +656,14 @@ void Mesh::initParallel() {
 
     // Compact the points
     compactPointsParallel(numpcs, runtime, ctx, lr_temp_points, 
-        runtime->get_logical_partition_by_tree(ip_prv, fsp, lr_temp_points.get_tree_id()),
-        lrp, lppprv, is_piece);
+        runtime->get_logical_partition_by_tree(ip_temp_private, fsp, 
+          lr_temp_points.get_tree_id()), lrp, lppprv, is_piece);
     compactPointsParallel(numpcs, runtime, ctx, lr_temp_points,
-        runtime->get_logical_partition_by_tree(ip_mstr, fsp, lr_temp_points.get_tree_id()),
-        lrp, lppmstr, is_piece);
+        runtime->get_logical_partition_by_tree(ip_temp_master, fsp, 
+          lr_temp_points.get_tree_id()), lrp, lppmstr, is_piece);
 
     // Update the side pointers to points with a gather copy
+#if 0
     {
       IndexCopyLauncher update_launcher(is_piece);
       update_launcher.add_copy_requirements(
@@ -652,7 +672,7 @@ void Mesh::initParallel() {
           RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
       update_launcher.add_src_field(0/*index*/, FID_MAPPTEMP2PDENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP1);
-      update_launcher.set_gather(lrs.get_tree_id(), FID_MAPSP1TEMP);
+      update_launcher.set_gather_field(lrs.get_tree_id(), FID_MAPSP1TEMP);
       runtime->issue_copy_operation(ctx, update_launcher);
     }
     {
@@ -663,24 +683,54 @@ void Mesh::initParallel() {
           RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
       update_launcher.add_src_field(0/*index*/, FID_MAPPTEMP2PDENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP2);
-      update_launcher.set_gather(lrs.get_tree_id(), FID_MAPSP2TEMP);
+      update_launcher.set_gather_field(lrs.get_tree_id(), FID_MAPSP2TEMP);
       runtime->issue_copy_operation(ctx, update_launcher);
     }
+#else
+    {
+      TaskLauncher update_launcher(TID_TEMPGATHER, TaskArgument());
+      update_launcher.add_region_requirement(
+          RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points));
+      update_launcher.add_field(0/*index*/, FID_MAPPTEMP2PDENSE);
+      update_launcher.add_region_requirement(
+          RegionRequirement(lrs, WRITE_DISCARD, EXCLUSIVE, lrs));
+      update_launcher.add_field(1/*index*/, FID_MAPSP1);
+      update_launcher.add_region_requirement(
+          RegionRequirement(lrs, READ_ONLY, EXCLUSIVE, lrs));
+      update_launcher.add_field(2/*index*/, FID_MAPSP1TEMP);
+      runtime->execute_task(ctx, update_launcher);
+    }
+    {
+      TaskLauncher update_launcher(TID_TEMPGATHER, TaskArgument());
+      update_launcher.add_region_requirement(
+          RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points));
+      update_launcher.add_field(0/*index*/, FID_MAPPTEMP2PDENSE);
+      update_launcher.add_region_requirement(
+          RegionRequirement(lrs, WRITE_DISCARD, EXCLUSIVE, lrs));
+      update_launcher.add_field(1/*index*/, FID_MAPSP2);
+      update_launcher.add_region_requirement(
+          RegionRequirement(lrs, READ_ONLY, EXCLUSIVE, lrs));
+      update_launcher.add_field(2/*index*/, FID_MAPSP2TEMP);
+      runtime->execute_task(ctx, update_launcher);
+    }
+#endif
 
-    // Then we can get the actual ghost point partitions by projecting
-    IndexPartition ip_shared_sides = runtime->create_partition_by_preimage(ctx, ip_mstr,
-                                                    lrs, lrs, FID_MAPSP1, is_piece);
-    IndexPartition ip_reachable_ghost_points = runtime->create_partition_by_image(ctx,is_shr,
-            runtime->get_logical_partition(lrs, ip_shared_sides), lrs, FID_MAPSP2, is_piece);
-    IndexPartition ip_shr = runtime->create_partition_by_difference(ctx, is_shr,
-                                      ip_reachable_ghost_points, ip_mstr, is_piece);
+    // Lastly we need to get the shared partition by performing an image
+    // through one of the point mappings to get the set of shared points
+    // Note that this gets scoped by the is_shr index space to avoid any
+    // private points
+    IndexPartition ip_shr = runtime->create_partition_by_image(ctx, is_shr, 
+                                            lps, lrs, FID_MAPSP1, is_piece);
     lppshr = runtime->get_logical_partition_by_tree(ip_shr, fsp, lrp.get_tree_id());
     runtime->attach_name(lppshr, "lppshr");
 
+    // Figure out which points are private and shared for our sides
+    calcOwnershipParallel(runtime, ctx, lrs, lps, ip_prv, ip_shr, is_piece);
+
     // Calculate centers, volumes, and side fractions
-    calcCtrsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppmstr, is_piece);
+    calcCtrsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppshr, is_piece);
     Future numsbad = 
-      calcVolsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppmstr, is_piece);
+      calcVolsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppshr, is_piece);
     calcSideFracsParallel(runtime, ctx, lrs, lps, lrz, lpz, is_piece);
 
     // create index spaces and fields for global vars
@@ -879,6 +929,71 @@ void Mesh::getPlaneChunks(
 }
 
 
+void Mesh::calcOwnershipParallel(
+            Runtime *runtime,
+            Context ctx,
+            LogicalRegion lr_sides,
+            LogicalPartition lp_sides,
+            IndexPartition ip_private,
+            IndexPartition ip_shared,
+            IndexSpace is_piece) {
+  const CalcOwnersArgs args(ip_private, ip_shared);
+  IndexTaskLauncher launcher(TID_CALCOWNERS, is_piece, 
+                            TaskArgument(&args, sizeof(args)), ArgumentMap());
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_sides));
+  launcher.add_field(0/*index*/, FID_MAPSP1);
+  launcher.add_field(0/*index*/, FID_MAPSP2);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+  launcher.add_field(1/*index*/, FID_MAPSP1REG);
+  launcher.add_field(1/*index*/, FID_MAPSP2REG);
+  runtime->execute_index_space(ctx, launcher);
+}
+
+
+void Mesh::calcOwnersTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorWD<int> acc_mapsp1reg(regions[1], FID_MAPSP1REG);
+    const AccessorWD<int> acc_mapsp2reg(regions[1], FID_MAPSP2REG);
+
+    const CalcOwnersArgs *args = reinterpret_cast<const CalcOwnersArgs*>(task->args);
+    const Domain private_domain = 
+      runtime->get_index_space_domain(
+          runtime->get_index_subspace(args->ip_private, task->index_point));
+    const Domain shared_domain = 
+      runtime->get_index_space_domain(
+          runtime->get_index_subspace(args->ip_shared, task->index_point));
+
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    for (PointIterator itr(runtime, iss); itr(); itr++)
+    {
+      const Pointer p1 = acc_mapsp1[*itr];
+      if (!private_domain.contains(p1))
+      {
+        assert(shared_domain.contains(p1));
+        acc_mapsp1reg[*itr] = 1;
+      }
+      else
+        acc_mapsp1reg[*itr] = 0;
+
+      const Pointer p2 = acc_mapsp2[*itr];
+      if (!private_domain.contains(p2))
+      {
+        assert(shared_domain.contains(p2));
+        acc_mapsp2reg[*itr] = 1;
+      }
+      else
+        acc_mapsp2reg[*itr] = 0;
+    }
+}
+
+
 void Mesh::calcCtrsParallel(
             Runtime *runtime,
             Context ctx,
@@ -888,7 +1003,7 @@ void Mesh::calcCtrsParallel(
             LogicalPartition lp_zones,
             LogicalRegion lr_points,
             LogicalPartition lp_points_private,
-            LogicalPartition lp_points_master,
+            LogicalPartition lp_points_shared,
             IndexSpace is_piece) {
   IndexTaskLauncher launcher(TID_CALCCTRS, is_piece, TaskArgument(), ArgumentMap());
   launcher.add_region_requirement(
@@ -897,7 +1012,7 @@ void Mesh::calcCtrsParallel(
   launcher.add_field(0/*index*/, FID_MAPSP2);
   launcher.add_field(0/*index*/, FID_MAPSZ);
   launcher.add_field(0/*index*/, FID_MAPSP1REG);
-  launcher.add_field(0/*index*/, FID_MAPSP1REG);
+  launcher.add_field(0/*index*/, FID_MAPSP2REG);
   launcher.add_region_requirement(
       RegionRequirement(lp_zones, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_zones));
   launcher.add_field(1/*index*/, FID_ZNUMP);
@@ -905,7 +1020,7 @@ void Mesh::calcCtrsParallel(
       RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
   launcher.add_field(2/*index*/, FID_PX);
   launcher.add_region_requirement(
-      RegionRequirement(lp_points_master, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+      RegionRequirement(lp_points_shared, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
   launcher.add_field(3/*index*/, FID_PX);
   launcher.add_region_requirement(
       RegionRequirement(lp_sides, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
@@ -969,7 +1084,7 @@ Future Mesh::calcVolsParallel(
             LogicalPartition lp_zones,
             LogicalRegion lr_points,
             LogicalPartition lp_points_private,
-            LogicalPartition lp_points_master,
+            LogicalPartition lp_points_shared,
             IndexSpace is_piece) {
   IndexTaskLauncher launcher(TID_CALCVOLS, is_piece, TaskArgument(), ArgumentMap());
   launcher.add_region_requirement(
@@ -983,7 +1098,7 @@ Future Mesh::calcVolsParallel(
       RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
   launcher.add_field(1/*index*/, FID_PX);
   launcher.add_region_requirement(
-      RegionRequirement(lp_points_master, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+      RegionRequirement(lp_points_shared, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
   launcher.add_field(2/*index*/, FID_PX);
   launcher.add_region_requirement(
       RegionRequirement(lp_zones, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_zones));
@@ -1430,6 +1545,25 @@ void Mesh::compactPointsTask(
     {
       acc_dst[*itr_dst] = acc_src[*itr_src];
       acc_ptr[*itr_src] = *itr_dst;
+    }
+}
+
+
+void Mesh::tempGatherTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_src(regions[0], task->regions[0].instance_fields[0]);
+    const AccessorWD<Pointer> acc_dst(regions[1], task->regions[1].instance_fields[0]);
+    const AccessorRO<Pointer> acc_idx(regions[2], task->regions[2].instance_fields[0]);
+
+    const IndexSpace iss = task->regions[1].region.get_index_space(); 
+    for (PointIterator itr(runtime, iss); itr(); itr++)
+    {
+      // For the output figure out where we want to do the gather from
+      const Pointer p = acc_idx[*itr];
+      acc_dst[*itr] = acc_src[p];
     }
 }
 
