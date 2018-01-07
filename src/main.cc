@@ -101,7 +101,7 @@ void mainTask(const Task *task,
 
     Driver drv(&inp, probname, numpcs, !sequential, ctx, runtime);
 
-    drv.run();
+    drv.run(ctx, runtime);
 
 }
 
@@ -114,7 +114,7 @@ int main(int argc, char **argv)
     TaskVariantRegistrar registrar(TID_MAIN, "main");
     registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
     registrar.set_idempotent();
-    //registrar.set_replicable();
+    registrar.set_replicable();
     Runtime::preregister_task_variant<mainTask>(registrar, "main");
 
     Runtime::add_registration_callback(registerMappers);

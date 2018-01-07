@@ -27,6 +27,15 @@ class Hydro;
 
 class Driver {
 public:
+    struct TimingMeasurement {
+    public:
+      int cycle;
+      Future f_time;
+      double time;
+      double dt;
+      std::string msgdt;
+    };
+public:
 
     // children of this object
     Mesh *mesh;
@@ -55,7 +64,9 @@ public:
             Runtime* runtime);
     ~Driver();
 
-    void run();
+    void run(
+            Context ctx,
+            Runtime* runtime);
     void calcGlobalDt();
 
 };  // class Driver

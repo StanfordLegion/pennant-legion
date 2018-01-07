@@ -66,17 +66,20 @@ Driver::~Driver() {
 
 }
 
-void Driver::run() {
+void Driver::run(
+        Context ctx,
+        Runtime* runtime) {
 
     time = 0.0;
     cycle = 0;
 
-    double tbegin, tlast;
-    // get starting timestamp
-    struct timeval sbegin;
-    gettimeofday(&sbegin, NULL);
-    tbegin = sbegin.tv_sec + sbegin.tv_usec * 1.e-6;
-    tlast = tbegin;
+    // Better timing for Legion
+    const TimingLauncher timing_launcher(MEASURE_MICRO_SECONDS);
+    std::deque<TimingMeasurement> timing_measurements;
+    // First make sure all our setup is done before beginning timing
+    runtime->issue_execution_fence(ctx);
+    // Get our start time
+    Future f_start = runtime->issue_timing_measurement(ctx, timing_launcher);
 
     // main event loop
     while (cycle < cstop && time < tstop) {
@@ -92,28 +95,42 @@ void Driver::run() {
         time += dt;
 
         if (cycle == 1 || cycle % dtreport == 0) {
-            struct timeval scurr;
-            gettimeofday(&scurr, NULL);
-            double tcurr = scurr.tv_sec + scurr.tv_usec * 1.e-6;
-            double tdiff = tcurr - tlast;
 
-            cout << scientific << setprecision(5);
-            cout << "End cycle " << setw(6) << cycle
-                 << ", time = " << setw(11) << time
-                 << ", dt = " << setw(11) << dt
-                 << ", wall = " << setw(11) << tdiff << endl;
-            cout << "dt limiter: " << msgdt << endl;
+            timing_measurements.push_back(TimingMeasurement());
+            TimingMeasurement &measurement = timing_measurements.back();
+            measurement.cycle = cycle;
+            measurement.f_time = 
+              runtime->issue_timing_measurement(ctx, timing_launcher);
+            measurement.time = time;
+            measurement.dt = dt;
+            measurement.msgdt = msgdt;
 
-            tlast = tcurr;
         } // if cycle...
 
     } // while cycle...
 
     // get stopping timestamp
-    struct timeval send;
-    gettimeofday(&send, NULL);
-    double tend = send.tv_sec + send.tv_usec * 1.e-6;
-    double runtime = tend - tbegin;
+    runtime->issue_execution_fence(ctx);
+    Future f_stop = runtime->issue_timing_measurement(ctx, timing_launcher);
+
+    const double tbegin = f_start.get_result<long long>();
+    double tlast = tbegin;
+    for (std::deque<TimingMeasurement>::const_iterator it = 
+          timing_measurements.begin(); it != timing_measurements.end(); it++)
+    {
+      const double tnext = it->f_time.get_result<long long>();
+      const double tdiff = tnext - tlast; 
+      cout << scientific << setprecision(5);
+      cout << "End cycle " << setw(6) << it->cycle
+           << ", time = " << setw(11) << it->time
+           << ", dt = " << setw(11) << it->dt
+           << ", wall = " << setw(11) << tdiff << endl;
+      cout << "dt limiter: " << it->msgdt << endl;
+      tlast = tnext;
+    }
+
+    const double tend = f_stop.get_result<long long>();
+    const double walltime = tend - tbegin;
 
     // write end message
     cout << endl;
@@ -126,7 +143,7 @@ void Driver::run() {
 
     cout << endl;
     cout << "************************************" << endl;
-    cout << "hydro cycle run time= " << setw(14) << runtime << endl;
+    cout << "hydro cycle run time= " << setw(14) << walltime << endl;
     cout << "************************************" << endl;
 
 
