@@ -160,10 +160,10 @@ const double MinOp<double>::identity = 1.e99;
 Mesh::Mesh(
         const InputFile* inp,
         const int numpcsa,
-        const bool parallel,
+        const bool par,
         Context ctxa,
         Runtime* runtimea)
-        : gmesh(NULL),  wxy(NULL), egold(NULL),
+        : gmesh(NULL),  wxy(NULL), egold(NULL), parallel(par),
           numpcs(numpcsa), ctx(ctxa), runtime(runtimea) {
 
     chunksize = inp->getInt("chunksize", 0);
@@ -453,9 +453,13 @@ void Mesh::init() {
 
 
 void Mesh::initParallel() {
+    const Rect<1> piece_rect(Point<1>(0), Point<1>(numpcs-1));
+    dompc  = Domain(piece_rect);
     // Create a space for the number of pieces that we will have
-    IndexSpace is_piece = runtime->create_index_space(ctx, Rect<1>(0, numpcs-1));
+    IndexSpace is_piece = runtime->create_index_space(ctx, piece_rect);
+    ispc = is_piece;
     IndexPartition ip_piece = runtime->create_equal_partition(ctx, is_piece, is_piece);
+    ippc = ip_piece;
 
     // Create point index space and field spaces
     nump = gmesh->calcNumPoints(numpcs);
@@ -647,7 +651,7 @@ void Mesh::initParallel() {
         lp_shared_range, lr_shared_range, FID_RANGE, is_piece);
 
     // Now make the actual point logical region, get the partitions, and copy over data
-    LogicalRegion lrp = runtime->create_logical_region(ctx, isp, fsp);
+    lrp = runtime->create_logical_region(ctx, isp, fsp);
     runtime->attach_name(lrp, "lrp");
     lppprv = runtime->get_logical_partition_by_tree(ip_prv, fsp, lrp.get_tree_id());
     runtime->attach_name(lppprv, "lppprv");
@@ -1172,8 +1176,6 @@ int Mesh::calcVolsTask(
         // check for negative side volumes
         if (sv <= 0.) 
           count += 1;
-        // we're not checking the result right now so include this assertion
-        assert(sv > 0.);
     }
 
     return count;

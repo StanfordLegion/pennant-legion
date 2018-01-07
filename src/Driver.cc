@@ -130,10 +130,12 @@ void Driver::run() {
     cout << "************************************" << endl;
 
 
-    // do final mesh output
-    hydro->getFinalState();
-    mesh->write(probname, cycle, time,
-            hydro->zr, hydro->ze, hydro->zp);
+    // do final mesh output if we aren't in a parallel mode
+    if (!mesh->parallel) {
+      hydro->getFinalState();
+      mesh->write(probname, cycle, time,
+              hydro->zr, hydro->ze, hydro->zp);
+    }
 
 }
 

@@ -28,11 +28,23 @@ enum HydroBCFieldID {
 };
 
 enum HydroBCTaskID {
-    TID_APPLYFIXEDBC = 'B' * 100
+    TID_APPLYFIXEDBC = 'B' * 100,
+    TID_COUNTBCPOINTS,
+    TID_COUNTBCRANGES,
+    TID_CREATEBCMAPS
 };
 
 
 class HydroBC {
+public:
+    struct CountBCArgs {
+    public:
+        CountBCArgs(double b, double e, bool x)
+          : bound(b), eps(e), xplane(x) { }
+    public:
+        double bound, eps;
+        bool xplane;
+    };
 public:
 
     // associated mesh object
@@ -52,9 +64,33 @@ public:
             const double2 v,
             const std::vector<int>& mbp);
 
+    HydroBC(
+            Mesh* msh,
+            const double2 v,
+            const double bound, 
+            const bool xplane);
+
     ~HydroBC();
 
     static void applyFixedBCTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void countBCPointsTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static Legion::coord_t countBCRangesTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void createBCMapsTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,

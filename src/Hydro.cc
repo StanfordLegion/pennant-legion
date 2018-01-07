@@ -96,6 +96,24 @@ static void __attribute__ ((constructor)) registerTasks() {
       registrar.set_leaf();
       Runtime::preregister_task_variant<double, Hydro::calcDtTask>(registrar, "calcdt");
     }
+    {
+      TaskVariantRegistrar registrar(TID_INITSUBRGN, "CPU init subrange");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Hydro::initSubrgnTask>(registrar, "init subrange");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_INITHYDRO, "CPU init hydro");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Hydro::initHydroTask>(registrar, "init hydro");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_INITRADIALVEL, "CPU init radial vel");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Hydro::initRadialVelTask>(registrar, "init radial vel");
+    }
 }
 }; // namespace
 
@@ -122,12 +140,21 @@ Hydro::Hydro(
 
     const double2 vfixx = double2(1., 0.);
     const double2 vfixy = double2(0., 1.);
-    for (int i = 0; i < bcx.size(); ++i)
-        bcs.push_back(new HydroBC(mesh, vfixx, mesh->getXPlane(bcx[i])));
-    for (int i = 0; i < bcy.size(); ++i)
-        bcs.push_back(new HydroBC(mesh, vfixy, mesh->getYPlane(bcy[i])));
+    if (mesh->parallel) {
+      for (int i = 0; i < bcx.size(); ++i)
+        bcs.push_back(new HydroBC(mesh, vfixx, bcx[i], true/*xplane*/));
+      for (int i = 0; i < bcy.size(); ++i)
+        bcs.push_back(new HydroBC(mesh, vfixy, bcy[i], false/*xplane*/));
 
-    init();
+      initParallel();
+    } else {
+      for (int i = 0; i < bcx.size(); ++i)
+          bcs.push_back(new HydroBC(mesh, vfixx, mesh->getXPlane(bcx[i])));
+      for (int i = 0; i < bcy.size(); ++i)
+          bcs.push_back(new HydroBC(mesh, vfixy, mesh->getYPlane(bcy[i])));
+
+      init();
+    }
 }
 
 
@@ -147,7 +174,6 @@ void Hydro::init() {
     const int numzch = mesh->numzch;
     const int nump = mesh->nump;
     const int numz = mesh->numz;
-    const int nums = mesh->nums;
 
     const double2* zx = mesh->zx;
     const double* zvol = mesh->zvol;
@@ -210,6 +236,107 @@ void Hydro::init() {
     mesh->setField(lrz, FID_ZETOT, zetot, numz);
     mesh->setField(lrz, FID_ZWRATE, zwrate, numz);
 
+}
+
+
+void Hydro::initParallel() {
+  const LogicalRegion& lrp = mesh->lrp;
+  const LogicalPartition lppprv = mesh->lppprv;
+  const LogicalPartition lppmstr = mesh->lppmstr;
+  const LogicalRegion& lrz = mesh->lrz;
+  const LogicalPartition lpz = mesh->lpz;
+  const IndexSpace is_piece = mesh->ispc;
+  const vector<double>& subrgn = mesh->subregion;
+  // fill zr
+  {
+    FillLauncher launcher(lrz, lrz, TaskArgument(&rinit, sizeof(rinit)));
+    launcher.add_field(FID_ZR);
+    runtime->fill_fields(ctx, launcher); 
+  }
+    
+  // fill ze
+  {
+    FillLauncher launcher(lrz, lrz, TaskArgument(&einit, sizeof(einit)));
+    launcher.add_field(FID_ZE);
+    runtime->fill_fields(ctx, launcher);
+  }
+
+  // fill zwrate
+  {
+    const double zero = 0.;
+    FillLauncher launcher(lrz, lrz, TaskArgument(&zero, sizeof(zero)));
+    launcher.add_field(FID_ZWRATE);
+    runtime->fill_fields(ctx, launcher);
+  }
+
+  // see if we have to initialize subrange
+  if (!subrgn.empty())
+  {
+    const double eps = 1.e-12;
+    InitSubrgnArgs args(subrgn, eps, rinitsub, einitsub); 
+    IndexTaskLauncher launcher(TID_INITSUBRGN, is_piece,
+        TaskArgument(&args, sizeof(args)), ArgumentMap());
+    launcher.add_region_requirement(
+        RegionRequirement(lpz, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrz));
+    launcher.add_field(0/*index*/, FID_ZX);
+    launcher.add_region_requirement(
+        RegionRequirement(lpz, 0/*identity*/, READ_WRITE, EXCLUSIVE, lrz));
+    launcher.add_field(1/*index*/, FID_ZR);
+    launcher.add_field(1/*index*/, FID_ZE);
+    runtime->execute_index_space(ctx, launcher);
+  }
+
+  // compute zm and ze
+  {
+    IndexTaskLauncher launcher(TID_INITHYDRO, is_piece, 
+                          TaskArgument(), ArgumentMap());
+    launcher.add_region_requirement(
+        RegionRequirement(lpz, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrz));
+    launcher.add_field(0/*index*/, FID_ZR);
+    launcher.add_field(0/*index*/, FID_ZVOL);
+    launcher.add_field(0/*index*/, FID_ZE);
+    launcher.add_region_requirement(
+        RegionRequirement(lpz, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrz));
+    launcher.add_field(1/*index*/, FID_ZM);
+    launcher.add_field(1/*index*/, FID_ZETOT);
+    runtime->execute_index_space(ctx, launcher);
+  }
+
+  // Initialize the radial velocity
+  if (uinitradial != 0.)
+  {
+    const double eps = 1.e-12;
+    const InitRadialVelArgs args(uinitradial, eps);
+    {
+      IndexTaskLauncher launcher(TID_INITRADIALVEL, is_piece,
+            TaskArgument(&args, sizeof(args)), ArgumentMap());
+      launcher.add_region_requirement(
+          RegionRequirement(lppprv, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+      launcher.add_field(0/*index*/, FID_PX);
+      launcher.add_region_requirement(
+          RegionRequirement(lppprv, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrp));
+      launcher.add_field(1/*index*/, FID_PU);
+      runtime->execute_index_space(ctx, launcher);
+    }
+    {
+      IndexTaskLauncher launcher(TID_INITRADIALVEL, is_piece,
+            TaskArgument(&args, sizeof(args)), ArgumentMap());
+      launcher.add_region_requirement(
+          RegionRequirement(lppmstr, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+      launcher.add_field(0/*index*/, FID_PX);
+      launcher.add_region_requirement(
+          RegionRequirement(lppmstr, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrp));
+      launcher.add_field(1/*index*/, FID_PU);
+      runtime->execute_index_space(ctx, launcher);
+    }
+  }
+  else
+  {
+    const double2 zero2(0., 0.);
+    FillLauncher launcher(lrp, lrp, TaskArgument(&zero2,sizeof(zero2)));
+    launcher.add_field(FID_PU);
+    runtime->fill_fields(ctx, launcher);
+  }
 }
 
 
@@ -1164,6 +1291,78 @@ double Hydro::calcDtTask(
     }
 
     return dtrec;
+}
+
+
+void Hydro::initSubrgnTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+  const InitSubrgnArgs *args = reinterpret_cast<InitSubrgnArgs*>(task->args);
+
+  const AccessorRO<double2> acc_zx(regions[0], FID_ZX);
+
+  const AccessorWD<double> acc_zr(regions[1], FID_ZR);
+  const AccessorWD<double> acc_ze(regions[1], FID_ZE);
+
+  IndexSpace isz = task->regions[0].region.get_index_space();
+  for (PointIterator itr(runtime, isz); itr(); itr++)
+  {
+    const double2 zx = acc_zx[*itr]; 
+    if (zx.x > (args->subrgn[0] - args->eps) &&
+        zx.x < (args->subrgn[1] + args->eps) &&
+        zx.y > (args->subrgn[2] - args->eps) &&
+        zx.y < (args->subrgn[3] + args->eps)) {
+        acc_zr[*itr] = args->rinitsub;
+        acc_ze[*itr] = args->einitsub;
+    }
+  }
+}
+
+
+void Hydro::initHydroTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+  const AccessorRO<double> acc_zr(regions[0], FID_ZR);
+  const AccessorRO<double> acc_zvol(regions[0], FID_ZVOL);
+  const AccessorRO<double> acc_ze(regions[0], FID_ZE);
+
+  const AccessorWD<double> acc_zm(regions[1], FID_ZM);
+  const AccessorWD<double> acc_zetot(regions[1], FID_ZETOT);
+
+  IndexSpace isz = task->regions[0].region.get_index_space();
+  for (PointIterator itr(runtime, isz); itr(); itr++)
+  {
+    const double zm = acc_zr[*itr] * acc_zvol[*itr];
+    acc_zm[*itr] = zm;
+    acc_zetot[*itr] = acc_ze[*itr] * zm;
+  }
+}
+
+
+void Hydro::initRadialVelTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+  const InitRadialVelArgs *args = reinterpret_cast<const InitRadialVelArgs*>(task->args);
+
+  const AccessorRO<double2> acc_px(regions[0], FID_PX);
+  const AccessorWD<double2>  acc_pu(regions[1], FID_PU);
+
+  IndexSpace isp = task->regions[0].region.get_index_space();
+  for (PointIterator itr(runtime, isp); itr(); itr++)
+  {
+    const double2 px = acc_px[*itr];
+    const double pmag = length(px);
+    if (pmag > args->eps)
+      acc_pu[*itr] = args->vel * px / pmag;
+    else
+      acc_pu[*itr] = double2(0., 0.);
+  }
 }
 
 

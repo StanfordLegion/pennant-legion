@@ -42,11 +42,36 @@ enum HydroTaskID {
     TID_CALCWORK,
     TID_CALCWORKRATE,
     TID_CALCENERGY,
-    TID_CALCDT
+    TID_CALCDT,
+    TID_INITSUBRGN,
+    TID_INITHYDRO,
+    TID_INITRADIALVEL
 };
 
 
 class Hydro {
+public:
+    struct InitSubrgnArgs {
+    public:
+      InitSubrgnArgs(const std::vector<double> &range, 
+                     double e, double rinit, double einit)
+        : eps(e), rinitsub(rinit), einitsub(einit)
+      {
+        assert(range.size() == 4);
+        for (int i = 0; i < 4; i++)
+          subrgn[i] = range[i];
+      }
+    public:
+      double subrgn[4];
+      double eps, rinitsub, einitsub;
+    };
+    struct InitRadialVelArgs {
+    public:
+      InitRadialVelArgs(double v, double e)
+        : vel(v), eps(e) { }
+    public:
+      double vel, eps;
+    };
 public:
 
     // associated mesh object
@@ -93,6 +118,8 @@ public:
     ~Hydro();
 
     void init();
+
+    void initParallel();
 
     void initRadialVel(
             const double vel,
@@ -158,6 +185,24 @@ public:
             Legion::Runtime *runtime);
 
     static double calcDtTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void initSubrgnTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void initHydroTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void initRadialVelTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,

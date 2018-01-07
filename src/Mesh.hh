@@ -201,6 +201,7 @@ public:
     ExportGold* egold;
 
     // parameters
+    bool parallel;                 // perform parallel mesh generation
     int chunksize;                 // max size for processing chunks
     std::vector<double> subregion; // bounding box for a subregion
                                    // if nonempty, should have 4 entries:
@@ -253,6 +254,8 @@ public:
     Legion::LogicalRegion lrglb;
     Legion::LogicalPartition lppall, lpz, lps;
     Legion::LogicalPartition lppprv, lppmstr, lppshr;
+    Legion::IndexSpace ispc;
+    Legion::IndexPartition ippc;
     Legion::Domain dompc;
                                    // domain of legion pieces
     Legion::FutureMap fmapcv;
