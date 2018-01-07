@@ -500,7 +500,7 @@ void Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcv.add_field(5, FID_ZAREAP);
     launchcv.add_field(5, FID_ZVOLP);
-    mesh->fmapcv = runtime->execute_index_space(ctx, launchcv);
+    mesh->f_cv = runtime->execute_index_space(ctx, launchcv, OPID_SUMINT);
 
     IndexTaskLauncher launchcsv(TID_CALCSURFVECS, dompc, ta, am);
     launchcsv.add_region_requirement(
@@ -847,7 +847,7 @@ void Hydro::doCycle(
     launchcv.add_field(4, FID_SVOL);
     launchcv.add_field(5, FID_ZAREA);
     launchcv.add_field(5, FID_ZVOL);
-    mesh->fmapcv = runtime->execute_index_space(ctx, launchcv);
+    mesh->f_cv = runtime->execute_index_space(ctx, launchcv, OPID_SUMINT);
 
     // 7. compute work
     double cwargs[] = { dt };
@@ -926,7 +926,7 @@ void Hydro::doCycle(
     launchcdt.add_field(0, FID_ZSS);
     launchcdt.add_field(0, FID_ZVOL);
     launchcdt.add_field(0, FID_ZVOL0);
-    fmapcdt = runtime->execute_index_space(ctx, launchcdt);
+    f_cdt = runtime->execute_index_space(ctx, launchcdt, OPID_MINDBL);
 
     runtime->end_trace(ctx, 123);
 
@@ -1370,7 +1370,7 @@ void Hydro::getDtHydro(
         double& dtnew,
         string& msgdtnew) {
 
-    dtrec = mesh->reduceFutureMap<MinOp<double> >(fmapcdt);
+    dtrec = f_cdt.get_result<double>();
     if (dtrec < dtnew) {
         dtnew = dtrec;
         msgdtnew = "Hydro timestep";

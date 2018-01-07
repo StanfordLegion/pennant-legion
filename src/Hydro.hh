@@ -96,7 +96,7 @@ public:
     std::vector<double> bcx;    // x values of x-plane fixed boundaries
     std::vector<double> bcy;    // y values of y-plane fixed boundaries
 
-    FutureMap fmapcdt;
+    Future f_cdt;
     double dtrec;               // maximum timestep for hydro
     std::string msgdtrec;       // message:  reason for dtrec
 

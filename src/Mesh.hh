@@ -258,7 +258,7 @@ public:
     Legion::IndexPartition ippc;
     Legion::Domain dompc;
                                    // domain of legion pieces
-    Legion::FutureMap fmapcv;
+    Legion::Future f_cv;
                                    // future map for calcVolsTask
 
     Mesh(
@@ -282,10 +282,6 @@ public:
             const Legion::FieldID fid,
             const T* var,
             const int n);
-
-    template<typename Op>
-    typename Op::LHS reduceFutureMap(
-            Legion::FutureMap& fmap);
 
     void init();
     
@@ -547,19 +543,6 @@ void Mesh::setField(
           itr(); itr++, i++)
       acc[*itr] = var[i];
     runtime->unmap_region(ctx, pr);
-}
-
-
-template<typename Op>
-typename Op::LHS Mesh::reduceFutureMap(
-        Legion::FutureMap& fmap) {
-    using namespace Legion;
-    typedef typename Op::LHS LHS;
-    LHS val = Op::identity;
-    for (Domain::DomainPointIterator itrpc(dompc); itrpc; itrpc++) {
-        Op::template apply<true>(val, fmap.get_result<LHS>(itrpc.p));
-    }
-    return val;
 }
 
 

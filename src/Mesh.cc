@@ -1377,7 +1377,7 @@ void Mesh::calcVols(
 void Mesh::checkBadSides() {
 
     // if there were negative side volumes, error exit
-    numsbad = reduceFutureMap<SumOp<int> >(fmapcv);
+    numsbad = f_cv.get_result<int>();
     if (numsbad > 0) {
         cerr << "Error: " << numsbad << " negative side volumes" << endl;
         cerr << "Exiting..." << endl;
