@@ -8,7 +8,6 @@ Version .99 -- March 2016
 LA-CC-12-021
 
 
-
 PENNANT is an unstructured mesh physics mini-app designed for advanced
 architecture research.  It contains mesh data structures and a few
 physics algorithms adapted from the LANL rad-hydro code FLAG, and gives
@@ -16,4 +15,10 @@ a sample of the typical memory access patterns of FLAG.
 
 Further documentation can be found in the 'doc' directory of the
 PENNANT distribution.
+
+This version of PENNANT was updated in January of 2018 to use 
+the most recent Legion interface and to prepare it for experimentation
+with dynamic control replication. This process included adding a 
+dynamic mesh generation routine for rectangular and pie meshes
+using Legion dependent partitioning primitives.
 

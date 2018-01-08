@@ -667,6 +667,9 @@ void Mesh::initParallel() {
           lr_temp_points.get_tree_id()), lrp, lppmstr, is_piece);
 
     // Update the side pointers to points with a gather copy
+    // Gather copies aren't quite ready yet so we'll do this with
+    // a very simple gather copy task for now, but we will switch
+    // this over to proper gather copies once the runtime supports them
 #if 0
     {
       IndexCopyLauncher update_launcher(is_piece);
