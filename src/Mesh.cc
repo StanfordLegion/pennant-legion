@@ -853,16 +853,15 @@ void Mesh::writeStats() {
     int gnumzch = numzch;
     int gnumsch = numsch;
 
-    cout << "--- Mesh Information ---" << endl;
-    cout << "Points:  " << gnump << endl;
-    cout << "Zones:  "  << gnumz << endl;
-    cout << "Sides:  "  << gnums << endl;
-    cout << "Side chunks:  " << gnumsch << endl;
-    cout << "Point chunks:  " << gnumpch << endl;
-    cout << "Zone chunks:  " << gnumzch << endl;
-    cout << "Chunk size:  " << chunksize << endl;
-    cout << "------------------------" << endl;
-
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "--- Mesh Information ---\n");
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Points:  %d\n", gnump);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Zones:   %d\n", gnumz);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Sides:   %d\n", gnums);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Side chunks:  %d\n", gnumsch);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Point chunks: %d\n", gnumpch);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Zone chunks:  %d\n", gnumzch);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Chunk size:   %d\n", chunksize);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "------------------------\n");
 }
 
 

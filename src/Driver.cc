@@ -35,17 +35,16 @@ Driver::Driver(
         Context ctx,
         Runtime* runtime)
         : probname(pname) {
-    cout << "********************" << endl;
-    cout << "Running PENNANT v0.6" << endl;
-    cout << "********************" << endl;
-    cout << endl;
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "********************\n");
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Running PENNANT v0.6\n");
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "********************\n\n");
 
-    cout << "Running Legion on " << numpcs << " piece(s)" << endl;
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Running Legion on %d piece(s)", numpcs);
 
     cstop = inp->getInt("cstop", 999999);
     tstop = inp->getDouble("tstop", 1.e99);
     if (cstop == 999999 && tstop == 1.e99) {
-        cerr << "Must specify either cstop or tstop" << endl;
+        LEGION_PRINT_ONCE(runtime, ctx, stderr, "Must specify either cstop or tstop\n");
         exit(1);
     }
     dtmax = inp->getDouble("dtmax", 1.e99);
@@ -74,7 +73,7 @@ void Driver::run(
     cycle = 0;
 
     // Better timing for Legion
-    const TimingLauncher timing_launcher(MEASURE_MICRO_SECONDS);
+    TimingLauncher timing_launcher(MEASURE_MICRO_SECONDS);
     std::deque<TimingMeasurement> timing_measurements;
     // First make sure all our setup is done before beginning timing
     runtime->issue_execution_fence(ctx);
@@ -96,6 +95,8 @@ void Driver::run(
 
         if (cycle == 1 || cycle % dtreport == 0) {
 
+            timing_launcher.preconditions.clear();
+            timing_launcher.add_precondition(hydro->f_cdt);
             timing_measurements.push_back(TimingMeasurement());
             TimingMeasurement &measurement = timing_measurements.back();
             measurement.cycle = cycle;
@@ -120,12 +121,9 @@ void Driver::run(
     {
       const double tnext = it->f_time.get_result<long long>();
       const double tdiff = tnext - tlast; 
-      cout << scientific << setprecision(5);
-      cout << "End cycle " << setw(6) << it->cycle
-           << ", time = " << setw(11) << it->time
-           << ", dt = " << setw(11) << it->dt
-           << ", wall = " << setw(11) << tdiff << endl;
-      cout << "dt limiter: " << it->msgdt << endl;
+      LEGION_PRINT_ONCE(runtime, ctx, stdout, "End cycle %6d, time = %11.5g"
+          ", dt = %11.5g, wall = %11.5g us\n", it->cycle, it->time, it->dt, tdiff);
+      LEGION_PRINT_ONCE(runtime, ctx, stdout, "dt limiter: %s\n", it->msgdt.c_str());
       tlast = tnext;
     }
 
@@ -133,18 +131,13 @@ void Driver::run(
     const double walltime = tend - tbegin;
 
     // write end message
-    cout << endl;
-    cout << "Run complete" << endl;
-    cout << scientific << setprecision(6);
-    cout << "cycle = " << setw(6) << cycle
-         << ",         cstop = " << setw(6) << cstop << endl;
-    cout << "time  = " << setw(14) << time
-         << ", tstop = " << setw(14) << tstop << endl;
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "\nRun complete\n");
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "cycle = %6d,        cstop = %6d\n", cycle, cstop);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "time = %14.6g, tstop = %14.6g\n\n", time, tstop);
 
-    cout << endl;
-    cout << "************************************" << endl;
-    cout << "hydro cycle run time= " << setw(14) << walltime << endl;
-    cout << "************************************" << endl;
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "hydro cycle run time= %14.8g us\n", walltime);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
 
 
     // do final mesh output if we aren't in a parallel mode
