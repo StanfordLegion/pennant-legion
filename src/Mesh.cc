@@ -28,47 +28,85 @@
 
 using namespace std;
 using namespace Memory;
-using namespace LegionRuntime::HighLevel;
-using namespace LegionRuntime::Accessor;
+using namespace Legion;
 
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
-    HighLevelRuntime::register_legion_task<Mesh::copyFieldTask<double> >(
-            TID_COPYFIELDDBL, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "copyfielddbl");
-    HighLevelRuntime::register_legion_task<Mesh::copyFieldTask<double2> >(
-            TID_COPYFIELDDBL2, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "copyfielddbl2");
-    HighLevelRuntime::register_legion_task<Mesh::fillFieldTask<double> >(
-            TID_FILLFIELDDBL, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "fillfielddbl");
-    HighLevelRuntime::register_legion_task<Mesh::fillFieldTask<double2> >(
-            TID_FILLFIELDDBL2, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "fillfielddbl2");
-    HighLevelRuntime::register_legion_task<Mesh::calcCtrsTask>(
-            TID_CALCCTRS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcctrs");
-    HighLevelRuntime::register_legion_task<int, Mesh::calcVolsTask>(
-            TID_CALCVOLS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcvols");
-    HighLevelRuntime::register_legion_task<Mesh::calcSurfVecsTask>(
-            TID_CALCSURFVECS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcsurfvecs");
-    HighLevelRuntime::register_legion_task<Mesh::calcEdgeLenTask>(
-            TID_CALCEDGELEN, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calcedgelen");
-    HighLevelRuntime::register_legion_task<Mesh::calcCharLenTask>(
-            TID_CALCCHARLEN, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "calccharlen");
+    {
+      TaskVariantRegistrar registrar(TID_CALCCTRS, "CPU calcctrs");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcCtrsTask>(registrar, "calcctrs");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCVOLS, "CPU calcvols");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<int, Mesh::calcVolsTask>(registrar, "calcvols");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCSIDEFRACS, "CPU calcsidefracs");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcSideFracsTask>(registrar, "sidefracs");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCSURFVECS, "CPU calcsurfvecs");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcSurfVecsTask>(registrar, "calcsurfvecs");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCEDGELEN, "CPU calcedgelen");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcEdgeLenTask>(registrar, "calcedgelen");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCCHARLEN, "CPU calccharlen");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcCharLenTask>(registrar, "calccharlen");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_COUNTPOINTS, "CPU count points");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::countPointsTask>(registrar, "count points");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCRANGES, "CPU calc ranges");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcRangesTask>(registrar, "calc ranges");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_COMPACTPOINTS, "CPU compact points");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::compactPointsTask>(registrar, "compact points");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCOWNERS, "CPU calc owners");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcOwnersTask>(registrar, "calc owners");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_TEMPGATHER, "CPU temp gather");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::tempGatherTask>(registrar, "temp gather");
+    }
 
-    HighLevelRuntime::register_reduction_op<SumOp<int> >(
+    Runtime::register_reduction_op<SumOp<int> >(
             OPID_SUMINT);
-    HighLevelRuntime::register_reduction_op<SumOp<double> >(
+    Runtime::register_reduction_op<SumOp<double> >(
             OPID_SUMDBL);
-    HighLevelRuntime::register_reduction_op<SumOp<double2> >(
+    Runtime::register_reduction_op<SumOp<double2> >(
             OPID_SUMDBL2);
-    HighLevelRuntime::register_reduction_op<MinOp<double> >(
+    Runtime::register_reduction_op<MinOp<double> >(
             OPID_MINDBL);
 }
 }; // namespace
@@ -122,9 +160,10 @@ const double MinOp<double>::identity = 1.e99;
 Mesh::Mesh(
         const InputFile* inp,
         const int numpcsa,
+        const bool par,
         Context ctxa,
-        HighLevelRuntime* runtimea)
-        : gmesh(NULL),  wxy(NULL), egold(NULL),
+        Runtime* runtimea)
+        : gmesh(NULL),  wxy(NULL), egold(NULL), parallel(par),
           numpcs(numpcsa), ctx(ctxa), runtime(runtimea) {
 
     chunksize = inp->getInt("chunksize", 0);
@@ -138,7 +177,10 @@ Mesh::Mesh(
     wxy = new WriteXY(this);
     egold = new ExportGold(this);
 
-    init();
+    if (parallel)
+        initParallel();
+    else
+        init();
 }
 
 
@@ -218,8 +260,6 @@ void Mesh::init() {
 
     // create index spaces and fields for points, zones, sides
     IndexSpace isp = runtime->create_index_space(ctx, nump);
-    IndexAllocator iap = runtime->create_index_allocator(ctx, isp);
-    iap.alloc(nump);
     FieldSpace fsp = runtime->create_field_space(ctx);
     FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
     fap.allocate_field(sizeof(double2), FID_PX);
@@ -234,8 +274,6 @@ void Mesh::init() {
     runtime->attach_name(lrp, "lrp");
 
     IndexSpace isz = runtime->create_index_space(ctx, numz);
-    IndexAllocator iaz = runtime->create_index_allocator(ctx, isz);
-    iaz.alloc(numz);
     FieldSpace fsz = runtime->create_field_space(ctx);
     FieldAllocator faz = runtime->create_field_allocator(ctx, fsz);
     faz.allocate_field(sizeof(int), FID_ZNUMP);
@@ -263,15 +301,13 @@ void Mesh::init() {
     runtime->attach_name(lrz, "lrz");
 
     IndexSpace iss = runtime->create_index_space(ctx, nums);
-    IndexAllocator ias = runtime->create_index_allocator(ctx, iss);
-    ias.alloc(nums);
     FieldSpace fss = runtime->create_field_space(ctx);
     FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
-    fas.allocate_field(sizeof(ptr_t), FID_MAPSP1);
-    fas.allocate_field(sizeof(ptr_t), FID_MAPSP2);
-    fas.allocate_field(sizeof(ptr_t), FID_MAPSZ);
-    fas.allocate_field(sizeof(ptr_t), FID_MAPSS3);
-    fas.allocate_field(sizeof(ptr_t), FID_MAPSS4);
+    fas.allocate_field(sizeof(Pointer), FID_MAPSP1);
+    fas.allocate_field(sizeof(Pointer), FID_MAPSP2);
+    fas.allocate_field(sizeof(Pointer), FID_MAPSZ);
+    fas.allocate_field(sizeof(Pointer), FID_MAPSS3);
+    fas.allocate_field(sizeof(Pointer), FID_MAPSS4);
     fas.allocate_field(sizeof(int), FID_MAPSP1REG);
     fas.allocate_field(sizeof(int), FID_MAPSP2REG);
     fas.allocate_field(sizeof(double2), FID_EX);
@@ -300,8 +336,6 @@ void Mesh::init() {
 
     // create index spaces and fields for global vars
     IndexSpace isglb = runtime->create_index_space(ctx, 1);
-    IndexAllocator iaglb = runtime->create_index_allocator(ctx, isglb);
-    iaglb.alloc(1);
     FieldSpace fsglb = runtime->create_field_space(ctx);
     FieldAllocator faglb = runtime->create_field_allocator(ctx, fsglb);
     faglb.allocate_field(sizeof(int), FID_NUMSBAD);
@@ -311,15 +345,9 @@ void Mesh::init() {
 
     // create domain over pieces
     Rect<1> task_rect(Point<1>(0), Point<1>(numpcs-1));
-    dompc  = Domain::from_rect<1>(task_rect);
-    IndexSpace ispc = runtime->create_index_space(ctx, dompc);
-    
+    dompc  = Domain(task_rect);
 #if 0 
-    
-    {
-      IndexAllocator allocator = runtime->create_index_allocator(ctx, ispc);
-      allocator.alloc(numpcs);
-    }
+    IndexSpace ispc = runtime->create_index_space(ctx, dompc);
     dompc = runtime->get_index_space_domain(ctx, ispc);
 #endif 
     // create zone and side partitions
@@ -394,11 +422,11 @@ void Mesh::init() {
     lppshr = runtime->get_logical_partition_by_tree(
             ctx, ippshr, fsp, lrp.get_tree_id());
 
-    vector<ptr_t> lgmapsp1(&mapsp1[0], &mapsp1[nums]);
-    vector<ptr_t> lgmapsp2(&mapsp2[0], &mapsp2[nums]);
-    vector<ptr_t> lgmapsz (&mapsz [0], &mapsz [nums]);
-    vector<ptr_t> lgmapss3(&mapss3[0], &mapss3[nums]);
-    vector<ptr_t> lgmapss4(&mapss4[0], &mapss4[nums]);
+    vector<Pointer> lgmapsp1(&mapsp1[0], &mapsp1[nums]);
+    vector<Pointer> lgmapsp2(&mapsp2[0], &mapsp2[nums]);
+    vector<Pointer> lgmapsz (&mapsz [0], &mapsz [nums]);
+    vector<Pointer> lgmapss3(&mapss3[0], &mapss3[nums]);
+    vector<Pointer> lgmapss4(&mapss4[0], &mapss4[nums]);
 
     vector<int> lgmapsp1reg(nums), lgmapsp2reg(nums);
     for (int s = 0; s < nums; ++s) {
@@ -421,6 +449,324 @@ void Mesh::init() {
 
     setField(lrglb, FID_NUMSBAD, &numsbad, 1);
 
+}
+
+
+void Mesh::initParallel() {
+    const Rect<1> piece_rect(Point<1>(0), Point<1>(numpcs-1));
+    dompc  = Domain(piece_rect);
+    // Create a space for the number of pieces that we will have
+    IndexSpace is_piece = runtime->create_index_space(ctx, piece_rect);
+    ispc = is_piece;
+    IndexPartition ip_piece = runtime->create_equal_partition(ctx, is_piece, is_piece);
+    ippc = ip_piece;
+
+    // Create point index space and field spaces
+    nump = gmesh->calcNumPoints(numpcs);
+    IndexSpace isp = runtime->create_index_space(ctx, Rect<1>(0,nump-1));
+    FieldSpace fsp = runtime->create_field_space(ctx);
+    {
+      FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
+      fap.allocate_field(sizeof(double2), FID_PX);
+      fap.allocate_field(sizeof(double2), FID_PXP);
+      fap.allocate_field(sizeof(double2), FID_PX0);
+      fap.allocate_field(sizeof(double2), FID_PU);
+      fap.allocate_field(sizeof(double2), FID_PU0);
+      fap.allocate_field(sizeof(double), FID_PMASWT);
+      fap.allocate_field(sizeof(double2), FID_PF);
+      fap.allocate_field(sizeof(double2), FID_PAP);
+      fap.allocate_field(sizeof(coord_t), FID_PIECE);
+      fap.allocate_field(sizeof(Pointer), FID_MAPPTEMP2PDENSE);
+    }
+
+    // load fields into temp points with equal partition
+    LogicalRegion lr_temp_points = runtime->create_logical_region(ctx, isp, fsp);
+    IndexPartition ip_points_equal = runtime->create_equal_partition(ctx, isp, is_piece);
+    LogicalPartition lp_points_equal = 
+      runtime->get_logical_partition(lr_temp_points, ip_points_equal);
+    gmesh->generatePointsParallel(numpcs, runtime, ctx, 
+                                  lr_temp_points, lp_points_equal, is_piece); 
+
+    // equal partition zones
+    numz = gmesh->calcNumZones(numpcs);
+    IndexSpace isz = runtime->create_index_space(ctx, Rect<1>(0, numz-1));
+    FieldSpace fsz = runtime->create_field_space(ctx);
+    {
+      FieldAllocator faz = runtime->create_field_allocator(ctx, fsz);
+      faz.allocate_field(sizeof(int), FID_ZNUMP);
+      faz.allocate_field(sizeof(double2), FID_ZX);
+      faz.allocate_field(sizeof(double2), FID_ZXP);
+      faz.allocate_field(sizeof(double), FID_ZAREA);
+      faz.allocate_field(sizeof(double), FID_ZVOL);
+      faz.allocate_field(sizeof(double), FID_ZAREAP);
+      faz.allocate_field(sizeof(double), FID_ZVOLP);
+      faz.allocate_field(sizeof(double), FID_ZVOL0);
+      faz.allocate_field(sizeof(double), FID_ZDL);
+      faz.allocate_field(sizeof(double), FID_ZM);
+      faz.allocate_field(sizeof(double), FID_ZR);
+      faz.allocate_field(sizeof(double), FID_ZRP);
+      faz.allocate_field(sizeof(double), FID_ZE);
+      faz.allocate_field(sizeof(double), FID_ZETOT);
+      faz.allocate_field(sizeof(double), FID_ZW);
+      faz.allocate_field(sizeof(double), FID_ZWRATE);
+      faz.allocate_field(sizeof(double), FID_ZP);
+      faz.allocate_field(sizeof(double), FID_ZSS);
+      faz.allocate_field(sizeof(double), FID_ZDU);
+      faz.allocate_field(sizeof(double2), FID_ZUC);
+      faz.allocate_field(sizeof(double), FID_ZTMP);
+    }
+    lrz = runtime->create_logical_region(ctx, isz, fsz);
+    runtime->attach_name(lrz, "lrz");
+    IndexPartition zones_equal = runtime->create_equal_partition(ctx, isz, is_piece);
+    // fill in the number of sides for each zone
+    gmesh->generateZonesParallel(numpcs, runtime, ctx, lrz, 
+        runtime->get_logical_partition(ctx, lrz, zones_equal), is_piece);
+
+    // Create sides logical region
+    nums = gmesh->calcNumSides(numpcs);
+    numc = nums;
+    IndexSpace iss = runtime->create_index_space(ctx, Rect<1>(0, nums-1));
+    FieldSpace fss = runtime->create_field_space(ctx);
+    {
+      FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSP1);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSP1TEMP);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSP2);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSP2TEMP);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSZ);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSS3);
+      fas.allocate_field(sizeof(Pointer), FID_MAPSS4);
+      fas.allocate_field(sizeof(int), FID_MAPSP1REG);
+      fas.allocate_field(sizeof(int), FID_MAPSP2REG);
+      fas.allocate_field(sizeof(double2), FID_EX);
+      fas.allocate_field(sizeof(double2), FID_EXP);
+      fas.allocate_field(sizeof(double), FID_SAREA);
+      fas.allocate_field(sizeof(double), FID_SVOL);
+      fas.allocate_field(sizeof(double), FID_SAREAP);
+      fas.allocate_field(sizeof(double), FID_SVOLP);
+      fas.allocate_field(sizeof(double2), FID_SSURFP);
+      fas.allocate_field(sizeof(double), FID_ELEN);
+      fas.allocate_field(sizeof(double), FID_SMF);
+      fas.allocate_field(sizeof(double2), FID_SFP);
+      fas.allocate_field(sizeof(double2), FID_SFQ);
+      fas.allocate_field(sizeof(double2), FID_SFT);
+      fas.allocate_field(sizeof(double), FID_CAREA);
+      fas.allocate_field(sizeof(double), FID_CEVOL);
+      fas.allocate_field(sizeof(double), FID_CDU);
+      fas.allocate_field(sizeof(double), FID_CDIV);
+      fas.allocate_field(sizeof(double), FID_CCOS);
+      fas.allocate_field(sizeof(double2), FID_CQE1);
+      fas.allocate_field(sizeof(double2), FID_CQE2);
+      fas.allocate_field(sizeof(double), FID_CRMU);
+      fas.allocate_field(sizeof(double), FID_CW);
+      fas.allocate_field(sizeof(Pointer), FID_PIECE);
+    }
+    lrs = runtime->create_logical_region(ctx, iss, fss);
+    runtime->attach_name(lrs, "lrs");
+    IndexPartition equal_sides = runtime->create_equal_partition(ctx, iss, is_piece);
+    // construct temp side maps with equal partition (iterate over zones and find sides)
+    gmesh->generateSidesParallel(numpcs, runtime, ctx, lrs, 
+        runtime->get_logical_partition(lrs, equal_sides), is_piece);
+
+    // Get the proper side and zone partitions for our pieces
+    IndexPartition side_pieces = 
+      runtime->create_partition_by_field(ctx, lrs, lrs, FID_PIECE, is_piece);
+    lps = runtime->get_logical_partition(lrs, side_pieces);
+    IndexPartition zone_pieces = 
+      runtime->create_partition_by_image(ctx, isz, lps, lrs, FID_MAPSZ, is_piece);
+    lpz = runtime->get_logical_partition(lrz, zone_pieces);
+
+    // Now we need to compact our points and generate our point partition tree
+    // First compute our owned points
+    IndexPartition ip_owned_points = runtime->create_partition_by_field(ctx, 
+                                    lr_temp_points, lr_temp_points, FID_PIECE, is_piece);
+    runtime->attach_name(ip_owned_points, "owned points");
+    
+    // Now find the set of points that we can reach from our points through all our sides
+    IndexPartition ip_reachable_points = runtime->create_partition_by_image(ctx, isp,
+                                                  lps, lrs, FID_MAPSP1TEMP, is_piece);
+    runtime->attach_name(ip_reachable_points, "reachable points");
+
+    // Now we can make the temp ghost partition
+    IndexPartition ip_temp_ghost_points = runtime->create_partition_by_difference(ctx,
+                                isp, ip_reachable_points, ip_owned_points, is_piece);
+    runtime->attach_name(ip_temp_ghost_points, "temporary ghost points");
+
+    // Now create a two-way partition of private versus shared
+    IndexSpace is_private = runtime->create_index_space(ctx, Rect<1>(0, 1));
+    IndexPartition ip_private_shared = 
+      runtime->create_pending_partition(ctx, isp, is_private);
+
+    // Fill in the two sub-regions of the ipp index space
+    IndexSpace is_all_shared = runtime->create_index_space_union(ctx, 
+        ip_private_shared, Point<1>(1)/*color*/, ip_temp_ghost_points);
+    std::vector<IndexSpace> diff_spaces(1, is_all_shared);
+    IndexSpace is_all_private = runtime->create_index_space_difference(ctx, 
+                  ip_private_shared, Point<1>(0)/*color*/, isp, diff_spaces);
+    runtime->attach_name(ip_private_shared, "all private-shared");
+
+    // create the private and shared partitions with cross product partitions
+    // There are only going to be two of them so we can get their names back
+    // right away without having to worry about scalability
+    std::map<IndexSpace,IndexPartition> partition_handles;
+    partition_handles[is_all_shared] = IndexPartition::NO_PART;
+    partition_handles[is_all_private] = IndexPartition::NO_PART;
+    runtime->create_cross_product_partitions(ctx, ip_private_shared, 
+                                ip_owned_points, partition_handles);
+    IndexPartition ip_temp_master = partition_handles[is_all_shared];
+    IndexPartition ip_temp_private = partition_handles[is_all_private];
+
+    // The problem with these partitions is that the sub-regions in them
+    // might not be dense, so we now need to make the actual dense partitions
+    // To do this we make a temporary region of the number of pieces and count
+    // how many points exist in private and shared and then use image partitions
+    // to compute them
+    FieldSpace fsc = runtime->create_field_space(ctx);
+    {
+      FieldAllocator fac = runtime->create_field_allocator(ctx, fsc); 
+      fac.allocate_field(sizeof(coord_t), FID_COUNT);
+      fac.allocate_field(sizeof(Rect<1>), FID_RANGE);
+    }
+    LogicalRegion lr_all_range = runtime->create_logical_region(ctx, is_private, fsc);
+    LogicalRegion lr_private_range = runtime->create_logical_region(ctx, is_piece, fsc);
+    LogicalPartition lp_private_range = 
+      runtime->get_logical_partition(lr_private_range, ip_piece);
+    LogicalRegion lr_shared_range = runtime->create_logical_region(ctx, is_piece, fsc);
+    LogicalPartition lp_shared_range = 
+      runtime->get_logical_partition(lr_shared_range, ip_piece);
+    computeRangesParallel(numpcs, runtime, ctx, lr_all_range,
+        lr_private_range, lp_private_range, lr_shared_range, lp_shared_range,
+        ip_temp_private, ip_temp_master, is_piece);
+
+    // Now we can compute the actual dense versions of the partition
+    IndexPartition private_ip = runtime->create_equal_partition(ctx, is_private, is_private);
+    IndexPartition ippall = runtime->create_partition_by_image_range(ctx, isp,
+        runtime->get_logical_partition(lr_all_range, private_ip), lr_all_range, 
+        FID_RANGE, is_private);
+    IndexSpace is_prv = runtime->get_index_subspace(ippall, DomainPoint(0));
+    IndexSpace is_shr = runtime->get_index_subspace(ippall, DomainPoint(1));
+    IndexPartition ip_prv = runtime->create_partition_by_image_range(ctx, is_prv,
+        lp_private_range, lr_private_range, FID_RANGE, is_piece);
+    IndexPartition ip_mstr = runtime->create_partition_by_image_range(ctx, is_shr,
+        lp_shared_range, lr_shared_range, FID_RANGE, is_piece);
+
+    // Now make the actual point logical region, get the partitions, and copy over data
+    lrp = runtime->create_logical_region(ctx, isp, fsp);
+    runtime->attach_name(lrp, "lrp");
+    lppprv = runtime->get_logical_partition_by_tree(ip_prv, fsp, lrp.get_tree_id());
+    runtime->attach_name(lppprv, "lppprv");
+    lppmstr = runtime->get_logical_partition_by_tree(ip_mstr, fsp, lrp.get_tree_id());
+    runtime->attach_name(lppmstr, "lppmstr");
+
+    // Compact the points
+    compactPointsParallel(numpcs, runtime, ctx, lr_temp_points, 
+        runtime->get_logical_partition_by_tree(ip_temp_private, fsp, 
+          lr_temp_points.get_tree_id()), lrp, lppprv, is_piece);
+    compactPointsParallel(numpcs, runtime, ctx, lr_temp_points,
+        runtime->get_logical_partition_by_tree(ip_temp_master, fsp, 
+          lr_temp_points.get_tree_id()), lrp, lppmstr, is_piece);
+
+    // Update the side pointers to points with a gather copy
+    // Gather copies aren't quite ready yet so we'll do this with
+    // a very simple gather copy task for now, but we will switch
+    // this over to proper gather copies once the runtime supports them
+#if 0
+    {
+      IndexCopyLauncher update_launcher(is_piece);
+      update_launcher.add_copy_requirements(
+          RegionRequirement(lp_points_equal, 0/*identity projection*/, 
+                            READ_ONLY, EXCLUSIVE, lr_temp_points),
+          RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
+      update_launcher.add_src_field(0/*index*/, FID_MAPPTEMP2PDENSE);
+      update_launcher.add_dst_field(0/*index*/, FID_MAPSP1);
+      update_launcher.add_gather_field(
+          RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs), FID_MAPSP1TEMP);
+      runtime->issue_copy_operation(ctx, update_launcher);
+    }
+    {
+      IndexCopyLauncher update_launcher(is_piece);
+      update_launcher.add_copy_requirements(
+          RegionRequirement(lp_points_equal, 0/*identity projection*/, 
+                            READ_ONLY, EXCLUSIVE, lr_temp_points),
+          RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
+      update_launcher.add_src_field(0/*index*/, FID_MAPPTEMP2PDENSE);
+      update_launcher.add_dst_field(0/*index*/, FID_MAPSP2);
+      update_launcher.add_gather_field(
+          RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs), FID_MAPSP2TEMP);
+      runtime->issue_copy_operation(ctx, update_launcher);
+    }
+#else
+    {
+      TaskLauncher update_launcher(TID_TEMPGATHER, TaskArgument());
+      update_launcher.add_region_requirement(
+          RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points));
+      update_launcher.add_field(0/*index*/, FID_MAPPTEMP2PDENSE);
+      update_launcher.add_region_requirement(
+          RegionRequirement(lrs, WRITE_DISCARD, EXCLUSIVE, lrs));
+      update_launcher.add_field(1/*index*/, FID_MAPSP1);
+      update_launcher.add_region_requirement(
+          RegionRequirement(lrs, READ_ONLY, EXCLUSIVE, lrs));
+      update_launcher.add_field(2/*index*/, FID_MAPSP1TEMP);
+      runtime->execute_task(ctx, update_launcher);
+    }
+    {
+      TaskLauncher update_launcher(TID_TEMPGATHER, TaskArgument());
+      update_launcher.add_region_requirement(
+          RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points));
+      update_launcher.add_field(0/*index*/, FID_MAPPTEMP2PDENSE);
+      update_launcher.add_region_requirement(
+          RegionRequirement(lrs, WRITE_DISCARD, EXCLUSIVE, lrs));
+      update_launcher.add_field(1/*index*/, FID_MAPSP2);
+      update_launcher.add_region_requirement(
+          RegionRequirement(lrs, READ_ONLY, EXCLUSIVE, lrs));
+      update_launcher.add_field(2/*index*/, FID_MAPSP2TEMP);
+      runtime->execute_task(ctx, update_launcher);
+    }
+#endif
+
+    // Lastly we need to get the shared partition by performing an image
+    // through one of the point mappings to get the set of shared points
+    // Note that this gets scoped by the is_shr index space to avoid any
+    // private points
+    IndexPartition ip_shr = runtime->create_partition_by_image(ctx, is_shr, 
+                                            lps, lrs, FID_MAPSP1, is_piece);
+    lppshr = runtime->get_logical_partition_by_tree(ip_shr, fsp, lrp.get_tree_id());
+    runtime->attach_name(lppshr, "lppshr");
+
+    // Figure out which points are private and shared for our sides
+    calcOwnershipParallel(runtime, ctx, lrs, lps, ip_prv, ip_shr, is_piece);
+
+    // Calculate centers, volumes, and side fractions
+    calcCtrsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppshr, is_piece);
+    Future numsbad = 
+      calcVolsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppshr, is_piece);
+    calcSideFracsParallel(runtime, ctx, lrs, lps, lrz, lpz, is_piece);
+
+    // create index spaces and fields for global vars
+    IndexSpace isglb = runtime->create_index_space(ctx, 1);
+    FieldSpace fsglb = runtime->create_field_space(ctx);
+    {
+      FieldAllocator faglb = runtime->create_field_allocator(ctx, fsglb);
+      faglb.allocate_field(sizeof(int), FID_NUMSBAD);
+      faglb.allocate_field(sizeof(double), FID_DTREC);
+    }
+    lrglb = runtime->create_logical_region(ctx, isglb, fsglb);
+    runtime->attach_name(lrglb, "lrglb");
+    {
+      FillLauncher fill(lrglb, lrglb, numsbad);
+      fill.add_field(FID_NUMSBAD);
+      runtime->fill_fields(ctx, fill);
+    }
+
+    // Delete our temporary regions
+    runtime->destroy_logical_region(ctx, lr_temp_points);
+    runtime->destroy_logical_region(ctx, lr_all_range);
+    runtime->destroy_logical_region(ctx, lr_private_range);
+    runtime->destroy_logical_region(ctx, lr_shared_range);
+
+    // Ignore chunking for now
+
+    writeStats();
 }
 
 
@@ -512,16 +858,15 @@ void Mesh::writeStats() {
     int gnumzch = numzch;
     int gnumsch = numsch;
 
-    cout << "--- Mesh Information ---" << endl;
-    cout << "Points:  " << gnump << endl;
-    cout << "Zones:  "  << gnumz << endl;
-    cout << "Sides:  "  << gnums << endl;
-    cout << "Side chunks:  " << gnumsch << endl;
-    cout << "Point chunks:  " << gnumpch << endl;
-    cout << "Zone chunks:  " << gnumzch << endl;
-    cout << "Chunk size:  " << chunksize << endl;
-    cout << "------------------------" << endl;
-
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "--- Mesh Information ---\n");
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Points:  %d\n", gnump);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Zones:   %d\n", gnumz);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Sides:   %d\n", gnums);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Side chunks:  %d\n", gnumsch);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Point chunks: %d\n", gnumpch);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Zone chunks:  %d\n", gnumzch);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Chunk size:   %d\n", chunksize);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "------------------------\n");
 }
 
 
@@ -592,58 +937,106 @@ void Mesh::getPlaneChunks(
 }
 
 
-template <typename T>
-void Mesh::copyFieldTask(
-        const Task *task,
-        const std::vector<PhysicalRegion> &regions,
-        Context ctx,
-        HighLevelRuntime *runtime) {
-  // determine which fields to use in the copy
-    FieldID fid_src = *(task->regions[0].instance_fields.begin());
-    FieldID fid_dst = *(task->regions[1].instance_fields.begin());
-    LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_src;
-    acc_src = regions[0].get_field_accessor(fid_src).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
-      
-    //MyAccessor<T> acc_src = get_accessor<T>(regions[0], fid_src); //regions[0].get_field_accessor(fid_src).typeify<T>().convert<AccessorType::SOA>();
-    LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_dst;
-    acc_dst = regions[1].get_field_accessor(fid_dst).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
-//    MyAccessor<T> acc_dst =
-//        get_accessor<T>(regions[1], fid_dst);
-
-    const IndexSpace& is = task->regions[0].region.get_index_space();
-    for (IndexIterator itr(runtime, ctx, is); itr.has_next(); )
-    {
-        ptr_t idx = itr.next();
-        acc_dst.write(idx, acc_src.read(idx));
-    }
-
+void Mesh::calcOwnershipParallel(
+            Runtime *runtime,
+            Context ctx,
+            LogicalRegion lr_sides,
+            LogicalPartition lp_sides,
+            IndexPartition ip_private,
+            IndexPartition ip_shared,
+            IndexSpace is_piece) {
+  const CalcOwnersArgs args(ip_private, ip_shared);
+  IndexTaskLauncher launcher(TID_CALCOWNERS, is_piece, 
+                            TaskArgument(&args, sizeof(args)), ArgumentMap());
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_sides));
+  launcher.add_field(0/*index*/, FID_MAPSP1);
+  launcher.add_field(0/*index*/, FID_MAPSP2);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+  launcher.add_field(1/*index*/, FID_MAPSP1REG);
+  launcher.add_field(1/*index*/, FID_MAPSP2REG);
+  runtime->execute_index_space(ctx, launcher);
 }
 
 
-template <typename T>
-void Mesh::fillFieldTask(
+void Mesh::calcOwnersTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
-    const T* args = (const T*) task->args;
-    const T val = args[0];
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorWD<int> acc_mapsp1reg(regions[1], FID_MAPSP1REG);
+    const AccessorWD<int> acc_mapsp2reg(regions[1], FID_MAPSP2REG);
 
-    FieldID fid_var = task->regions[0].instance_fields[0];
-   LegionRuntime::Accessor::RegionAccessor<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> , T> acc_var;
-   acc_var = regions[0].get_field_accessor(fid_var).typeify<T>(). template convert<LegionRuntime::Accessor::AccessorType::SOA<sizeof(T)> >(); 
-      
-//     MyAccessor<T> acc_var =
-//        get_accessor<T>(regions[0], fid_var);
+    const CalcOwnersArgs *args = reinterpret_cast<const CalcOwnersArgs*>(task->args);
+    const Domain private_domain = 
+      runtime->get_index_space_domain(
+          runtime->get_index_subspace(args->ip_private, task->index_point));
+    const Domain shared_domain = 
+      runtime->get_index_space_domain(
+          runtime->get_index_subspace(args->ip_shared, task->index_point));
 
-    const IndexSpace& is = task->regions[0].region.get_index_space();
-    
-    for (IndexIterator itr(runtime, ctx, is); itr.has_next();)
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    for (PointIterator itr(runtime, iss); itr(); itr++)
     {
-        ptr_t idx = itr.next();
-        acc_var.write(idx, val);
-    }
+      const Pointer p1 = acc_mapsp1[*itr];
+      if (!private_domain.contains(p1))
+      {
+        assert(shared_domain.contains(p1));
+        acc_mapsp1reg[*itr] = 1;
+      }
+      else
+        acc_mapsp1reg[*itr] = 0;
 
+      const Pointer p2 = acc_mapsp2[*itr];
+      if (!private_domain.contains(p2))
+      {
+        assert(shared_domain.contains(p2));
+        acc_mapsp2reg[*itr] = 1;
+      }
+      else
+        acc_mapsp2reg[*itr] = 0;
+    }
+}
+
+
+void Mesh::calcCtrsParallel(
+            Runtime *runtime,
+            Context ctx,
+            LogicalRegion lr_sides,
+            LogicalPartition lp_sides,
+            LogicalRegion lr_zones,
+            LogicalPartition lp_zones,
+            LogicalRegion lr_points,
+            LogicalPartition lp_points_private,
+            LogicalPartition lp_points_shared,
+            IndexSpace is_piece) {
+  IndexTaskLauncher launcher(TID_CALCCTRS, is_piece, TaskArgument(), ArgumentMap());
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_sides));
+  launcher.add_field(0/*index*/, FID_MAPSP1);
+  launcher.add_field(0/*index*/, FID_MAPSP2);
+  launcher.add_field(0/*index*/, FID_MAPSZ);
+  launcher.add_field(0/*index*/, FID_MAPSP1REG);
+  launcher.add_field(0/*index*/, FID_MAPSP2REG);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_zones, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_zones));
+  launcher.add_field(1/*index*/, FID_ZNUMP);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+  launcher.add_field(2/*index*/, FID_PX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_points_shared, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+  launcher.add_field(3/*index*/, FID_PX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+  launcher.add_field(4/*index*/, FID_EX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_zones, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_zones));
+  launcher.add_field(5/*index*/, FID_ZX);
+  runtime->execute_index_space(ctx, launcher);
 }
 
 
@@ -651,136 +1044,187 @@ void Mesh::calcCtrsTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
-    MyAccessor<ptr_t> acc_mapsp1 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP1);
-    MyAccessor<ptr_t> acc_mapsp2 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP2);
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<int> acc_mapsp1reg =
-        get_accessor<int>(regions[0], FID_MAPSP1REG);
-    MyAccessor<int> acc_mapsp2reg =
-        get_accessor<int>(regions[0], FID_MAPSP2REG);
-    MyAccessor<int> acc_znump =
-        get_accessor<int>(regions[1], FID_ZNUMP);
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
+    const AccessorRO<int> acc_znump(regions[1], FID_ZNUMP);
     FieldID fid_px = task->regions[2].instance_fields[0];
-    MyAccessor<double2> acc_px[2] = {
-        get_accessor<double2>(regions[2], fid_px),
-        get_accessor<double2>(regions[3], fid_px)
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[2], fid_px),
+        AccessorRO<double2>(regions[3], fid_px)
     };
     FieldID fid_ex = task->regions[4].instance_fields[0];
-    MyAccessor<double2> acc_ex =
-        get_accessor<double2>(regions[4], fid_ex);
+    const AccessorWD<double2> acc_ex(regions[4], fid_ex);
     FieldID fid_zx = task->regions[5].instance_fields[0];
-    MyAccessor<double2> acc_zx =
-        get_accessor<double2>(regions[5], fid_zx);
+    const AccessorWD<double2> acc_zx(regions[5], fid_zx);
 
     const IndexSpace& isz = task->regions[1].region.get_index_space();
-    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next();)
-    {
-        ptr_t z = itrz.next();
-        acc_zx.write(z, double2(0., 0.));
-
-    }
+    for (PointIterator itr(runtime, isz); itr(); itr++)
+      acc_zx[*itr] = double2(0., 0.);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx, iss); itrs.has_next(); )
+    for (PointIterator itr(runtime, iss); itr(); itr++)
     {
-        ptr_t s = itrs.next();
-        ptr_t p1 = acc_mapsp1.read(s);
-        int p1reg = acc_mapsp1reg.read(s);
-        ptr_t p2 = acc_mapsp2.read(s);
-        int p2reg = acc_mapsp2reg.read(s);
-        ptr_t z  = acc_mapsz.read(s);
-        double2 px1 = acc_px[p1reg].read(p1);
-        double2 px2 = acc_px[p2reg].read(p2);
-        double2 ex  = 0.5 * (px1 + px2);
-        acc_ex.write(s, ex);
-        double2 zx  = acc_zx.read(z);
-        int n = acc_znump.read(z);
-        zx += px1 / n;
-        acc_zx.write(z, zx);
+        const Pointer p1 = acc_mapsp1[*itr];
+        const int p1reg = acc_mapsp1reg[*itr];
+        const Pointer p2 = acc_mapsp2[*itr];
+        const int p2reg = acc_mapsp2reg[*itr];
+        const Pointer z = acc_mapsz[*itr];
+        const double2 px1 = acc_px[p1reg][p1];
+        const double2 px2 = acc_px[p2reg][p2];
+        const double2 ex  = 0.5 * (px1 + px2);
+        acc_ex[*itr] = ex;
+        const int n = acc_znump[z];
+        acc_zx[z] += px1 / n;
     }
 }
 
+
+Future Mesh::calcVolsParallel(
+            Runtime *runtime,
+            Context ctx,
+            LogicalRegion lr_sides,
+            LogicalPartition lp_sides,
+            LogicalRegion lr_zones,
+            LogicalPartition lp_zones,
+            LogicalRegion lr_points,
+            LogicalPartition lp_points_private,
+            LogicalPartition lp_points_shared,
+            IndexSpace is_piece) {
+  IndexTaskLauncher launcher(TID_CALCVOLS, is_piece, TaskArgument(), ArgumentMap());
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_sides));
+  launcher.add_field(0/*index*/, FID_MAPSP1);
+  launcher.add_field(0/*index*/, FID_MAPSP2);
+  launcher.add_field(0/*index*/, FID_MAPSZ);
+  launcher.add_field(0/*index*/, FID_MAPSP1REG);
+  launcher.add_field(0/*index*/, FID_MAPSP2REG);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+  launcher.add_field(1/*index*/, FID_PX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_points_shared, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+  launcher.add_field(2/*index*/, FID_PX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_zones, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_zones));
+  launcher.add_field(3/*index*/, FID_ZX);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+  launcher.add_field(4/*index*/, FID_SAREA);
+  launcher.add_field(4/*index*/, FID_SVOL);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_zones, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_zones));
+  launcher.add_field(5/*index*/, FID_ZAREA);
+  launcher.add_field(5/*index*/, FID_ZVOL);
+  return runtime->execute_index_space(ctx, launcher, OPID_SUMINT);
+}
 
 int Mesh::calcVolsTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
-    MyAccessor<ptr_t> acc_mapsp1 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP1);
-    MyAccessor<ptr_t> acc_mapsp2 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP2);
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<int> acc_mapsp1reg =
-        get_accessor<int>(regions[0], FID_MAPSP1REG);
-    MyAccessor<int> acc_mapsp2reg =
-        get_accessor<int>(regions[0], FID_MAPSP2REG);
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
     FieldID fid_px = task->regions[1].instance_fields[0];
-    MyAccessor<double2> acc_px[2] = {
-        get_accessor<double2>(regions[1], fid_px),
-        get_accessor<double2>(regions[2], fid_px)
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[1], fid_px),
+        AccessorRO<double2>(regions[2], fid_px)
     };
     FieldID fid_zx = task->regions[3].instance_fields[0];
-    MyAccessor<double2> acc_zx =
-        get_accessor<double2>(regions[3], fid_zx);
+    const AccessorRO<double2> acc_zx(regions[3], fid_zx);
     FieldID fid_sarea = task->regions[4].instance_fields[0];
     FieldID fid_svol  = task->regions[4].instance_fields[1];
-    MyAccessor<double> acc_sarea =
-        get_accessor<double>(regions[4], fid_sarea);
-    MyAccessor<double> acc_svol =
-        get_accessor<double>(regions[4], fid_svol);
+    const AccessorWD<double> acc_sarea(regions[4], fid_sarea);
+    const AccessorWD<double> acc_svol(regions[4], fid_svol);
     FieldID fid_zarea = task->regions[5].instance_fields[0];
     FieldID fid_zvol  = task->regions[5].instance_fields[1];
-    MyAccessor<double> acc_zarea =
-        get_accessor<double>(regions[5], fid_zarea);
-    MyAccessor<double> acc_zvol =
-        get_accessor<double>(regions[5], fid_zvol);
+    const AccessorWD<double> acc_zarea(regions[5], fid_zarea);
+    const AccessorWD<double> acc_zvol(regions[5], fid_zvol);
 
     const IndexSpace& isz = task->regions[3].region.get_index_space();
-    for (IndexIterator itrz(runtime, ctx, isz); itrz.has_next(); )
+    for (PointIterator itr(runtime, isz); itr(); itr++)
     {
-        ptr_t z = itrz.next();
-        acc_zarea.write(z, 0.);
-        acc_zvol.write(z, 0.);
+        acc_zarea[*itr] = 0.;
+        acc_zvol[*itr] = 0.;
     }
 
     const double third = 1. / 3.;
     int count = 0;
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime, ctx, iss); itrs.has_next(); )
+    for (PointIterator itr(runtime, iss); itr(); itr++)
     {
-        ptr_t s = itrs.next();
-        ptr_t p1 = acc_mapsp1.read(s);
-        int p1reg = acc_mapsp1reg.read(s);
-        ptr_t p2 = acc_mapsp2.read(s);
-        int p2reg = acc_mapsp2reg.read(s);
-        ptr_t z  = acc_mapsz.read(s);
-        double2 px1 = acc_px[p1reg].read(p1);
-        double2 px2 = acc_px[p2reg].read(p2);
-        double2 zx  = acc_zx.read(z);
+        const Pointer p1 = acc_mapsp1[*itr];
+        const int p1reg = acc_mapsp1reg[*itr];
+        const Pointer p2 = acc_mapsp2[*itr];
+        const int p2reg = acc_mapsp2reg[*itr];
+        const Pointer z = acc_mapsz[*itr];
+        const double2 px1 = acc_px[p1reg][p1];
+        const double2 px2 = acc_px[p2reg][p2];
+        const double2 zx  = acc_zx[z];
 
         // compute side volumes, sum to zone
-        double sa = 0.5 * cross(px2 - px1, zx - px1);
-        double sv = third * sa * (px1.x + px2.x + zx.x);
-        acc_sarea.write(s, sa);
-        acc_svol.write(s, sv);
-        double za = acc_zarea.read(z);
-        za += sa;
-        acc_zarea.write(z, za);
-        double zv = acc_zvol.read(z);
-        zv += sv;
-        acc_zvol.write(z, zv);
+        const double sa = 0.5 * cross(px2 - px1, zx - px1);
+        const double sv = third * sa * (px1.x + px2.x + zx.x);
+        acc_sarea[*itr] = sa;
+        acc_svol[*itr] = sv;
+        acc_zarea[z] += sa;
+        acc_zvol[z] += sv;
 
         // check for negative side volumes
-        if (sv <= 0.) count += 1;
+        if (sv <= 0.) 
+          count += 1;
     }
 
     return count;
+}
+
+
+void Mesh::calcSideFracsParallel(
+            Runtime *runtime,
+            Context ctx,
+            LogicalRegion lr_sides,
+            LogicalPartition lp_sides,
+            LogicalRegion lr_zones,
+            LogicalPartition lp_zones,
+            IndexSpace is_piece) {
+  IndexTaskLauncher launcher(TID_CALCSIDEFRACS, is_piece, TaskArgument(), ArgumentMap());
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_sides));
+  launcher.add_field(0/*index*/, FID_SAREA);
+  launcher.add_field(0/*index*/, FID_MAPSZ);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_zones, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_zones));
+  launcher.add_field(1/*index*/, FID_ZAREA);
+  launcher.add_region_requirement(
+      RegionRequirement(lp_sides, 0/*idenity*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+  launcher.add_field(2/*index*/, FID_SMF);
+  runtime->execute_index_space(ctx, launcher);
+}
+
+
+void Mesh::calcSideFracsTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<double> acc_sarea(regions[0], FID_SAREA);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double> acc_zarea(regions[1], FID_ZAREA);
+    const AccessorWD<double> acc_smf(regions[2], FID_SMF);
+
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    for (PointIterator itr(runtime, iss); itr(); itr++)
+    {
+      const Pointer z = acc_mapsz[*itr];
+      acc_smf[*itr] = acc_sarea[*itr] / acc_zarea[z];
+    }
 }
 
 
@@ -788,25 +1232,20 @@ void Mesh::calcSurfVecsTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<double2> acc_ex =
-        get_accessor<double2>(regions[0], FID_EXP);
-    MyAccessor<double2> acc_zx =
-        get_accessor<double2>(regions[1], FID_ZXP);
-    MyAccessor<double2> acc_ssurf =
-        get_accessor<double2>(regions[2], FID_SSURFP);
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double2> acc_ex(regions[0], FID_EXP);
+    const AccessorRO<double2> acc_zx(regions[1], FID_ZXP);
+    const AccessorWD<double2> acc_ssurf(regions[2], FID_SSURFP);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next();)
+    for (PointIterator itr(runtime, iss); itr(); itr++)
     {
-        ptr_t s = itrs.next();
-        ptr_t z = acc_mapsz.read(s);
-        double2 ex = acc_ex.read(s);
-        double2 zx = acc_zx.read(z);
-        double2 ss = rotateCCW(ex - zx);
-        acc_ssurf.write(s, ss);
+        const Pointer z = acc_mapsz[*itr];
+        const double2 ex = acc_ex[*itr];
+        const double2 zx = acc_zx[z];
+        const double2 ss = rotateCCW(ex - zx);
+        acc_ssurf[*itr] = ss;
     }
 }
 
@@ -815,35 +1254,29 @@ void Mesh::calcEdgeLenTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
-    MyAccessor<ptr_t> acc_mapsp1 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP1);
-    MyAccessor<ptr_t> acc_mapsp2 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP2);
-    MyAccessor<int> acc_mapsp1reg =
-        get_accessor<int>(regions[0], FID_MAPSP1REG);
-    MyAccessor<int> acc_mapsp2reg =
-        get_accessor<int>(regions[0], FID_MAPSP2REG);
-    MyAccessor<double2> acc_px[2] = {
-        get_accessor<double2>(regions[1], FID_PXP),
-        get_accessor<double2>(regions[2], FID_PXP)
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[1], FID_PXP),
+        AccessorRO<double2>(regions[2], FID_PXP)
     };
-    MyAccessor<double> acc_elen =
-        get_accessor<double>(regions[3], FID_ELEN);
+    const AccessorWD<double> acc_elen(regions[3], FID_ELEN);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next(); )
+    for (PointIterator itr(runtime, iss); itr(); itr++)
     {
-        ptr_t s = itrs.next();
-        ptr_t p1 = acc_mapsp1.read(s);
-        int p1reg = acc_mapsp1reg.read(s);
-        ptr_t p2 = acc_mapsp2.read(s);
-        int p2reg = acc_mapsp2reg.read(s);
-        double2 px1 = acc_px[p1reg].read(p1);
-        double2 px2 = acc_px[p2reg].read(p2);
+        const Pointer p1 = acc_mapsp1[*itr];
+        const int p1reg = acc_mapsp1reg[*itr];
+        const Pointer p2 = acc_mapsp2[*itr];
+        const int p2reg = acc_mapsp2reg[*itr];
+        const double2 px1 = acc_px[p1reg][p1];
+        const double2 px2 = acc_px[p2reg][p2];
 
-        double elen = length(px2 - px1);
-        acc_elen.write(s, elen);
+        const double elen = length(px2 - px1);
+        acc_elen[*itr] = elen;
     }
 }
 
@@ -852,41 +1285,30 @@ void Mesh::calcCharLenTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<double> acc_elen =
-        get_accessor<double>(regions[0], FID_ELEN);
-    MyAccessor<double> acc_sarea =
-        get_accessor<double>(regions[0], FID_SAREAP);
-    MyAccessor<int> acc_znump =
-        get_accessor<int>(regions[1], FID_ZNUMP);
-    MyAccessor<double> acc_zdl =
-        get_accessor<double>(regions[2], FID_ZDL);
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double> acc_elen(regions[0], FID_ELEN);
+    const AccessorRO<double> acc_sarea(regions[0], FID_SAREAP);
+    const AccessorRO<int> acc_znump(regions[1], FID_ZNUMP);
+    const AccessorWD<double> acc_zdl(regions[2], FID_ZDL);
 
     const IndexSpace& isz = task->regions[1].region.get_index_space();
-    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next();)
-    {
-        ptr_t z = itrz.next();
-        acc_zdl.write(z, 1.e99);
-        
-    }
+    for (PointIterator itr(runtime, isz); itr(); itr++)
+        acc_zdl[*itr] = 1.e99;
     
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next();)
+    for (PointIterator itr(runtime, iss); itr(); itr++)
     {
-        ptr_t s = itrs.next();
-        ptr_t z  = acc_mapsz.read(s);
-        double area = acc_sarea.read(s);
-        double base = acc_elen.read(s);
-        double zdl = acc_zdl.read(z);
-        int np = acc_znump.read(z);
-        double fac = (np == 3 ? 3. : 4.);
-        double sdl = fac * area / base;
-        zdl = min(zdl, sdl);
-        acc_zdl.write(z, zdl);
+        const Pointer z = acc_mapsz[*itr];
+        const double area = acc_sarea[*itr];
+        const double base = acc_elen[*itr];
+        const double zdl = acc_zdl[z];
+        const int np = acc_znump[z];
+        const double fac = (np == 3 ? 3. : 4.);
+        const double sdl = fac * area / base;
+        const double zdl2 = min(zdl, sdl);
+        acc_zdl[z] = zdl2;
     }
-
 }
 
 
@@ -959,7 +1381,7 @@ void Mesh::calcVols(
 void Mesh::checkBadSides() {
 
     // if there were negative side volumes, error exit
-    numsbad = reduceFutureMap<SumOp<int> >(fmapcv);
+    numsbad = f_cv.get_result<int>();
     if (numsbad > 0) {
         cerr << "Error: " << numsbad << " negative side volumes" << endl;
         cerr << "Exiting..." << endl;
@@ -984,4 +1406,170 @@ void Mesh::calcSideFracs(
 }
 
 
+void Mesh::computeRangesParallel(
+            const int numpcs,
+            Runtime *runtime,
+            Context ctx,
+            LogicalRegion lr_all_range,
+            LogicalRegion lr_private_range,
+            LogicalPartition lp_private_range,
+            LogicalRegion lr_shared_range,
+            LogicalPartition lp_shared_range,
+            IndexPartition ip_private,
+            IndexPartition ip_shared,
+            IndexSpace is_piece)
+{
+  // First we do two index space launches to compute the counts of
+  // the number of points in each subregion
+  {
+    IndexTaskLauncher launcher(TID_COUNTPOINTS, is_piece,
+        TaskArgument(&ip_private, sizeof(ip_private)), ArgumentMap());
+    launcher.add_region_requirement(RegionRequirement(lp_private_range,
+          0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_private_range));
+    launcher.add_field(0/*index*/, FID_COUNT);
+    runtime->execute_index_space(ctx, launcher);
+  }
+  {
+    IndexTaskLauncher launcher(TID_COUNTPOINTS, is_piece,
+        TaskArgument(&ip_shared, sizeof(ip_shared)), ArgumentMap());
+    launcher.add_region_requirement(RegionRequirement(lp_shared_range,
+          0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_shared_range));
+    launcher.add_field(0/*index*/, FID_COUNT);
+    runtime->execute_index_space(ctx, launcher);
+  }
+  // Then we do a single task launch to compute the ranges
+  TaskLauncher launcher(TID_CALCRANGES, TaskArgument());
+  launcher.add_region_requirement(
+      RegionRequirement(lr_all_range, WRITE_DISCARD, EXCLUSIVE, lr_all_range));
+  launcher.add_field(0/*index*/, FID_RANGE);
+  launcher.add_region_requirement(
+      RegionRequirement(lr_private_range, WRITE_DISCARD, EXCLUSIVE, lr_private_range));
+  launcher.add_field(1/*index*/, FID_RANGE);
+  launcher.add_region_requirement(
+      RegionRequirement(lr_shared_range, WRITE_DISCARD, EXCLUSIVE, lr_shared_range));
+  launcher.add_field(2/*index*/, FID_RANGE);
+  launcher.add_region_requirement(
+      RegionRequirement(lr_private_range, READ_ONLY, EXCLUSIVE, lr_private_range));
+  launcher.add_field(3/*index*/, FID_COUNT);
+  launcher.add_region_requirement(
+      RegionRequirement(lr_shared_range, READ_ONLY, EXCLUSIVE, lr_shared_range));
+  launcher.add_field(4/*index*/, FID_COUNT);
+  runtime->execute_task(ctx, launcher);
+}
+
+
+void Mesh::compactPointsParallel(
+            const int numpcs,
+            Runtime *runtime,
+            Context ctx,
+            LogicalRegion lr_temp_points,
+            LogicalPartition lp_temp_points,
+            LogicalRegion lr_points,
+            LogicalPartition lp_points,
+            IndexSpace is_piece) {
+  IndexTaskLauncher launcher(TID_COMPACTPOINTS, is_piece,
+                              TaskArgument(), ArgumentMap());
+  launcher.add_region_requirement(RegionRequirement(lp_points,
+        0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_points));
+  launcher.add_field(0/*index*/, FID_PX);
+  launcher.add_region_requirement(RegionRequirement(lp_temp_points,
+        0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_temp_points));
+  launcher.add_field(1/*index*/, FID_PX);
+  launcher.add_region_requirement(RegionRequirement(lp_temp_points,
+        0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_temp_points));
+  launcher.add_field(2/*index*/, FID_MAPPTEMP2PDENSE);
+
+  runtime->execute_index_space(ctx, launcher);
+}
+
+
+void Mesh::countPointsTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    IndexPartition ip = *(const IndexPartition*)task->args;
+    // Get the subregion
+    IndexSpace is = runtime->get_index_subspace(ip, task->index_point);
+    Domain dom = runtime->get_index_space_domain(is);
+    // Write out the count of the number of points
+    const AccessorWD<coord_t> acc(regions[0], FID_COUNT);
+    acc[task->index_point] = dom.get_volume();
+}
+
+
+void Mesh::calcRangesTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    coord_t current = 0;
+    // Compute the private ranges first  
+    const AccessorRO<coord_t> priv_count(regions[3], FID_COUNT);
+    const AccessorWD<Rect<1> > priv_range(regions[1], FID_RANGE);
+    IndexSpace is_priv = task->regions[3].region.get_index_space();
+    for (PointIterator itr(runtime, is_priv); itr(); itr++)
+    {
+      const coord_t count = priv_count[*itr];
+      priv_range[*itr] = Rect<1>(current, current + count - 1);
+      current += count;
+    }
+    // Update the all private range
+    const AccessorWD<Rect<1> > all_range(regions[0], FID_RANGE);
+    const coord_t shared_start = current;
+    all_range[Pointer(0)] = Rect<1>(0, shared_start-1);
+    // Now we can do the shared ranges
+    const AccessorRO<coord_t> shr_count(regions[4], FID_COUNT);
+    const AccessorWD<Rect<1> > shr_range(regions[2], FID_RANGE);
+    IndexSpace is_shr = task->regions[4].region.get_index_space();
+    for (PointIterator itr(runtime, is_shr); itr(); itr++)
+    {
+      const coord_t count = shr_count[*itr];
+      shr_range[*itr] = Rect<1>(current, current + count - 1);
+      current += count;
+    }
+    // Update the all shared range
+    all_range[Pointer(1)] = Rect<1>(shared_start, current-1);
+}
+
+
+void Mesh::compactPointsTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    IndexSpace is_dst = task->regions[0].region.get_index_space();
+    IndexSpace is_src = task->regions[1].region.get_index_space();
+    assert(runtime->get_index_space_domain(is_src).get_volume() ==
+            runtime->get_index_space_domain(is_dst).get_volume());
+    PointIterator itr_src(runtime, is_src);
+    PointIterator itr_dst(runtime, is_dst);
+    const AccessorWD<double2> acc_dst(regions[0], FID_PX);
+    const AccessorRO<double2> acc_src(regions[1], FID_PX);
+    const AccessorWD<Pointer> acc_ptr(regions[2], FID_MAPPTEMP2PDENSE);
+    for ( ; itr_src() && itr_dst(); itr_src++, itr_dst++)
+    {
+      acc_dst[*itr_dst] = acc_src[*itr_src];
+      acc_ptr[*itr_src] = *itr_dst;
+    }
+}
+
+
+void Mesh::tempGatherTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_src(regions[0], task->regions[0].instance_fields[0]);
+    const AccessorWD<Pointer> acc_dst(regions[1], task->regions[1].instance_fields[0]);
+    const AccessorRO<Pointer> acc_idx(regions[2], task->regions[2].instance_fields[0]);
+
+    const IndexSpace iss = task->regions[1].region.get_index_space(); 
+    for (PointIterator itr(runtime, iss); itr(); itr++)
+    {
+      // For the output figure out where we want to do the gather from
+      const Pointer p = acc_idx[*itr];
+      acc_dst[*itr] = acc_src[p];
+    }
+}
 

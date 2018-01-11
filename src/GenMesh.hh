@@ -16,6 +16,9 @@
 #include <string>
 #include <vector>
 #include <map>
+
+#include "legion.h"
+
 #include "Vec2.hh"
 
 // forward declarations
@@ -26,7 +29,47 @@ typedef std::map<int, std::vector<int> > colormap;
 
 const int MULTICOLOR = -1;
 
+enum GenMeshTaskID {
+    TID_GENPOINTS_RECT = 'G' * 100,
+    TID_GENPOINTS_PIE,
+    TID_GENPOINTS_HEX,
+    TID_GENZONES_PIE,
+    TID_GENSIDES_RECT,
+    TID_GENSIDES_PIE,
+    TID_GENSIDES_HEX,
+};
+
 class GenMesh {
+public:
+    struct GenPointArgs {
+    public:
+      GenPointArgs(GenMesh *gmesh)
+        : nzx(gmesh->nzx), nzy(gmesh->nzy),
+          numpcx(gmesh->numpcx), numpcy(gmesh->numpcy),
+          lenx(gmesh->lenx), leny(gmesh->leny) { }
+    public:
+      const int nzx, nzy;
+      const int numpcx, numpcy;
+      const double lenx, leny;
+    };
+    struct GenZoneArgs {
+    public:
+      GenZoneArgs(GenMesh *gmesh)
+        : nzx(gmesh->nzx), nzy(gmesh->nzy),
+          numpcx(gmesh->numpcx), numpcy(gmesh->numpcy) { }
+    public:
+      const int nzx, nzy;
+      const int numpcx, numpcy;
+    };
+    struct GenSideArgs {
+    public:
+      GenSideArgs(GenMesh *gmesh)
+        : nzx(gmesh->nzx), nzy(gmesh->nzy),
+          numpcx(gmesh->numpcx), numpcy(gmesh->numpcy) { }
+    public:
+      const int nzx, nzy;
+      const int numpcx, numpcy;
+    };
 public:
 
     std::string meshtype;       // generated mesh type
@@ -35,6 +78,7 @@ public:
     double lenx, leny;          // length of mesh sides, in x and y
                                 // directions
     int numpcx, numpcy;         // number of pieces to generate,
+    bool pieces;
                                 // in x and y directions
     std::vector<int> zxbounds, zybounds;
                                 // boundaries of pieces, in x and y
@@ -81,6 +125,78 @@ public:
             std::vector<int>& zonecolors);
 
     void calcNumPieces(const int numpc);
+
+    int calcNumPoints(const int numpc);
+
+    int calcNumZones(const int numpc);
+
+    int calcNumSides(const int numpc);
+
+    void generatePointsParallel(
+            const int numpcs,
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion points_lr,
+            Legion::LogicalPartition points_lp,
+            Legion::IndexSpace piece_is);
+
+    void generateZonesParallel(
+            const int numpcs,
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion zones_lr,
+            Legion::LogicalPartition zones_lp,
+            Legion::IndexSpace piece_is);
+
+    void generateSidesParallel(
+            const int numpcs,
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion sides_lr,
+            Legion::LogicalPartition sides_lp,
+            Legion::IndexSpace piece_is);
+
+    static void genPointsRect(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void genPointsPie(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void genPointsHex(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void genZonesPie(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void genSidesRect(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void genSidesPie(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void genSidesHex(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
 }; // class GenMesh
 

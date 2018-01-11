@@ -28,11 +28,23 @@ enum HydroBCFieldID {
 };
 
 enum HydroBCTaskID {
-    TID_APPLYFIXEDBC = 'B' * 100
+    TID_APPLYFIXEDBC = 'B' * 100,
+    TID_COUNTBCPOINTS,
+    TID_COUNTBCRANGES,
+    TID_CREATEBCMAPS
 };
 
 
 class HydroBC {
+public:
+    struct CountBCArgs {
+    public:
+        CountBCArgs(double b, double e, bool x)
+          : bound(b), eps(e), xplane(x) { }
+    public:
+        double bound, eps;
+        bool xplane;
+    };
 public:
 
     // associated mesh object
@@ -44,21 +56,45 @@ public:
     std::vector<int> pchbfirst;    // start/stop index for bdy pt chunks
     std::vector<int> pchblast;
 
-    LegionRuntime::HighLevel::LogicalRegion lrb;
-    LegionRuntime::HighLevel::LogicalPartition lpb;
+    Legion::LogicalRegion lrb;
+    Legion::LogicalPartition lpb;
 
     HydroBC(
             Mesh* msh,
             const double2 v,
             const std::vector<int>& mbp);
 
+    HydroBC(
+            Mesh* msh,
+            const double2 v,
+            const double bound, 
+            const bool xplane);
+
     ~HydroBC();
 
     static void applyFixedBCTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void countBCPointsTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static Legion::coord_t countBCRangesTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void createBCMapsTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
 }; // class HydroBC
 

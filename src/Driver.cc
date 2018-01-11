@@ -31,20 +31,20 @@ Driver::Driver(
         const InputFile* inp,
         const std::string& pname,
         const int numpcs,
-        LegionRuntime::HighLevel::Context ctx,
-        LegionRuntime::HighLevel::HighLevelRuntime* runtime)
+        const bool parallel,
+        Context ctx,
+        Runtime* runtime)
         : probname(pname) {
-    cout << "********************" << endl;
-    cout << "Running PENNANT v0.6" << endl;
-    cout << "********************" << endl;
-    cout << endl;
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "********************\n");
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Running PENNANT v0.6\n");
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "********************\n\n");
 
-    cout << "Running Legion on " << numpcs << " piece(s)" << endl;
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Running Legion on %d piece(s)", numpcs);
 
     cstop = inp->getInt("cstop", 999999);
     tstop = inp->getDouble("tstop", 1.e99);
     if (cstop == 999999 && tstop == 1.e99) {
-        cerr << "Must specify either cstop or tstop" << endl;
+        LEGION_PRINT_ONCE(runtime, ctx, stderr, "Must specify either cstop or tstop\n");
         exit(1);
     }
     dtmax = inp->getDouble("dtmax", 1.e99);
@@ -53,7 +53,7 @@ Driver::Driver(
     dtreport = inp->getInt("dtreport", 10);
 
     // initialize mesh, hydro
-    mesh = new Mesh(inp, numpcs, ctx, runtime);
+    mesh = new Mesh(inp, numpcs, parallel, ctx, runtime);
     hydro = new Hydro(inp, mesh, ctx, runtime);
 
 }
@@ -65,17 +65,20 @@ Driver::~Driver() {
 
 }
 
-void Driver::run() {
+void Driver::run(
+        Context ctx,
+        Runtime* runtime) {
 
     time = 0.0;
     cycle = 0;
 
-    double tbegin, tlast;
-    // get starting timestamp
-    struct timeval sbegin;
-    gettimeofday(&sbegin, NULL);
-    tbegin = sbegin.tv_sec + sbegin.tv_usec * 1.e-6;
-    tlast = tbegin;
+    // Better timing for Legion
+    TimingLauncher timing_launcher(MEASURE_MICRO_SECONDS);
+    std::deque<TimingMeasurement> timing_measurements;
+    // First make sure all our setup is done before beginning timing
+    runtime->issue_execution_fence(ctx);
+    // Get our start time
+    Future f_start = runtime->issue_timing_measurement(ctx, timing_launcher);
 
     // main event loop
     while (cycle < cstop && time < tstop) {
@@ -91,48 +94,58 @@ void Driver::run() {
         time += dt;
 
         if (cycle == 1 || cycle % dtreport == 0) {
-            struct timeval scurr;
-            gettimeofday(&scurr, NULL);
-            double tcurr = scurr.tv_sec + scurr.tv_usec * 1.e-6;
-            double tdiff = tcurr - tlast;
 
-            cout << scientific << setprecision(5);
-            cout << "End cycle " << setw(6) << cycle
-                 << ", time = " << setw(11) << time
-                 << ", dt = " << setw(11) << dt
-                 << ", wall = " << setw(11) << tdiff << endl;
-            cout << "dt limiter: " << msgdt << endl;
+            timing_launcher.preconditions.clear();
+            timing_launcher.add_precondition(hydro->f_cdt);
+            timing_measurements.push_back(TimingMeasurement());
+            TimingMeasurement &measurement = timing_measurements.back();
+            measurement.cycle = cycle;
+            measurement.f_time = 
+              runtime->issue_timing_measurement(ctx, timing_launcher);
+            measurement.time = time;
+            measurement.dt = dt;
+            measurement.msgdt = msgdt;
 
-            tlast = tcurr;
         } // if cycle...
 
     } // while cycle...
 
     // get stopping timestamp
-    struct timeval send;
-    gettimeofday(&send, NULL);
-    double tend = send.tv_sec + send.tv_usec * 1.e-6;
-    double runtime = tend - tbegin;
+    runtime->issue_execution_fence(ctx);
+    Future f_stop = runtime->issue_timing_measurement(ctx, timing_launcher);
+
+    const double tbegin = f_start.get_result<long long>();
+    double tlast = tbegin;
+    for (std::deque<TimingMeasurement>::const_iterator it = 
+          timing_measurements.begin(); it != timing_measurements.end(); it++)
+    {
+      const double tnext = it->f_time.get_result<long long>();
+      const double tdiff = tnext - tlast; 
+      LEGION_PRINT_ONCE(runtime, ctx, stdout, "End cycle %6d, time = %11.5g"
+          ", dt = %11.5g, wall = %11.5g us\n", it->cycle, it->time, it->dt, tdiff);
+      LEGION_PRINT_ONCE(runtime, ctx, stdout, "dt limiter: %s\n", it->msgdt.c_str());
+      tlast = tnext;
+    }
+
+    const double tend = f_stop.get_result<long long>();
+    const double walltime = tend - tbegin;
 
     // write end message
-    cout << endl;
-    cout << "Run complete" << endl;
-    cout << scientific << setprecision(6);
-    cout << "cycle = " << setw(6) << cycle
-         << ",         cstop = " << setw(6) << cstop << endl;
-    cout << "time  = " << setw(14) << time
-         << ", tstop = " << setw(14) << tstop << endl;
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "\nRun complete\n");
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "cycle = %6d,        cstop = %6d\n", cycle, cstop);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "time = %14.6g, tstop = %14.6g\n\n", time, tstop);
 
-    cout << endl;
-    cout << "************************************" << endl;
-    cout << "hydro cycle run time= " << setw(14) << runtime << endl;
-    cout << "************************************" << endl;
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "hydro cycle run time= %14.8g us\n", walltime);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
 
 
-    // do final mesh output
-    hydro->getFinalState();
-    mesh->write(probname, cycle, time,
-            hydro->zr, hydro->ze, hydro->zp);
+    // do final mesh output if we aren't in a parallel mode
+    if (!mesh->parallel) {
+      hydro->getFinalState();
+      mesh->write(probname, cycle, time,
+              hydro->zr, hydro->ze, hydro->zp);
+    }
 
 }
 

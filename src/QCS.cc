@@ -23,24 +23,35 @@
 #include "Hydro.hh"
 
 using namespace std;
-using namespace LegionRuntime::HighLevel;
-using namespace LegionRuntime::Accessor;
+using namespace Legion;
 
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
-    HighLevelRuntime::register_legion_task<QCS::setCornerDivTask>(
-            TID_SETCORNERDIV, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "setcornerdiv");
-    HighLevelRuntime::register_legion_task<QCS::setQCnForceTask>(
-            TID_SETQCNFORCE, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "setqcnforce");
-    HighLevelRuntime::register_legion_task<QCS::setForceTask>(
-            TID_SETFORCEQCS, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "setforceqcs");
-    HighLevelRuntime::register_legion_task<QCS::setVelDiffTask>(
-            TID_SETVELDIFF, Processor::LOC_PROC, true, true,
-            AUTO_GENERATE_ID, TaskConfigOptions(true), "setveldiff");
+    {
+      TaskVariantRegistrar registrar(TID_SETCORNERDIV, "CPU setcornerdiv");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<QCS::setCornerDivTask>(registrar, "setcornerdiv");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_SETQCNFORCE, "CPU setqcnforce");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<QCS::setQCnForceTask>(registrar, "setqcnforce");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_SETFORCEQCS, "CPU setforceqcs");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<QCS::setForceTask>(registrar, "setforceqcs");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_SETVELDIFF, "CPU setveldiff");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<QCS::setVelDiffTask>(registrar, "setveldiff");
+    }
 }
 }; // namespace
 
@@ -82,147 +93,127 @@ void QCS::setCornerDivTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<ptr_t> acc_mapsp1 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP1);
-    MyAccessor<ptr_t> acc_mapsp2 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP2);
-    MyAccessor<ptr_t> acc_mapss3 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSS3);
-    MyAccessor<int> acc_mapsp1reg =
-        get_accessor<int>(regions[0], FID_MAPSP1REG);
-    MyAccessor<int> acc_mapsp2reg =
-        get_accessor<int>(regions[0], FID_MAPSP2REG);
-    MyAccessor<double2> acc_ex =
-        get_accessor<double2>(regions[0], FID_EXP);
-    MyAccessor<double> acc_elen =
-        get_accessor<double>(regions[0], FID_ELEN);
-    MyAccessor<int> acc_znump =
-        get_accessor<int>(regions[1], FID_ZNUMP);
-    MyAccessor<double2> acc_zx =
-        get_accessor<double2>(regions[1], FID_ZXP);
-    MyAccessor<double2> acc_pu[2] = {
-        get_accessor<double2>(regions[2], FID_PU0),
-        get_accessor<double2>(regions[3], FID_PU0)
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<Pointer> acc_mapss3(regions[0], FID_MAPSS3);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
+    const AccessorRO<double2> acc_ex(regions[0], FID_EXP);
+    const AccessorRO<double> acc_elen(regions[0], FID_ELEN);
+    const AccessorRO<int> acc_znump(regions[1], FID_ZNUMP);
+    const AccessorRO<double2> acc_zx(regions[1], FID_ZXP);
+    const AccessorRO<double2> acc_pu[2] = {
+        AccessorRO<double2>(regions[2], FID_PU0),
+        AccessorRO<double2>(regions[3], FID_PU0)
     };
-    MyAccessor<double2> acc_px[2] = {
-        get_accessor<double2>(regions[2], FID_PXP),
-        get_accessor<double2>(regions[3], FID_PXP)
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[2], FID_PXP),
+        AccessorRO<double2>(regions[3], FID_PXP)
     };
-    MyAccessor<double2> acc_zuc =
-        get_accessor<double2>(regions[4], FID_ZUC);
-    MyAccessor<double> acc_carea =
-        get_accessor<double>(regions[5], FID_CAREA);
-    MyAccessor<double> acc_ccos =
-        get_accessor<double>(regions[5], FID_CCOS);
-    MyAccessor<double> acc_cdiv =
-        get_accessor<double>(regions[5], FID_CDIV);
-    MyAccessor<double> acc_cevol =
-        get_accessor<double>(regions[5], FID_CEVOL);
-    MyAccessor<double> acc_cdu =
-        get_accessor<double>(regions[5], FID_CDU);
+    const AccessorWD<double2> acc_zuc(regions[4], FID_ZUC);
+    const AccessorWD<double> acc_carea(regions[5], FID_CAREA);
+    const AccessorWD<double> acc_ccos(regions[5], FID_CCOS);
+    const AccessorWD<double> acc_cdiv(regions[5], FID_CDIV);
+    const AccessorWD<double> acc_cevol(regions[5], FID_CEVOL);
+    const AccessorWD<double> acc_cdu(regions[5], FID_CDU);
 
     // [1] Compute a zone-centered velocity
     const IndexSpace& isz = task->regions[1].region.get_index_space();
-    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next(); )
-    {
-        ptr_t z = itrz.next();
-        acc_zuc.write(z, double2(0., 0.));
-    }
+    for (PointIterator itz(runtime, isz); itz(); itz++)
+        acc_zuc[*itz] = double2(0., 0.);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next(); )
+    for (PointIterator its(runtime, iss); its(); its++)
     {
-        ptr_t s = itrs.next();
-        ptr_t p = acc_mapsp1.read(s);
-        int preg = acc_mapsp1reg.read(s);
-        ptr_t z = acc_mapsz.read(s);
-        double2 pu = acc_pu[preg].read(p);
-        double2 zuc = acc_zuc.read(z);
-        int n = acc_znump.read(z);
-        zuc += pu / n;
-        acc_zuc.write(z, zuc);
+        const Pointer s = *its;
+        const Pointer p = acc_mapsp1[s];
+        const int preg = acc_mapsp1reg[s];
+        const Pointer z = acc_mapsz[s];
+        const double2 pu = acc_pu[preg][p];
+        const double2 zuc = acc_zuc[z];
+        const int n = acc_znump[z];
+        acc_zuc[z] = zuc + pu / n;
     }
 
     // [2] Divergence at the corner
-    for (IndexIterator itrc(runtime,ctx,iss); itrc.has_next();)
+    for (PointIterator its(runtime, iss); its(); its++)
     {
-        ptr_t c = itrc.next();
-        ptr_t s2 = c;
-        ptr_t s = acc_mapss3.read(s2);
+        const Pointer c = *its;
+        const Pointer s2 = c;
+        const Pointer s = acc_mapss3[s2];
         // Associated zone, point
-        ptr_t z = acc_mapsz.read(s);
-        ptr_t p = acc_mapsp2.read(s);
-        int preg = acc_mapsp2reg.read(s);
+        const Pointer z = acc_mapsz[s];
+        const Pointer p = acc_mapsp2[s];
+        const int preg = acc_mapsp2reg[s];
         // Neighboring points
-        ptr_t p1 = acc_mapsp1.read(s);
-        int p1reg = acc_mapsp1reg.read(s);
-        ptr_t p2 = acc_mapsp2.read(s2);
-        int p2reg = acc_mapsp2reg.read(s2);
+        const Pointer p1 = acc_mapsp1[s];
+        const int p1reg = acc_mapsp1reg[s];
+        const Pointer p2 = acc_mapsp2[s2];
+        const int p2reg = acc_mapsp2reg[s2];
 
         // Velocities and positions
         // 0 = point p
-        double2 up0 = acc_pu[preg].read(p);
-        double2 xp0 = acc_px[preg].read(p);
+        const double2 up0 = acc_pu[preg][p];
+        const double2 xp0 = acc_px[preg][p];
         // 1 = edge e2
-        double2 up1 = 0.5 * (up0 + acc_pu[p2reg].read(p2));
-        double2 xp1 = acc_ex.read(s2);
+        const double2 up1 = 0.5 * (up0 + acc_pu[p2reg][p2]);
+        const double2 xp1 = acc_ex[s2];
         // 2 = zone center z
-        double2 up2 = acc_zuc.read(z);
-        double2 xp2 = acc_zx.read(z);
+        const double2 up2 = acc_zuc[z];
+        const double2 xp2 = acc_zx[z];
         // 3 = edge e1
-        double2 up3 = 0.5 * (acc_pu[p1reg].read(p1) + up0);
-        double2 xp3 = acc_ex.read(s);
+        const double2 up3 = 0.5 * (acc_pu[p1reg].read(p1) + up0);
+        const double2 xp3 = acc_ex[s];
 
         // compute 2d cartesian volume of corner
         double cvolume = 0.5 * cross(xp2 - xp0, xp3 - xp1);
-        acc_carea.write(c, cvolume);
+        acc_carea[c] = cvolume;
 
         // compute cosine angle
-        double2 v1 = xp3 - xp0;
-        double2 v2 = xp1 - xp0;
-        double de1 = acc_elen.read(s);
-        double de2 = acc_elen.read(s2);
-        double minelen = min(de1, de2);
-        double ccos = ((minelen < 1.e-12) ?
+        const double2 v1 = xp3 - xp0;
+        const double2 v2 = xp1 - xp0;
+        const double de1 = acc_elen[s];
+        const double de2 = acc_elen[s2];
+        const double minelen = min(de1, de2);
+        const double ccos = ((minelen < 1.e-12) ?
                 0. :
                 4. * dot(v1, v2) / (de1 * de2));
-        acc_ccos.write(c, ccos);
+        acc_ccos[c] = ccos;
 
         // compute divergence of corner
-        double cdiv = (cross(up2 - up0, xp3 - xp1) -
+        const double cdiv = (cross(up2 - up0, xp3 - xp1) -
                 cross(up3 - up1, xp2 - xp0)) /
                 (2.0 * cvolume);
-        acc_cdiv.write(c, cdiv);
+        acc_cdiv[c] = cdiv;
 
         // compute evolution factor
-        double2 dxx1 = 0.5 * (xp1 + xp2 - xp0 - xp3);
-        double2 dxx2 = 0.5 * (xp2 + xp3 - xp0 - xp1);
-        double dx1 = length(dxx1);
-        double dx2 = length(dxx2);
+        const double2 dxx1 = 0.5 * (xp1 + xp2 - xp0 - xp3);
+        const double2 dxx2 = 0.5 * (xp2 + xp3 - xp0 - xp1);
+        const double dx1 = length(dxx1);
+        const double dx2 = length(dxx2);
 
         // average corner-centered velocity
-        double2 duav = 0.25 * (up0 + up1 + up2 + up3);
+        const double2 duav = 0.25 * (up0 + up1 + up2 + up3);
 
-        double test1 = abs(dot(dxx1, duav) * dx2);
-        double test2 = abs(dot(dxx2, duav) * dx1);
-        double num = (test1 > test2 ? dx1 : dx2);
-        double den = (test1 > test2 ? dx2 : dx1);
-        double r = num / den;
+        const double test1 = abs(dot(dxx1, duav) * dx2);
+        const double test2 = abs(dot(dxx2, duav) * dx1);
+        const double num = (test1 > test2 ? dx1 : dx2);
+        const double den = (test1 > test2 ? dx2 : dx1);
+        const double r = num / den;
         double evol = sqrt(4.0 * cvolume * r);
         evol = min(evol, 2.0 * minelen);
 
         // compute delta velocity
-        double dv1 = length2(up1 + up2 - up0 - up3);
-        double dv2 = length2(up2 + up3 - up0 - up1);
+        const double dv1 = length2(up1 + up2 - up0 - up3);
+        const double dv2 = length2(up2 + up3 - up0 - up1);
         double du = sqrt(max(dv1, dv2));
 
         evol = (cdiv < 0.0 ? evol : 0.);
         du   = (cdiv < 0.0 ? du   : 0.);
-        acc_cevol.write(c, evol);
-        acc_cdu.write(c, du);
+        acc_cevol[c] = evol;
+        acc_cdu[c] = du;
     }
 }
 
@@ -232,98 +223,82 @@ void QCS::setQCnForceTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     const double* args = (const double*) task->args;
     const double qgamma = args[0];
     const double q1     = args[1];
     const double q2     = args[2];
 
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<ptr_t> acc_mapsp1 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP1);
-    MyAccessor<ptr_t> acc_mapsp2 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP2);
-    MyAccessor<ptr_t> acc_mapss3 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSS3);
-    MyAccessor<int> acc_mapsp1reg =
-        get_accessor<int>(regions[0], FID_MAPSP1REG);
-    MyAccessor<int> acc_mapsp2reg =
-        get_accessor<int>(regions[0], FID_MAPSP2REG);
-    MyAccessor<double> acc_elen =
-        get_accessor<double>(regions[0], FID_ELEN);
-    MyAccessor<double> acc_cdiv =
-        get_accessor<double>(regions[0], FID_CDIV);
-    MyAccessor<double> acc_cdu =
-        get_accessor<double>(regions[0], FID_CDU);
-    MyAccessor<double> acc_cevol =
-        get_accessor<double>(regions[0], FID_CEVOL);
-    MyAccessor<double> acc_zrp =
-        get_accessor<double>(regions[1], FID_ZRP);
-    MyAccessor<double> acc_zss =
-        get_accessor<double>(regions[1], FID_ZSS);
-    MyAccessor<double2> acc_pu[2] = {
-        get_accessor<double2>(regions[2], FID_PU0),
-        get_accessor<double2>(regions[3], FID_PU0)
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<Pointer> acc_mapss3(regions[0], FID_MAPSS3);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
+    const AccessorRO<double> acc_elen(regions[0], FID_ELEN);
+    const AccessorRO<double> acc_cdiv(regions[0], FID_CDIV);
+    const AccessorRO<double> acc_cdu(regions[0], FID_CDU);
+    const AccessorRO<double> acc_cevol(regions[0], FID_CEVOL);
+    const AccessorRO<double> acc_zrp(regions[1], FID_ZRP);
+    const AccessorRO<double> acc_zss(regions[1], FID_ZSS);
+    const AccessorRO<double2> acc_pu[2] = {
+        AccessorRO<double2>(regions[2], FID_PU0),
+        AccessorRO<double2>(regions[3], FID_PU0)
     };
-    MyAccessor<double> acc_crmu =
-        get_accessor<double>(regions[4], FID_CRMU);
-    MyAccessor<double2> acc_cqe1 =
-        get_accessor<double2>(regions[4], FID_CQE1);
-    MyAccessor<double2> acc_cqe2 =
-        get_accessor<double2>(regions[4], FID_CQE2);
+    const AccessorWD<double> acc_crmu(regions[4], FID_CRMU);
+    const AccessorWD<double2> acc_cqe1(regions[4], FID_CQE1);
+    const AccessorWD<double2> acc_cqe2(regions[4], FID_CQE2);
 
     const double gammap1 = qgamma + 1.0;
 
     // [4.1] Compute the crmu (real Kurapatenko viscous scalar)
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrc(runtime,ctx,iss); itrc.has_next(); )
+    for (PointIterator its(runtime, iss); its(); its++)
     {
-        ptr_t c = itrc.next();
-        ptr_t z = acc_mapsz.read(c);
+        const Pointer c = *its;
+        const Pointer z = acc_mapsz[c];
 
         // Kurapatenko form of the viscosity
-        double cdu = acc_cdu.read(c);
-        double ztmp2 = q2 * 0.25 * gammap1 * cdu;
-        double zss = acc_zss.read(z);
-        double ztmp1 = q1 * zss;
-        double zkur = ztmp2 + sqrt(ztmp2 * ztmp2 + ztmp1 * ztmp1);
+        const double cdu = acc_cdu[c];
+        const double ztmp2 = q2 * 0.25 * gammap1 * cdu;
+        const double zss = acc_zss[z];
+        const double ztmp1 = q1 * zss;
+        const double zkur = ztmp2 + sqrt(ztmp2 * ztmp2 + ztmp1 * ztmp1);
         // Compute crmu for each corner
-        double zrp = acc_zrp.read(z);
-        double cevol = acc_cevol.read(c);
-        double crmu = zkur * zrp * cevol;
-        double cdiv = acc_cdiv.read(c);
-        crmu = ((cdiv > 0.0) ? 0. : crmu);
-        acc_crmu.write(c, crmu);
+        const double zrp = acc_zrp[z];
+        const double cevol = acc_cevol[c];
+        const double crmu = zkur * zrp * cevol;
+        const double cdiv = acc_cdiv[c];
+        acc_crmu[c] = ((cdiv > 0.0) ? 0. : crmu);
     }
 
     // [4.2] Compute the cqe for each corner
-    for (IndexIterator itrc(runtime,ctx,iss); itrc.has_next(); )
+    for (PointIterator its(runtime, iss); its(); its++)
     {
-        ptr_t c = itrc.next();
-        ptr_t s2 = c;
-        ptr_t s = acc_mapss3.read(s2);
-        ptr_t p = acc_mapsp2.read(s);
-        int preg = acc_mapsp2reg.read(s);
+        const Pointer c = *its;
+        const Pointer s2 = c;
+        const Pointer s = acc_mapss3[s2];
+        const Pointer p = acc_mapsp2[s];
+        const int preg = acc_mapsp2reg[s];
         // Associated point 1
-        ptr_t p1 = acc_mapsp1.read(s);
-        int p1reg = acc_mapsp1reg.read(s);
+        const Pointer p1 = acc_mapsp1[s];
+        const int p1reg = acc_mapsp1reg[s];
         // Associated point 2
-        ptr_t p2 = acc_mapsp2.read(s2);
-        int p2reg = acc_mapsp2reg.read(s2);
+        const Pointer p2 = acc_mapsp2[s2];
+        const int p2reg = acc_mapsp2reg[s2];
 
         // Compute: cqe(1,2,3)=edge 1, y component (2nd), 3rd corner
         //          cqe(2,1,3)=edge 2, x component (1st)
-        double crmu = acc_crmu.read(c);
-        double2 pu = acc_pu[preg].read(p);
-        double2 pu1 = acc_pu[p1reg].read(p1);
-        double elen = acc_elen.read(s);
-        double2 cqe1 = crmu * (pu - pu1) / elen;
-        acc_cqe1.write(c, cqe1);
-        double2 pu2 = acc_pu[p2reg].read(p2);
-        double elen2 = acc_elen.read(s2);
-        double2 cqe2 = crmu * (pu2 - pu) / elen2;
-        acc_cqe2.write(c, cqe2);
+        const double crmu = acc_crmu[c];
+        const double2 pu = acc_pu[preg][p];
+        const double2 pu1 = acc_pu[p1reg][p1];
+        const double elen = acc_elen[s];
+        const double2 cqe1 = crmu * (pu - pu1) / elen;
+        acc_cqe1[c] = cqe1;
+        const double2 pu2 = acc_pu[p2reg][p2];
+        const double elen2 = acc_elen[s2];
+        const double2 cqe2 = crmu * (pu2 - pu) / elen2;
+        acc_cqe2[c] = cqe2;
     }
 }
 
@@ -333,59 +308,50 @@ void QCS::setForceTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
-    MyAccessor<ptr_t> acc_mapss4 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSS4);
-    MyAccessor<double> acc_carea =
-        get_accessor<double>(regions[0], FID_CAREA);
-    MyAccessor<double2> acc_cqe1 =
-        get_accessor<double2>(regions[0], FID_CQE1);
-    MyAccessor<double2> acc_cqe2 =
-        get_accessor<double2>(regions[0], FID_CQE2);
-    MyAccessor<double> acc_elen =
-        get_accessor<double>(regions[0], FID_ELEN);
-    MyAccessor<double> acc_ccos =
-        get_accessor<double>(regions[1], FID_CCOS);
-    MyAccessor<double> acc_cw =
-        get_accessor<double>(regions[2], FID_CW);
-    MyAccessor<double2> acc_sfq =
-        get_accessor<double2>(regions[2], FID_SFQ);
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapss4(regions[0], FID_MAPSS4);
+    const AccessorRO<double> acc_carea(regions[0], FID_CAREA);
+    const AccessorRO<double2> acc_cqe1(regions[0], FID_CQE1);
+    const AccessorRO<double2> acc_cqe2(regions[0], FID_CQE2);
+    const AccessorRO<double> acc_elen(regions[0], FID_ELEN);
+    const AccessorWD<double> acc_ccos(regions[1], FID_CCOS);
+    const AccessorWD<double> acc_cw(regions[2], FID_CW);
+    const AccessorWD<double2> acc_sfq(regions[2], FID_SFQ);
 
     // [5.1] Preparation of extra variables
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrc(runtime,ctx,iss); itrc.has_next(); )
+    for (PointIterator its(runtime, iss); its(); its++)
     {
-        ptr_t c = itrc.next();
-        double ccos = acc_ccos.read(c);
-        double csin2 = 1.0 - ccos * ccos;
-        double carea = acc_carea.read(c);
-        double cw = ((csin2 < 1.e-4) ? 0. : carea / csin2);
-        acc_cw.write(c, cw);
-        ccos      = ((csin2 < 1.e-4) ? 0. : ccos);
-        acc_ccos.write(c, ccos);
+        const Pointer c = *its;
+        const double ccos = acc_ccos[c];
+        const double csin2 = 1.0 - ccos * ccos;
+        const double carea = acc_carea[c];
+        const double cw = ((csin2 < 1.e-4) ? 0. : carea / csin2);
+        acc_cw[c] = cw;
+        acc_ccos[c] = ((csin2 < 1.e-4) ? 0. : ccos);
     }
 
     // [5.2] Set-Up the forces on corners
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next(); )
+    for (PointIterator its(runtime, iss); its(); its++)
     {
-        ptr_t s = itrs.next();
+        const Pointer s = *its;
         // Associated corners 1 and 2
-        ptr_t c1 = s;
-        ptr_t c2 = acc_mapss4.read(s);
+        const Pointer c1 = s;
+        const Pointer c2 = acc_mapss4[s];
         // Edge length for c1, c2 contribution to s
-        double el = acc_elen.read(s);
+        const double el = acc_elen[s];
 
-        double cw1 = acc_cw.read(c1);
-        double cw2 = acc_cw.read(c2);
-        double ccos1 = acc_ccos.read(c1);
-        double ccos2 = acc_ccos.read(c2);
-        double2 cqe11 = acc_cqe1.read(c1);
-        double2 cqe12 = acc_cqe1.read(c2);
-        double2 cqe21 = acc_cqe2.read(c1);
-        double2 cqe22 = acc_cqe2.read(c2);
-        double2 sfq = (cw1 * (cqe21 + ccos1 * cqe11) +
+        const double cw1 = acc_cw[c1];
+        const double cw2 = acc_cw[c2];
+        const double ccos1 = acc_ccos[c1];
+        const double ccos2 = acc_ccos[c2];
+        const double2 cqe11 = acc_cqe1[c1];
+        const double2 cqe12 = acc_cqe1[c2];
+        const double2 cqe21 = acc_cqe2[c1];
+        const double2 cqe22 = acc_cqe2[c2];
+        const double2 sfq = (cw1 * (cqe21 + ccos1 * cqe11) +
                        cw2 * (cqe12 + ccos2 * cqe22)) / el;
-        acc_sfq.write(s, sfq);
+        acc_sfq[s] = sfq;
     }
 }
 
@@ -395,77 +361,65 @@ void QCS::setVelDiffTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
-        HighLevelRuntime *runtime) {
+        Runtime *runtime) {
     const double* args = (const double*) task->args;
     const double q1 = args[0];
     const double q2 = args[1];
 
-    MyAccessor<ptr_t> acc_mapsz =
-        get_accessor<ptr_t>(regions[0], FID_MAPSZ);
-    MyAccessor<ptr_t> acc_mapsp1 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP1);
-    MyAccessor<ptr_t> acc_mapsp2 =
-        get_accessor<ptr_t>(regions[0], FID_MAPSP2);
-    MyAccessor<int> acc_mapsp1reg =
-        get_accessor<int>(regions[0], FID_MAPSP1REG);
-    MyAccessor<int> acc_mapsp2reg =
-        get_accessor<int>(regions[0], FID_MAPSP2REG);
-    MyAccessor<double> acc_elen =
-        get_accessor<double>(regions[0], FID_ELEN);
-    MyAccessor<double> acc_zss =
-        get_accessor<double>(regions[1], FID_ZSS);
-    MyAccessor<double2> acc_pu[2] = {
-        get_accessor<double2>(regions[2], FID_PU0),
-        get_accessor<double2>(regions[3], FID_PU0)
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
+    const AccessorRO<double> acc_elen(regions[0], FID_ELEN);
+    const AccessorRO<double> acc_zss(regions[1], FID_ZSS);
+    const AccessorRO<double2> acc_pu[2] = {
+        AccessorRO<double2>(regions[2], FID_PU0),
+        AccessorRO<double2>(regions[3], FID_PU0)
     };
-    MyAccessor<double2> acc_px[2] = {
-        get_accessor<double2>(regions[2], FID_PXP),
-        get_accessor<double2>(regions[3], FID_PXP)
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[2], FID_PXP),
+        AccessorRO<double2>(regions[3], FID_PXP)
     };
-    MyAccessor<double> acc_ztmp =
-        get_accessor<double>(regions[4], FID_ZTMP);
-    MyAccessor<double> acc_zdu =
-        get_accessor<double>(regions[4], FID_ZDU);
+    const AccessorWD<double> acc_ztmp(regions[4], FID_ZTMP);
+    const AccessorWD<double> acc_zdu(regions[4], FID_ZDU);
 
     const IndexSpace& isz = task->regions[4].region.get_index_space();
-    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next(); )
-    {
-        ptr_t z = itrz.next();
-        acc_ztmp.write(z, 0.);
-    }
+    for (PointIterator itz(runtime, isz); itz(); itz++)
+        acc_ztmp[*itz] = 0.;
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (IndexIterator itrs(runtime,ctx,iss); itrs.has_next();)
+    for (PointIterator its(runtime, iss); its(); its++)
     {
-        ptr_t s = itrs.next();
-        ptr_t p1 = acc_mapsp1.read(s);
-        int p1reg = acc_mapsp1reg.read(s);
-        ptr_t p2 = acc_mapsp2.read(s);
-        int p2reg = acc_mapsp2reg.read(s);
-        ptr_t z  = acc_mapsz.read(s);
+        const Pointer s = *its;
+        const Pointer p1 = acc_mapsp1[s];
+        const int p1reg = acc_mapsp1reg[s];
+        const Pointer p2 = acc_mapsp2[s];
+        const int p2reg = acc_mapsp2reg[s];
+        const Pointer z = acc_mapsz[s];
 
-        double2 px1 = acc_px[p1reg].read(p1);
-        double2 px2 = acc_px[p2reg].read(p2);
-        double2 pu1 = acc_pu[p1reg].read(p1);
-        double2 pu2 = acc_pu[p2reg].read(p2);
-        double2 dx  = px2 - px1;
-        double2 du  = pu2 - pu1;
-        double lenx = acc_elen.read(s);
+        const double2 px1 = acc_px[p1reg][p1];
+        const double2 px2 = acc_px[p2reg][p2];
+        const double2 pu1 = acc_pu[p1reg][p1];
+        const double2 pu2 = acc_pu[p2reg][p2];
+        const double2 dx  = px2 - px1;
+        const double2 du  = pu2 - pu1;
+        const double lenx = acc_elen[s];
         double dux = dot(du, dx);
         dux = (lenx > 0. ? abs(dux) / lenx : 0.);
 
-        double ztmp  = acc_ztmp.read(z);
+        double ztmp  = acc_ztmp[z];
         ztmp = max(ztmp, dux);
-        acc_ztmp.write(z, ztmp);
+        acc_ztmp[z] = ztmp;
     }
 
-    for (IndexIterator itrz(runtime,ctx,isz); itrz.has_next();)
+    for (PointIterator itz(runtime, isz); itz(); itz++)
     {
-        ptr_t z = itrz.next();
-        double zss  = acc_zss.read(z);
-        double ztmp  = acc_ztmp.read(z);
-        double zdu = q1 * zss + 2. * q2 * ztmp;
-        acc_zdu.write(z, zdu);
+        const Pointer z = *itz;
+        const double zss  = acc_zss[z];
+        const double ztmp  = acc_ztmp[z];
+        const double zdu = q1 * zss + 2. * q2 * ztmp;
+        acc_zdu[z] = zdu;
     }
 }
 

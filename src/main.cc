@@ -16,12 +16,12 @@
 
 #include "legion.h"
 
-#include "MyMapper.hh"
+#include "PennantMapper.hh"
 #include "InputFile.hh"
 #include "Driver.hh"
 
 using namespace std;
-using namespace LegionRuntime::HighLevel;
+using namespace Legion;
 
 enum TaskID {
     TID_MAIN
@@ -30,35 +30,37 @@ enum TaskID {
 
 void registerMappers(
         Machine machine,
-        HighLevelRuntime *rt,
+        Runtime *rt,
         const std::set<Processor> &local_procs)
 {
     for (set<Processor>::const_iterator it = local_procs.begin();
         it != local_procs.end(); it++)
     {
         rt->replace_default_mapper(
-                new MyMapper(machine, rt, *it), *it);
+                new PennantMapper(machine, rt, *it), *it);
     }
 }
 
 
 void mainTask(const Task *task,
               const std::vector<PhysicalRegion> &regions,
-              Context ctx, HighLevelRuntime *runtime)
+              Context ctx, Runtime*runtime)
 {
-    const InputArgs& iargs = HighLevelRuntime::get_input_args();
+    const InputArgs& iargs = Runtime::get_input_args();
 
     // skip over legion args if present
     int i = 1;
     while (i < iargs.argc) {
         string arg(iargs.argv[i], 3);
-        if (arg != "-ll" && arg != "-hl" && arg != "-ca" && arg != "-le" && arg != "-dm") break;
+        if (arg != "-ll" && arg != "-lg" && arg != "-ca" && arg != "-le" && arg != "-dm") break;
         i += 2;
     }
     
     volatile bool debug = false;
     int numpcs = 1;
-    const char* filename;
+    bool sequential = false;
+    const char* filename = NULL;
+    bool warn = true;
     while (i < iargs.argc) { 
       if (iargs.argv[i] == string("-f")) { 
         filename = iargs.argv[i+1];
@@ -72,11 +74,23 @@ void mainTask(const Task *task,
         numpcs = atoi(iargs.argv[i + 1]);
         i += 2;
       }
-      else {
-        cerr << "Usage: pennant [legion args] "
-             << "[-n <numpcs>] <filename>" << endl;
-        exit(1);
+      else if (iargs.argv[i] == string("-s")) {
+        sequential = true;
+        i++;
       }
+      else {
+        if (warn) {
+          LEGION_PRINT_ONCE(runtime, ctx, stderr, "Usage: pennant [legion args] "
+                                                   "[-n <numpcs>] <filename>\n");
+          warn = false;
+        }
+        i++;
+      }
+    }
+
+    if (filename == NULL) {
+      LEGION_PRINT_ONCE(runtime, ctx, stderr, "No Pennant input file specified. Exitting...\n");
+      return; 
     }
 
     /* spin so debugger can attach... */
@@ -90,9 +104,9 @@ void mainTask(const Task *task,
     if (probname.substr(len - 4, 4) == ".pnt")
         probname = probname.substr(0, len - 4);
 
-    Driver drv(&inp, probname, numpcs, ctx, runtime);
+    Driver drv(&inp, probname, numpcs, !sequential, ctx, runtime);
 
-    drv.run();
+    drv.run(ctx, runtime);
 
 }
 
@@ -101,13 +115,14 @@ int main(int argc, char **argv)
 {
     // register main task only; other tasks have already been
     // registered by the classes that own them
-    HighLevelRuntime::set_top_level_task_id(TID_MAIN);
-    HighLevelRuntime::register_legion_task<mainTask>(
-      TID_MAIN, Processor::LOC_PROC, true, false,
-      AUTO_GENERATE_ID, TaskConfigOptions(), "main");
+    Runtime::set_top_level_task_id(TID_MAIN);
+    TaskVariantRegistrar registrar(TID_MAIN, "main");
+    registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+    registrar.set_replicable();
+    Runtime::preregister_task_variant<mainTask>(registrar, "main");
 
-    HighLevelRuntime::set_registration_callback(registerMappers);
+    Runtime::add_registration_callback(registerMappers);
 
-    return HighLevelRuntime::start(argc, argv);
+    return Runtime::start(argc, argv);
 }
 

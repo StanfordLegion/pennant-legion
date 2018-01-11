@@ -13,7 +13,7 @@
 #ifndef QCS_HH_
 #define QCS_HH_
 
-#include "legion_types.h"
+#include "legion.h"
 
 #include "Mesh.hh"
 
@@ -44,28 +44,28 @@ public:
     ~QCS();
 
     static void setCornerDivTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void setQCnForceTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void setForceTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void setVelDiffTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
 };  // class QCS
 

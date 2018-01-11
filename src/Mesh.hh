@@ -31,12 +31,15 @@ class ExportGold;
 enum MeshFieldID {
     FID_NUMSBAD = 'M' * 100,
     FID_MAPSP1,
+    FID_MAPSP1TEMP, // map from sides to points after loading only
     FID_MAPSP2,
+    FID_MAPSP2TEMP, // map from sides to points after loading only
     FID_MAPSZ,
     FID_MAPSS3,
     FID_MAPSS4,
     FID_MAPSP1REG,
     FID_MAPSP2REG,
+    FID_MAPPTEMP2PDENSE, // map from load points to dense points
     FID_ZNUMP,
     FID_PX,
     FID_EX,
@@ -57,7 +60,10 @@ enum MeshFieldID {
     FID_SSURFP,
     FID_ELEN,
     FID_SMF,
-    FID_ZDL
+    FID_ZDL,
+    FID_PIECE,
+    FID_COUNT,
+    FID_RANGE
 };
 
 enum HydroFieldID {
@@ -97,16 +103,18 @@ enum QCSFieldID {
 };
 
 enum MeshTaskID {
-    TID_COPYFIELDDBL = 'M' * 100,
-    TID_COPYFIELDDBL2,
-    TID_FILLFIELDDBL,
-    TID_FILLFIELDDBL2,
-    TID_SUMTOPTSDBL,
+    TID_SUMTOPTSDBL = 'M' * 100,
     TID_CALCCTRS,
     TID_CALCVOLS,
+    TID_CALCSIDEFRACS,
     TID_CALCSURFVECS,
     TID_CALCEDGELEN,
-    TID_CALCCHARLEN
+    TID_CALCCHARLEN,
+    TID_COUNTPOINTS,
+    TID_CALCRANGES,
+    TID_COMPACTPOINTS,
+    TID_CALCOWNERS,
+    TID_TEMPGATHER
 };
 
 enum MeshOpID {
@@ -176,6 +184,16 @@ public:
 
 class Mesh {
 public:
+    struct CalcOwnersArgs {
+    public:
+        CalcOwnersArgs(Legion::IndexPartition priv, 
+                       Legion::IndexPartition shared)
+          : ip_private(priv), ip_shared(shared) { }
+    public:
+        Legion::IndexPartition ip_private;
+        Legion::IndexPartition ip_shared;
+    };
+public:
 
     // children
     GenMesh* gmesh;
@@ -183,6 +201,7 @@ public:
     ExportGold* egold;
 
     // parameters
+    bool parallel;                 // perform parallel mesh generation
     int chunksize;                 // max size for processing chunks
     std::vector<double> subregion; // bounding box for a subregion
                                    // if nonempty, should have 4 entries:
@@ -229,43 +248,50 @@ public:
 
     std::vector<int> nodecolors;
     colormap nodemcolors;
-    LegionRuntime::HighLevel::Context ctx;
-    LegionRuntime::HighLevel::HighLevelRuntime* runtime;
-    LegionRuntime::HighLevel::LogicalRegion lrp, lrz, lrs;
-    LegionRuntime::HighLevel::LogicalRegion lrglb;
-    LegionRuntime::HighLevel::LogicalPartition lppall, lpz, lps;
-    LegionRuntime::HighLevel::LogicalPartition lppprv, lppmstr, lppshr;
-    LegionRuntime::HighLevel::Domain dompc;
+    Legion::Context ctx;
+    Legion::Runtime* runtime;
+    Legion::LogicalRegion lrp, lrz, lrs;
+    Legion::LogicalRegion lrglb;
+    Legion::LogicalPartition lppall, lpz, lps;
+    Legion::LogicalPartition lppprv, lppmstr, lppshr;
+    Legion::IndexSpace ispc;
+    Legion::IndexPartition ippc;
+    Legion::Domain dompc;
                                    // domain of legion pieces
-    LegionRuntime::HighLevel::FutureMap fmapcv;
+    Legion::Future f_cv;
                                    // future map for calcVolsTask
 
     Mesh(
             const InputFile* inp,
             const int numpcsa,
-            LegionRuntime::HighLevel::Context ctxa,
-            LegionRuntime::HighLevel::HighLevelRuntime* runtimea);
+            const bool parallel,
+            Legion::Context ctxa,
+            Legion::Runtime* runtimea);
     ~Mesh();
 
     template<typename T>
     void getField(
-            LegionRuntime::HighLevel::LogicalRegion& lr,
-            const LegionRuntime::HighLevel::FieldID fid,
+            Legion::LogicalRegion& lr,
+            const Legion::FieldID fid,
             T* var,
             const int n);
 
     template<typename T>
     void setField(
-            LegionRuntime::HighLevel::LogicalRegion& lr,
-            const LegionRuntime::HighLevel::FieldID fid,
+            Legion::LogicalRegion& lr,
+            const Legion::FieldID fid,
             const T* var,
             const int n);
 
-    template<typename Op>
-    typename Op::LHS reduceFutureMap(
-            LegionRuntime::HighLevel::FutureMap& fmap);
-
     void init();
+    
+    void initParallel();
+
+    void initPoints();
+
+    void initZones();
+
+    void initSides();
 
     // populate mapping arrays
     void initSides(
@@ -299,55 +325,47 @@ public:
             std::vector<int>& pchbfirst,
             std::vector<int>& pchblast);
 
-    template<typename T>
-    static void copyFieldTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
-
-    template<typename T>
-    static void fillFieldTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
-
     static void sumToPointsTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void calcCtrsTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static int calcVolsTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void calcSideFracsTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void calcSurfVecsTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void calcEdgeLenTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void calcCharLenTask(
-            const LegionRuntime::HighLevel::Task *task,
-            const std::vector<LegionRuntime::HighLevel::PhysicalRegion> &regions,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime *runtime);
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     // compute edge, zone centers
     void calcCtrs(
@@ -380,73 +398,151 @@ public:
             const int sfirst,
             const int slast);
 
+    void computeRangesParallel(
+            const int numpcs,
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_all_range,
+            Legion::LogicalRegion lr_private_range,
+            Legion::LogicalPartition lp_private_range,
+            Legion::LogicalRegion lr_shared_range,
+            Legion::LogicalPartition lp_shared_range,
+            Legion::IndexPartition ip_private,
+            Legion::IndexPartition ip_shared,
+            Legion::IndexSpace is_piece);
+
+    void compactPointsParallel(
+            const int numpcs,
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_temp_points,
+            Legion::LogicalPartition lp_temp_points,
+            Legion::LogicalRegion lr_points,
+            Legion::LogicalPartition lp_points,
+            Legion::IndexSpace is_piece);
+
+    void calcOwnershipParallel(
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_sides,
+            Legion::LogicalPartition lp_sides,
+            Legion::IndexPartition ip_private,
+            Legion::IndexPartition ip_shared,
+            Legion::IndexSpace is_piece);
+
+    void calcCtrsParallel(
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_sides,
+            Legion::LogicalPartition lp_sides,
+            Legion::LogicalRegion lr_zones,
+            Legion::LogicalPartition lp_zones,
+            Legion::LogicalRegion lr_points,
+            Legion::LogicalPartition lp_points_private,
+            Legion::LogicalPartition lp_points_shared,
+            Legion::IndexSpace is_piece);
+
+    Legion::Future calcVolsParallel(
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_sides,
+            Legion::LogicalPartition lp_sides,
+            Legion::LogicalRegion lr_zones,
+            Legion::LogicalPartition lp_zones,
+            Legion::LogicalRegion lr_points,
+            Legion::LogicalPartition lp_points_private,
+            Legion::LogicalPartition lp_points_shared,
+            Legion::IndexSpace is_piece);
+
+    void calcSideFracsParallel(
+            Legion::Runtime *runtime,
+            Legion::Context ctx,
+            Legion::LogicalRegion lr_sides,
+            Legion::LogicalPartition lp_sides,
+            Legion::LogicalRegion lr_zones,
+            Legion::LogicalPartition lp_zones,
+            Legion::IndexSpace is_piece);
+
+    static void countPointsTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void calcRangesTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void compactPointsTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void calcOwnersTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void tempGatherTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
 }; // class Mesh
 
 
 template<typename T>
 void Mesh::getField(
-        LegionRuntime::HighLevel::LogicalRegion& lr,
-        const LegionRuntime::HighLevel::FieldID fid,
+        Legion::LogicalRegion& lr,
+        const Legion::FieldID fid,
         T* var,
         const int n) {
-    using namespace LegionRuntime::HighLevel;
-    using namespace LegionRuntime::Accessor;
+    using namespace Legion;
     RegionRequirement req(lr, READ_ONLY, EXCLUSIVE, lr);
     req.add_field(fid);
     InlineLauncher inl(req);
     PhysicalRegion pr = runtime->map_region(ctx, inl);
     pr.wait_until_valid();
-    RegionAccessor<AccessorType::Generic, T> acc =
-            pr.get_field_accessor(fid).typeify<T>();
+    FieldAccessor<READ_ONLY,T,1,coord_t,
+      Realm::AffineAccessor<T,1,coord_t> > acc(pr, fid);
     const IndexSpace& is = lr.get_index_space();
     
-    IndexIterator itr(runtime, ctx, is);
-    for (int i = 0; i < n; ++i)
-    {
-        ptr_t p = itr.next();
-        var[i] = acc.read(p);
-    }
+    int i = 0;
+    for (PointInDomainIterator<1,coord_t> itr(
+          runtime->get_index_space_domain(IndexSpaceT<1,coord_t>(is))); 
+          itr(); itr++, i++)
+      var[i] = acc[*itr];
     runtime->unmap_region(ctx, pr);
 }
 
 
 template<typename T>
 void Mesh::setField(
-        LegionRuntime::HighLevel::LogicalRegion& lr,
-        const LegionRuntime::HighLevel::FieldID fid,
+        Legion::LogicalRegion& lr,
+        const Legion::FieldID fid,
         const T* var,
         const int n) {
-    using namespace LegionRuntime::HighLevel;
-    using namespace LegionRuntime::Accessor;
+    using namespace Legion;
     RegionRequirement req(lr, WRITE_DISCARD, EXCLUSIVE, lr);
     req.add_field(fid);
     InlineLauncher inl(req);
     PhysicalRegion pr = runtime->map_region(ctx, inl);
     pr.wait_until_valid();
-    RegionAccessor<AccessorType::Generic, T> acc =
-            pr.get_field_accessor(fid).typeify<T>();
+    FieldAccessor<WRITE_DISCARD,T,1,coord_t,
+      Realm::AffineAccessor<T,1,coord_t> > acc(pr, fid);
     const IndexSpace& is = lr.get_index_space();
 
-    IndexIterator itr(runtime, ctx, is);
-    for (int i = 0; i < n; ++i)
-    {
-        ptr_t p = itr.next();
-        acc.write(p, var[i]);
-    }
+    int i = 0;
+    for (PointInDomainIterator<1,coord_t> itr(
+          runtime->get_index_space_domain(IndexSpaceT<1,coord_t>(is)));
+          itr(); itr++, i++)
+      acc[*itr] = var[i];
     runtime->unmap_region(ctx, pr);
-}
-
-
-template<typename Op>
-typename Op::LHS Mesh::reduceFutureMap(
-        LegionRuntime::HighLevel::FutureMap& fmap) {
-    using namespace LegionRuntime::HighLevel;
-    typedef typename Op::LHS LHS;
-    LHS val = Op::identity;
-    for (Domain::DomainPointIterator itrpc(dompc); itrpc; itrpc++) {
-        Op::template apply<true>(val, fmap.get_result<LHS>(itrpc.p));
-    }
-    return val;
 }
 
 

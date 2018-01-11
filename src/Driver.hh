@@ -15,7 +15,9 @@
 
 #include <string>
 
-#include "legion_types.h"
+#include "legion.h"
+
+using namespace Legion;
 
 // forward declarations
 class InputFile;
@@ -24,6 +26,15 @@ class Hydro;
 
 
 class Driver {
+public:
+    struct TimingMeasurement {
+    public:
+      int cycle;
+      Future f_time;
+      double time;
+      double dt;
+      std::string msgdt;
+    };
 public:
 
     // children of this object
@@ -48,11 +59,14 @@ public:
             const InputFile* inp,
             const std::string& pname,
             const int numpcs,
-            LegionRuntime::HighLevel::Context ctx,
-            LegionRuntime::HighLevel::HighLevelRuntime* runtime);
+            const bool parallel,
+            Context ctx,
+            Runtime* runtime);
     ~Driver();
 
-    void run();
+    void run(
+            Context ctx,
+            Runtime* runtime);
     void calcGlobalDt();
 
 };  // class Driver
