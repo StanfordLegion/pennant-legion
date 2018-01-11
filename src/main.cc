@@ -59,7 +59,7 @@ void mainTask(const Task *task,
     volatile bool debug = false;
     int numpcs = 1;
     bool sequential = false;
-    const char* filename;
+    const char* filename = NULL;
     bool warn = true;
     while (i < iargs.argc) { 
       if (iargs.argv[i] == string("-f")) { 
@@ -86,6 +86,11 @@ void mainTask(const Task *task,
         }
         i++;
       }
+    }
+
+    if (filename == NULL) {
+      LEGION_PRINT_ONCE(runtime, ctx, stderr, "No Pennant input file specified. Exitting...\n");
+      return; 
     }
 
     /* spin so debugger can attach... */
