@@ -679,7 +679,8 @@ void Mesh::initParallel() {
           RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
       update_launcher.add_src_field(0/*index*/, FID_MAPPTEMP2PDENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP1);
-      update_launcher.set_gather_field(lrs.get_tree_id(), FID_MAPSP1TEMP);
+      update_launcher.add_gather_field(
+          RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs), FID_MAPSP1TEMP);
       runtime->issue_copy_operation(ctx, update_launcher);
     }
     {
@@ -690,7 +691,8 @@ void Mesh::initParallel() {
           RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
       update_launcher.add_src_field(0/*index*/, FID_MAPPTEMP2PDENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP2);
-      update_launcher.set_gather_field(lrs.get_tree_id(), FID_MAPSP2TEMP);
+      update_launcher.add_gather_field(
+          RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs), FID_MAPSP2TEMP);
       runtime->issue_copy_operation(ctx, update_launcher);
     }
 #else
