@@ -16,7 +16,7 @@
 
 #include "legion.h"
 
-#include "MyMapper.hh"
+#include "PennantMapper.hh"
 #include "InputFile.hh"
 #include "Driver.hh"
 
@@ -37,7 +37,7 @@ void registerMappers(
         it != local_procs.end(); it++)
     {
         rt->replace_default_mapper(
-                new MyMapper(machine, rt, *it), *it);
+                new PennantMapper(machine, rt, *it), *it);
     }
 }
 
