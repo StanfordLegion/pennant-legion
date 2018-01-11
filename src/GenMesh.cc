@@ -896,9 +896,7 @@ void GenMesh::genSidesRect(
         assert(false);
     }
     acc_sp1[*itr] = Pointer(pidy1 * (args->nzx + 1) + pidx1);
-    assert(acc_sp1[*itr][0] < 100);
     acc_sp2[*itr] = Pointer(pidy2 * (args->nzx + 1) + pidx2);
-    assert(acc_sp2[*itr][0] < 100);
   }
 }
 
