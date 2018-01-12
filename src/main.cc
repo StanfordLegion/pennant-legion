@@ -118,7 +118,8 @@ int main(int argc, char **argv)
     Runtime::set_top_level_task_id(TID_MAIN);
     TaskVariantRegistrar registrar(TID_MAIN, "main");
     registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
-    registrar.set_replicable();
+    registrar.set_inner(true);
+    registrar.set_replicable(true);
     Runtime::preregister_task_variant<mainTask>(registrar, "main");
 
     Runtime::add_registration_callback(registerMappers);

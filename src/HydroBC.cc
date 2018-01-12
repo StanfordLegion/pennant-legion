@@ -154,7 +154,7 @@ HydroBC::HydroBC(
         RegionRequirement(lrc, WRITE_DISCARD, EXCLUSIVE, lrc));
     launcher.add_field(1/*index*/, FID_RANGE);
     Future f = runtime->execute_task(ctx, launcher);
-    numb = f.get_result<coord_t>();
+    numb = f.get_result<coord_t>(true/*silence warnings*/);
   }
   // Make the index space and compute the partition of it for the pieces
   IndexSpace isb = runtime->create_index_space(ctx, Rect<1>(0,numb-1));

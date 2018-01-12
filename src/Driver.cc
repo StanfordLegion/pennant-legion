@@ -114,12 +114,12 @@ void Driver::run(
     runtime->issue_execution_fence(ctx);
     Future f_stop = runtime->issue_timing_measurement(ctx, timing_launcher);
 
-    const double tbegin = f_start.get_result<long long>();
+    const double tbegin = f_start.get_result<long long>(true/*silence warnings*/);
     double tlast = tbegin;
     for (std::deque<TimingMeasurement>::const_iterator it = 
           timing_measurements.begin(); it != timing_measurements.end(); it++)
     {
-      const double tnext = it->f_time.get_result<long long>();
+      const double tnext = it->f_time.get_result<long long>(true/*silence warnings*/);
       const double tdiff = tnext - tlast; 
       LEGION_PRINT_ONCE(runtime, ctx, stdout, "End cycle %6d, time = %11.5g"
           ", dt = %11.5g, wall = %11.5g us\n", it->cycle, it->time, it->dt, tdiff);
@@ -127,7 +127,7 @@ void Driver::run(
       tlast = tnext;
     }
 
-    const double tend = f_stop.get_result<long long>();
+    const double tend = f_stop.get_result<long long>(true/*silence warnings*/);
     const double walltime = tend - tbegin;
 
     // write end message
