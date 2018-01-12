@@ -94,6 +94,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       Runtime::preregister_task_variant<Mesh::calcOwnersTask>(registrar, "calc owners");
     }
     {
+      TaskVariantRegistrar registrar(TID_CHECKBADSIDES, "CPU check bad sides");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::checkBadSidesTask>(registrar, "check bad sides");
+    }
+    {
       TaskVariantRegistrar registrar(TID_TEMPGATHER, "CPU temp gather");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
@@ -243,12 +249,13 @@ void Mesh::init() {
 
     }
 
-    numsbad = 0;
+    int numsbad = 0;
     for (int sch = 0; sch < numsch; ++sch) {
         int sfirst = schsfirst[sch];
         int slast = schslast[sch];
         calcCtrs(px, ex, zx, sfirst, slast);
-        calcVols(px, zx, sarea, svol, zarea, zvol, sfirst, slast);
+        numsbad += 
+          calcVols(px, zx, sarea, svol, zarea, zvol, sfirst, slast);
         calcSideFracs(sarea, zarea, smf, sfirst, slast);
     }
     // check for negative volumes on initialization
@@ -740,6 +747,7 @@ void Mesh::initParallel() {
     calcCtrsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppshr, is_piece);
     Future numsbad = 
       calcVolsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppshr, is_piece);
+    checkBadSides(-1/*init cycle*/, numsbad);
     calcSideFracsParallel(runtime, ctx, lrs, lps, lrz, lpz, is_piece);
 
     // create index spaces and fields for global vars
@@ -1338,7 +1346,7 @@ void Mesh::calcCtrs(
 }
 
 
-void Mesh::calcVols(
+int Mesh::calcVols(
         const double2* px,
         const double2* zx,
         double* sarea,
@@ -1373,20 +1381,18 @@ void Mesh::calcVols(
 
     } // for s
 
-    numsbad += count;
-
+    return count;
 }
 
 
-void Mesh::checkBadSides() {
+void Mesh::checkBadSides(int cycle, Future f) {
 
-    // if there were negative side volumes, error exit
-    numsbad = f_cv.get_result<int>();
-    if (numsbad > 0) {
-        cerr << "Error: " << numsbad << " negative side volumes" << endl;
-        cerr << "Exiting..." << endl;
-        exit(1);
-    }
+    // We launch a task to check this to avoid blocking
+    // the top-level task
+    TaskLauncher launcher(TID_CHECKBADSIDES, 
+        TaskArgument(&cycle, sizeof(cycle)));
+    launcher.add_future(f);
+    runtime->execute_task(ctx, launcher);
 
 }
 
@@ -1551,6 +1557,28 @@ void Mesh::compactPointsTask(
     {
       acc_dst[*itr_dst] = acc_src[*itr_src];
       acc_ptr[*itr_src] = *itr_dst;
+    }
+}
+
+
+void Mesh::checkBadSidesTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    assert(task->futures.size() == 1);
+    const int numsbad = task->futures[0].get_result<int>();
+    // if there were negative side volumes, error exit
+    if (numsbad > 0) {
+        const int cycle = *reinterpret_cast<const int*>(task->args);
+        if (cycle >= 0)
+            cerr << "Error: " << numsbad << " negative side volumes on cycle " 
+                 << cycle << endl;
+        else
+            cerr << "Error: " << numsbad << " negative side volumes " 
+                 << "during initialization" << endl;
+        cerr << "Exiting..." << endl;
+        exit(1);
     }
 }
 

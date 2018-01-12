@@ -114,6 +114,7 @@ enum MeshTaskID {
     TID_CALCRANGES,
     TID_COMPACTPOINTS,
     TID_CALCOWNERS,
+    TID_CHECKBADSIDES,
     TID_TEMPGATHER
 };
 
@@ -214,7 +215,6 @@ public:
                        // number of points, edges, zones,
                        // sides, corners, resp.
     int numpcs;        // number of pieces in Legion partition
-    int numsbad;       // number of bad sides (negative volume)
     int* mapsp1;       // maps: side -> points 1 and 2
     int* mapsp2;
     int* mapsz;        // map: side -> zone
@@ -258,8 +258,6 @@ public:
     Legion::IndexPartition ippc;
     Legion::Domain dompc;
                                    // domain of legion pieces
-    Legion::Future f_cv;
-                                   // future map for calcVolsTask
 
     Mesh(
             const InputFile* inp,
@@ -376,7 +374,7 @@ public:
             const int slast);
 
     // compute side, corner, zone volumes
-    void calcVols(
+    int calcVols(
             const double2* px,
             const double2* zx,
             double* sarea,
@@ -388,7 +386,7 @@ public:
 
     // check to see if previous volume computation had any
     // sides with negative volumes
-    void checkBadSides();
+    void checkBadSides(int cycle, Legion::Future f);
 
     // compute side mass fractions
     void calcSideFracs(
@@ -482,6 +480,12 @@ public:
             Legion::Runtime *runtime);
 
     static void calcOwnersTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void checkBadSidesTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,

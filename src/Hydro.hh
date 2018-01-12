@@ -126,7 +126,7 @@ public:
             const int pfirst,
             const int plast);
 
-    void doCycle(const double dt);
+    void doCycle(const double dt, const int cycle);
 
     void getFinalState();
 

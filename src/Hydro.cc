@@ -359,7 +359,8 @@ void Hydro::initRadialVel(
 
 
 void Hydro::doCycle(
-            const double dt) {
+            const double dt,
+            const int cycle) {
 
     resetDtHydro();
 
@@ -500,7 +501,7 @@ void Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcv.add_field(5, FID_ZAREAP);
     launchcv.add_field(5, FID_ZVOLP);
-    mesh->f_cv = runtime->execute_index_space(ctx, launchcv, OPID_SUMINT);
+    Future f_cv = runtime->execute_index_space(ctx, launchcv, OPID_SUMINT);
 
     IndexTaskLauncher launchcsv(TID_CALCSURFVECS, dompc, ta, am);
     launchcsv.add_region_requirement(
@@ -783,7 +784,7 @@ void Hydro::doCycle(
     }
 
     // check for negative volumes on predictor step
-    mesh->checkBadSides();
+    mesh->checkBadSides(cycle, f_cv);
 
     IndexTaskLauncher launchca(TID_CALCACCEL, dompc, ta, am);
     double apfargs[] = { dt };
@@ -847,7 +848,7 @@ void Hydro::doCycle(
     launchcv.add_field(4, FID_SVOL);
     launchcv.add_field(5, FID_ZAREA);
     launchcv.add_field(5, FID_ZVOL);
-    mesh->f_cv = runtime->execute_index_space(ctx, launchcv, OPID_SUMINT);
+    f_cv = runtime->execute_index_space(ctx, launchcv, OPID_SUMINT);
 
     // 7. compute work
     double cwargs[] = { dt };
@@ -931,7 +932,7 @@ void Hydro::doCycle(
     runtime->end_trace(ctx, 123);
 
     // check for negative volumes on corrector step
-    mesh->checkBadSides();
+    mesh->checkBadSides(cycle, f_cv);
 }
 
 

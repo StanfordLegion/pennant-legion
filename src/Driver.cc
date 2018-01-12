@@ -89,7 +89,7 @@ void Driver::run(
         calcGlobalDt();
 
         // begin hydro cycle
-        hydro->doCycle(dt);
+        hydro->doCycle(dt, cycle);
 
         time += dt;
 
