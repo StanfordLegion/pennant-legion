@@ -146,6 +146,7 @@ void Driver::run(void) {
               runtime->issue_timing_measurement(ctx, timing_launcher);
             f_prev_report = report_measurement(f_measurement, f_prev_measurement, 
                 cycle, f_prev_report, f_time, f_cycle, f_dt, p_not_done);
+            f_prev_measurement = f_measurement;
         } // if cycle...
 
     } // for cycle...
