@@ -25,16 +25,51 @@
 #include "Hydro.hh"
 
 using namespace std;
+using namespace Legion;
 
+namespace {  // unnamed
+static void __attribute__ ((constructor)) registerTasks() {
+    {
+      TaskVariantRegistrar registrar(TID_CALCGLOBALDT, "CPU calc global dt");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<double,Driver::calcGlobalDtTask>(registrar, "calc global dt");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_UPDATETIME, "CPU update time");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<double,Driver::updateTimeTask>(registrar, "update time");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_UPDATECYCLE, "CPU calc global dt");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<int,Driver::updateCycleTask>(registrar, "update cycle");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_TESTNOTDONE, "CPU test not done");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<bool,Driver::testNotDoneTask>(registrar, "test not done");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_REPORTMEASUREMENT, "CPU report measurement");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Driver::reportMeasurementTask>(registrar, "report measurement");
+    }
+}
+}; // namespace
 
 Driver::Driver(
         const InputFile* inp,
         const std::string& pname,
         const int numpcs,
         const bool parallel,
-        Context ctx,
-        Runtime* runtime)
-        : probname(pname) {
+        Context c,
+        Runtime* rt)
+        : probname(pname), ctx(c), runtime(rt) {
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "********************\n");
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "Running PENNANT v0.6\n");
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "********************\n\n");
@@ -65,75 +100,73 @@ Driver::~Driver() {
 
 }
 
-void Driver::run(
-        Context ctx,
-        Runtime* runtime) {
+void Driver::run(void) {
 
-    time = 0.0;
-    cycle = 0;
+    Predicate p_not_done = Predicate::TRUE_PRED;
+    const double time_init = 0.0;
+    Future f_time = Future::from_value(runtime, time_init);
+    const int cycle_init = 0;
+    Future f_cycle = Future::from_value(runtime, cycle_init);
+    Future f_dt, f_cdt; // initialized by first iteration
+    Future f_prev_report;
 
     // Better timing for Legion
     TimingLauncher timing_launcher(MEASURE_MICRO_SECONDS);
-    std::deque<TimingMeasurement> timing_measurements;
+    //std::deque<TimingMeasurement> timing_measurements;
     // First make sure all our setup is done before beginning timing
     runtime->issue_execution_fence(ctx);
     // Get our start time
     Future f_start = runtime->issue_timing_measurement(ctx, timing_launcher);
+    Future f_prev_measurement = f_start;
 
     // main event loop
-    while (cycle < cstop && time < tstop) {
-
-        cycle += 1;
+    for (int cycle = 0; cycle < cstop; cycle++) {
 
         // get timestep
-        calcGlobalDt();
+        f_dt = calcGlobalDt(f_dt, f_cdt, f_time, cycle, p_not_done);
 
         // begin hydro cycle
-        hydro->doCycle(dt, cycle);
+        f_cdt = hydro->doCycle(f_dt, cycle, p_not_done);
 
-        time += dt;
+        f_time = update_time(f_time, f_dt, p_not_done);
 
-        if (cycle == 1 || cycle % dtreport == 0) {
+        f_cycle = update_cycle(f_cycle, p_not_done);
 
+#ifdef ENABLE_MAX_CYCLE_PREDICATION
+        Future f_not_done = test_not_done(f_time, p_not_done); 
+
+        p_not_done = runtime->create_predicate(ctx, f_not_done);
+#endif
+
+        if ((cycle == 0) || (((cycle+1) % dtreport) == 0)) {
             timing_launcher.preconditions.clear();
-            timing_launcher.add_precondition(hydro->f_cdt);
-            timing_measurements.push_back(TimingMeasurement());
-            TimingMeasurement &measurement = timing_measurements.back();
-            measurement.cycle = cycle;
-            measurement.f_time = 
+            // Measure after f_cdt is ready which is when the cycle is complete
+            timing_launcher.add_precondition(f_cdt);
+            Future f_measurement = 
               runtime->issue_timing_measurement(ctx, timing_launcher);
-            measurement.time = time;
-            measurement.dt = dt;
-            measurement.msgdt = msgdt;
-
+            f_prev_report = report_measurement(f_measurement, f_prev_measurement, 
+                cycle, f_prev_report, f_time, f_cycle, f_dt, p_not_done);
         } // if cycle...
 
-    } // while cycle...
+    } // for cycle...
 
     // get stopping timestamp
-    runtime->issue_execution_fence(ctx);
+    timing_launcher.preconditions.clear();
+    // Measure after f_cdt is ready which is when the cycle is complete
+    timing_launcher.add_precondition(f_cdt);
     Future f_stop = runtime->issue_timing_measurement(ctx, timing_launcher);
 
     const double tbegin = f_start.get_result<long long>(true/*silence warnings*/);
-    double tlast = tbegin;
-    for (std::deque<TimingMeasurement>::const_iterator it = 
-          timing_measurements.begin(); it != timing_measurements.end(); it++)
-    {
-      const double tnext = it->f_time.get_result<long long>(true/*silence warnings*/);
-      const double tdiff = tnext - tlast; 
-      LEGION_PRINT_ONCE(runtime, ctx, stdout, "End cycle %6d, time = %11.5g"
-          ", dt = %11.5g, wall = %11.5g us\n", it->cycle, it->time, it->dt, tdiff);
-      LEGION_PRINT_ONCE(runtime, ctx, stdout, "dt limiter: %s\n", it->msgdt.c_str());
-      tlast = tnext;
-    }
-
     const double tend = f_stop.get_result<long long>(true/*silence warnings*/);
     const double walltime = tend - tbegin;
+    // Make sure that all the previous measurements are done being reported
+    // before we write out any of the final information
+    f_prev_report.get_void_result(true/*silence warnings*/);
 
     // write end message
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "\nRun complete\n");
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "cycle = %6d,        cstop = %6d\n", cycle, cstop);
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "time = %14.6g, tstop = %14.6g\n\n", time, tstop);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "cycle = %6d,        cstop = %8d\n", f_cycle.get_result<int>(), cstop);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "time = %14.6g, tstop = %8.6g\n\n", f_time.get_result<double>(), tstop);
 
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "hydro cycle run time= %14.8g us\n", walltime);
@@ -143,49 +176,169 @@ void Driver::run(
     // do final mesh output if we aren't in a parallel mode
     if (!mesh->parallel) {
       hydro->getFinalState();
-      mesh->write(probname, cycle, time,
+      mesh->write(probname, f_cycle.get_result<int>(), f_time.get_result<double>(),
               hydro->zr, hydro->ze, hydro->zp);
     }
 
 }
 
 
-void Driver::calcGlobalDt() {
-
-    // Save timestep from last cycle
-    dtlast = dt;
-    msgdtlast = msgdt;
-
-    // Compute timestep for this cycle
-    dt = dtmax;
-    msgdt = "Global maximum (dtmax)";
-
-    if (cycle == 1) {
-        // compare to initial timestep
-        if (dtinit < dt) {
-            dt = dtinit;
-            msgdt = "Initial timestep";
-        }
-    } else {
-        // compare to factor * previous timestep
-        double dtrecover = dtfac * dtlast;
-        if (dtrecover < dt) {
-            dt = dtrecover;
-            if (msgdtlast.substr(0, 8) == "Recovery")
-                msgdt = msgdtlast;
-            else
-                msgdt = "Recovery: " + msgdtlast;
-        }
-    }
-
-    // compare to time-to-end
-    if ((tstop - time) < dt) {
-        dt = tstop - time;
-        msgdt = "Global (tstop - time)";
-    }
-
-    // compare to hydro dt
-    if (cycle > 1) hydro->getDtHydro(dt, msgdt);
-
+Future Driver::calcGlobalDt(
+                    Future f_dt, 
+                    Future f_cdt, 
+                    Future f_time,
+                    const int cycle,
+                    Predicate pred) {
+  GlobalDtArgs args;
+  args.dtinit = dtinit;
+  args.dtmax = dtmax;
+  args.dtfac = dtfac;
+  args.tstop = tstop;
+  args.cycle = cycle;
+  TaskLauncher launcher(TID_CALCGLOBALDT, TaskArgument(&args, sizeof(args)), pred);
+  launcher.set_predicate_false_future(f_dt);
+  launcher.add_future(f_time);
+  if (cycle > 0) {
+    launcher.add_future(f_dt);
+    launcher.add_future(f_cdt);
+  }
+  return runtime->execute_task(ctx, launcher);
 }
+
+
+double Driver::calcGlobalDtTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+  const GlobalDtArgs *args = reinterpret_cast<const GlobalDtArgs*>(task->args);
+
+  double dt = args->dtmax;
+  if (args->cycle == 0) {
+    // compare to initial timestep
+    if (args->dtinit < dt)
+      dt = args->dtinit;
+  } else {
+    const double dtlast = task->futures[1].get_result<double>();
+    // compare to factor * previous timestep
+    const double dtrecover = args->dtfac * dtlast;
+    if (dtrecover < dt)
+      dt = dtrecover;
+  }
+
+  // compare to time-to-end
+  const double time = task->futures[0].get_result<double>();
+  if ((args->tstop - time) < dt)
+    dt = args->tstop - time;
+
+  // compare to hydro dt
+  if (args->cycle > 0) {
+    const double dtrec = task->futures[2].get_result<double>();
+    if (dtrec < dt)
+      dt = dtrec;
+  }
+  return dt;
+}
+
+
+Future Driver::update_time(
+                  Future f_time, 
+                  Future f_dt, 
+                  Predicate pred) {
+  TaskLauncher launcher(TID_UPDATETIME, TaskArgument(), pred);
+  launcher.set_predicate_false_future(f_time);
+  launcher.add_future(f_time);
+  launcher.add_future(f_dt);
+  return runtime->execute_task(ctx, launcher);
+}
+
+double Driver::updateTimeTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+  const double time = task->futures[0].get_result<double>();
+  const double dt = task->futures[1].get_result<double>();
+  return time + dt;
+}
+
+
+Future Driver::update_cycle(
+                  Future f_cycle,
+                  Predicate pred) {
+  TaskLauncher launcher(TID_UPDATECYCLE, TaskArgument(), pred);
+  launcher.set_predicate_false_future(f_cycle);
+  launcher.add_future(f_cycle);
+  return runtime->execute_task(ctx, launcher);
+}
+
+int Driver::updateCycleTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+  const int cycle = task->futures[0].get_result<int>();
+  return cycle + 1;
+}
+
+
+Future Driver::test_not_done(
+                  Future f_time,
+                  Predicate pred) {
+  TaskLauncher launcher(TID_TESTNOTDONE, TaskArgument(&tstop, sizeof(tstop)), pred);
+  const bool false_val = false;
+  launcher.set_predicate_false_result(TaskArgument(&false_val, sizeof(false_val)));
+  launcher.add_future(f_time);
+  return runtime->execute_task(ctx, launcher);
+}
+
+
+bool Driver::testNotDoneTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+  const double tstop = *reinterpret_cast<const double*>(task->args);
+  const double time = task->futures[0].get_result<double>();
+  return (time < tstop);
+}
+
+Future Driver::report_measurement(
+                  Future f_measurement,
+                  Future f_prev_measurement,
+                  const int cycle,
+                  Future f_prev_report,
+                  Future f_time,
+                  Future f_cycle,
+                  Future f_dt,
+                  Predicate pred) {
+  TaskLauncher launcher(TID_REPORTMEASUREMENT, TaskArgument(), pred);
+  launcher.set_predicate_false_future(f_prev_report);
+  launcher.add_future(f_measurement);
+  launcher.add_future(f_prev_measurement);
+  launcher.add_future(f_time);
+  launcher.add_future(f_cycle);
+  launcher.add_future(f_dt);
+  // This part guarantees that measurements are printed in order
+  if (cycle > 0)
+    launcher.add_future(f_prev_report);
+  return runtime->execute_task(ctx, launcher);
+}
+
+
+void Driver::reportMeasurementTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+  const long long measurement = task->futures[0].get_result<long long>();
+  const long long previous = task->futures[1].get_result<long long>();
+  const double time = task->futures[2].get_result<double>();
+  const int cycle = task->futures[3].get_result<int>();
+  const double dt = task->futures[4].get_result<double>();
+  const long long tdiff = measurement - previous; 
+  fprintf(stdout, "End cycle %6d, time = %11.5g, dt = %11.5g, wall = %11lld us\n", 
+          cycle, time, dt, tdiff);
+}
+
 

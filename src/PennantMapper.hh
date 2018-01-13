@@ -46,11 +46,17 @@ public:
                         const MapTaskInput &input,
                               MapTaskOutput &output);
   // Default mapper does the right thing for map_replicate_task
+  virtual void speculate(const Legion::Mapping::MapperContext ctx,
+                         const Legion::Task &task,
+                               SpeculativeOutput &output);
 public:
   virtual void map_copy(const Legion::Mapping::MapperContext ctx,
                         const Legion::Copy &copy,
                         const MapCopyInput &input,
                               MapCopyOutput &output);
+  virtual void speculate(const Legion::Mapping::MapperContext ctx,
+                         const Legion::Copy &copy,
+                               SpeculativeOutput &output);
 public:
   virtual void select_partition_projection(const Legion::Mapping::MapperContext  ctx,
                                            const Legion::Partition& partition,

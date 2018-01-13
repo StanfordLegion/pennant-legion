@@ -358,11 +358,10 @@ void Hydro::initRadialVel(
 }
 
 
-void Hydro::doCycle(
-            const double dt,
-            const int cycle) {
-
-    resetDtHydro();
+Future Hydro::doCycle(
+            Future f_dt,
+            const int cycle,
+            Predicate p_not_done) {
 
     LogicalRegion& lrp = mesh->lrp;
     LogicalRegion& lrs = mesh->lrs;
@@ -373,38 +372,38 @@ void Hydro::doCycle(
     LogicalPartition& lps = mesh->lps;
     LogicalPartition& lpz = mesh->lpz;
     //LogicalRegion& lrglb = mesh->lrglb;
-    Domain& dompc = mesh->dompc;
+    const IndexSpace& ispc= mesh->ispc;
 
     TaskArgument ta;
     ArgumentMap am;
 
     runtime->begin_trace(ctx, 123);
-    IndexCopyLauncher launchcfd(dompc);
+    IndexCopyLauncher launchcfd(ispc);
     launchcfd.add_copy_requirements(
         RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz),
         RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcfd.add_src_field(0/*index*/, FID_ZVOL);
     launchcfd.add_dst_field(0/*index*/, FID_ZVOL0);
+    launchcfd.predicate = p_not_done;
     runtime->issue_copy_operation(ctx, launchcfd);
     
     // begin hydro cycle
     double ffdargs[] = { 0. };
     IndexFillLauncher launchffd;
-    launchffd.launch_domain = dompc;
+    launchffd.launch_space = ispc;
     launchffd.projection = 0;
     launchffd.argument = TaskArgument(ffdargs, sizeof(ffdargs));
+    launchffd.predicate = p_not_done;
 
     double2 ffd2args[] = { double2(0., 0.) };
     IndexFillLauncher launchffd2;
-    launchffd2.launch_domain = dompc;
+    launchffd2.launch_space = ispc;
     launchffd2.projection = 0;
     launchffd2.argument = TaskArgument(ffd2args, sizeof(ffd2args));
+    launchffd2.predicate = p_not_done;
     
-    double aphargs[] = { dt };
-    IndexTaskLauncher launchaph(TID_ADVPOSHALF, dompc,
-                            TaskArgument(aphargs, sizeof(aphargs)), am, 
-                            Predicate::TRUE_PRED,
-                            false);
+    IndexTaskLauncher launchaph(TID_ADVPOSHALF, ispc, ta, am, p_not_done);
+    launchaph.add_future(f_dt);
     // do point routines twice, once each for private and master
     // partitions
     for (int part = 0; part < 2; ++part) {
@@ -451,7 +450,7 @@ void Hydro::doCycle(
         runtime->execute_index_space(ctx, launchaph);
     }  // for part
 
-    IndexTaskLauncher launchcc(TID_CALCCTRS, dompc, ta, am);
+    IndexTaskLauncher launchcc(TID_CALCCTRS, ispc, ta, am, p_not_done);
     launchcc.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchcc.add_field(0, FID_MAPSP1);
@@ -476,7 +475,7 @@ void Hydro::doCycle(
     launchcc.add_field(5, FID_ZXP);
     runtime->execute_index_space(ctx, launchcc);
 
-    IndexTaskLauncher launchcv(TID_CALCVOLS, dompc, ta, am);
+    IndexTaskLauncher launchcv(TID_CALCVOLS, ispc, ta, am, p_not_done);
     launchcv.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchcv.add_field(0, FID_MAPSP1);
@@ -503,7 +502,7 @@ void Hydro::doCycle(
     launchcv.add_field(5, FID_ZVOLP);
     Future f_cv = runtime->execute_index_space(ctx, launchcv, OPID_SUMINT);
 
-    IndexTaskLauncher launchcsv(TID_CALCSURFVECS, dompc, ta, am);
+    IndexTaskLauncher launchcsv(TID_CALCSURFVECS, ispc, ta, am, p_not_done);
     launchcsv.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchcsv.add_field(0, FID_MAPSZ);
@@ -516,7 +515,7 @@ void Hydro::doCycle(
     launchcsv.add_field(2, FID_SSURFP);
     runtime->execute_index_space(ctx, launchcsv);
 
-    IndexTaskLauncher launchcel(TID_CALCEDGELEN, dompc, ta, am);
+    IndexTaskLauncher launchcel(TID_CALCEDGELEN, ispc, ta, am, p_not_done);
     launchcel.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchcel.add_field(0, FID_MAPSP1);
@@ -534,7 +533,7 @@ void Hydro::doCycle(
     launchcel.add_field(3, FID_ELEN);
     runtime->execute_index_space(ctx, launchcel);
 
-    IndexTaskLauncher launchccl(TID_CALCCHARLEN, dompc, ta, am);
+    IndexTaskLauncher launchccl(TID_CALCCHARLEN, ispc, ta, am, p_not_done);
     launchccl.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchccl.add_field(0, FID_MAPSZ);
@@ -548,7 +547,7 @@ void Hydro::doCycle(
     launchccl.add_field(2, FID_ZDL);
     runtime->execute_index_space(ctx, launchccl);
 
-    IndexTaskLauncher launchcr(TID_CALCRHO, dompc, ta, am);
+    IndexTaskLauncher launchcr(TID_CALCRHO, ispc, ta, am, p_not_done);
     launchcr.add_region_requirement(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
     launchcr.add_field(0, FID_ZM);
@@ -558,7 +557,7 @@ void Hydro::doCycle(
     launchcr.add_field(1, FID_ZRP);
     runtime->execute_index_space(ctx, launchcr);
 
-    IndexTaskLauncher launchccm(TID_CALCCRNRMASS, dompc, ta, am);
+    IndexTaskLauncher launchccm(TID_CALCCRNRMASS, ispc, ta, am, p_not_done);
     launchccm.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchccm.add_field(0, FID_MAPSP1);
@@ -579,9 +578,10 @@ void Hydro::doCycle(
     launchccm.add_field(3, FID_PMASWT);
     runtime->execute_index_space(ctx, launchccm);
 
-    double cshargs[] = { pgas->gamma, pgas->ssmin, dt };
-    IndexTaskLauncher launchcsh(TID_CALCSTATEHALF, dompc,
-            TaskArgument(cshargs, sizeof(cshargs)), am);
+    double cshargs[] = { pgas->gamma, pgas->ssmin };
+    IndexTaskLauncher launchcsh(TID_CALCSTATEHALF, ispc,
+            TaskArgument(cshargs, sizeof(cshargs)), am, p_not_done);
+    launchcsh.add_future(f_dt);
     launchcsh.add_region_requirement(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
     launchcsh.add_field(0, FID_ZR);
@@ -596,7 +596,7 @@ void Hydro::doCycle(
     launchcsh.add_field(1, FID_ZSS);
     runtime->execute_index_space(ctx, launchcsh);
 
-    IndexTaskLauncher launchcfp(TID_CALCFORCEPGAS, dompc, ta, am);
+    IndexTaskLauncher launchcfp(TID_CALCFORCEPGAS, ispc, ta, am, p_not_done);
     launchcfp.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchcfp.add_field(0, FID_MAPSZ);
@@ -610,8 +610,8 @@ void Hydro::doCycle(
     runtime->execute_index_space(ctx, launchcfp);
 
     double cftargs[] = { tts->alfa, tts->ssmin };
-    IndexTaskLauncher launchcft(TID_CALCFORCETTS, dompc,
-            TaskArgument(cftargs, sizeof(cftargs)), am);
+    IndexTaskLauncher launchcft(TID_CALCFORCETTS, ispc,
+            TaskArgument(cftargs, sizeof(cftargs)), am, p_not_done);
     launchcft.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchcft.add_field(0, FID_MAPSZ);
@@ -628,7 +628,7 @@ void Hydro::doCycle(
     launchcft.add_field(2, FID_SFT);
     runtime->execute_index_space(ctx, launchcft);
 
-    IndexTaskLauncher launchscd(TID_SETCORNERDIV, dompc, ta, am);
+    IndexTaskLauncher launchscd(TID_SETCORNERDIV, ispc, ta, am, p_not_done);
     launchscd.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchscd.add_field(0, FID_MAPSZ);
@@ -664,8 +664,8 @@ void Hydro::doCycle(
     runtime->execute_index_space(ctx, launchscd);
 
     double sqcfargs[] = { qcs->qgamma, qcs->q1, qcs->q2 };
-    IndexTaskLauncher launchsqcf(TID_SETQCNFORCE, dompc,
-            TaskArgument(sqcfargs, sizeof(sqcfargs)), am);
+    IndexTaskLauncher launchsqcf(TID_SETQCNFORCE, ispc,
+            TaskArgument(sqcfargs, sizeof(sqcfargs)), am, p_not_done);
     launchsqcf.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchsqcf.add_field(0, FID_MAPSZ);
@@ -695,7 +695,7 @@ void Hydro::doCycle(
     launchsqcf.add_field(4, FID_CQE2);
     runtime->execute_index_space(ctx, launchsqcf);
 
-    IndexTaskLauncher launchsfq(TID_SETFORCEQCS, dompc, ta, am);
+    IndexTaskLauncher launchsfq(TID_SETFORCEQCS, ispc, ta, am, p_not_done);
     launchsfq.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchsfq.add_field(0, FID_MAPSS4);
@@ -713,8 +713,8 @@ void Hydro::doCycle(
     runtime->execute_index_space(ctx, launchsfq);
 
     double svdargs[] = { qcs->q1, qcs->q2 };
-    IndexTaskLauncher launchsvd(TID_SETVELDIFF, dompc,
-            TaskArgument(svdargs, sizeof(svdargs)), am);
+    IndexTaskLauncher launchsvd(TID_SETVELDIFF, ispc,
+            TaskArgument(svdargs, sizeof(svdargs)), am, p_not_done);
     launchsvd.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchsvd.add_field(0, FID_MAPSZ);
@@ -740,7 +740,7 @@ void Hydro::doCycle(
     launchsvd.add_field(4, FID_ZDU);
     runtime->execute_index_space(ctx, launchsvd);
 
-    IndexTaskLauncher launchscf(TID_SUMCRNRFORCE, dompc, ta, am);
+    IndexTaskLauncher launchscf(TID_SUMCRNRFORCE, ispc, ta, am, p_not_done);
     launchscf.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchscf.add_field(0, FID_MAPSP1);
@@ -759,7 +759,7 @@ void Hydro::doCycle(
     runtime->execute_index_space(ctx, launchscf);
 
     // 4a. apply boundary conditions
-    IndexTaskLauncher launchafbc(TID_APPLYFIXEDBC, dompc, ta, am);
+    IndexTaskLauncher launchafbc(TID_APPLYFIXEDBC, ispc, ta, am, p_not_done);
     for (int i = 0; i < bcs.size(); ++i) {
         double2 afbcargs[1] = { bcs[i]->vfix };
         launchafbc.global_arg =
@@ -784,12 +784,11 @@ void Hydro::doCycle(
     }
 
     // check for negative volumes on predictor step
-    mesh->checkBadSides(cycle, f_cv);
+    mesh->checkBadSides(cycle, f_cv, p_not_done);
 
-    IndexTaskLauncher launchca(TID_CALCACCEL, dompc, ta, am);
-    double apfargs[] = { dt };
-    IndexTaskLauncher launchapf(TID_ADVPOSFULL, dompc,
-            TaskArgument(apfargs, sizeof(apfargs)), am);
+    IndexTaskLauncher launchca(TID_CALCACCEL, ispc, ta, am, p_not_done);
+    IndexTaskLauncher launchapf(TID_ADVPOSFULL, ispc, ta, am, p_not_done);
+    launchapf.add_future(f_dt);
     // do point routines twice, once each for private and master
     // partitions
     for (int part = 0; part < 2; ++part) {
@@ -851,9 +850,8 @@ void Hydro::doCycle(
     f_cv = runtime->execute_index_space(ctx, launchcv, OPID_SUMINT);
 
     // 7. compute work
-    double cwargs[] = { dt };
-    IndexTaskLauncher launchcw(TID_CALCWORK, dompc,
-            TaskArgument(cwargs, sizeof(cwargs)), am);
+    IndexTaskLauncher launchcw(TID_CALCWORK, ispc, ta, am, p_not_done);
+    launchcw.add_future(f_dt);
     launchcw.add_region_requirement(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchcw.add_field(0, FID_MAPSP1);
@@ -881,9 +879,8 @@ void Hydro::doCycle(
     launchcw.add_field(4, FID_ZETOT);
     runtime->execute_index_space(ctx, launchcw);
 
-    double cwrargs[] = { dt };
-    IndexTaskLauncher launchcwr(TID_CALCWORKRATE, dompc,
-            TaskArgument(cwrargs, sizeof(cwrargs)), am);
+    IndexTaskLauncher launchcwr(TID_CALCWORKRATE, ispc, ta, am, p_not_done);
+    launchcwr.add_future(f_dt);
     launchcwr.add_region_requirement(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
     launchcwr.add_field(0, FID_ZVOL0);
@@ -896,7 +893,7 @@ void Hydro::doCycle(
     runtime->execute_index_space(ctx, launchcwr);
 
     // 8. update state variables
-    IndexTaskLauncher launchce(TID_CALCENERGY, dompc, ta, am);
+    IndexTaskLauncher launchce(TID_CALCENERGY, ispc, ta, am, p_not_done);
     launchce.add_region_requirement(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
     launchce.add_field(0, FID_ZETOT);
@@ -917,9 +914,10 @@ void Hydro::doCycle(
     runtime->execute_index_space(ctx, launchcr);
 
     // 9.  compute timestep for next cycle
-    double cdtargs[] = { cfl, cflv, dt };
-    IndexTaskLauncher launchcdt(TID_CALCDT, dompc,
-            TaskArgument(cdtargs, sizeof(cdtargs)), am);
+    double cdtargs[] = { cfl, cflv };
+    IndexTaskLauncher launchcdt(TID_CALCDT, ispc,
+            TaskArgument(cdtargs, sizeof(cdtargs)), am, p_not_done);
+    launchcdt.add_future(f_dt);
     launchcdt.add_region_requirement(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
     launchcdt.add_field(0, FID_ZDL);
@@ -927,12 +925,13 @@ void Hydro::doCycle(
     launchcdt.add_field(0, FID_ZSS);
     launchcdt.add_field(0, FID_ZVOL);
     launchcdt.add_field(0, FID_ZVOL0);
-    f_cdt = runtime->execute_index_space(ctx, launchcdt, OPID_MINDBL);
-
-    runtime->end_trace(ctx, 123);
+    Future f_cdt = runtime->execute_index_space(ctx, launchcdt, OPID_MINDBL);
 
     // check for negative volumes on corrector step
-    mesh->checkBadSides(cycle, f_cv);
+    mesh->checkBadSides(cycle, f_cv, p_not_done);
+
+    runtime->end_trace(ctx, 123);
+    return f_cdt;
 }
 
 
@@ -949,7 +948,7 @@ void Hydro::advPosHalfTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         Runtime *runtime) {
-    const double dt = *((const double*)task->args);
+    const double dt = task->futures[0].get_result<double>();
     const double dth = 0.5 * dt;
     const AccessorRO<double2> acc_px0(regions[0], FID_PX0);
     const AccessorRO<double2> acc_pu0(regions[0], FID_PU0);
@@ -1091,7 +1090,7 @@ void Hydro::advPosFullTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         Runtime *runtime) {
-    const double dt = *((const double*)task->args);
+    const double dt = task->futures[0].get_result<double>();
 
     const AccessorRO<double2> acc_px0(regions[0], FID_PX0);
     const AccessorRO<double2> acc_pu0(regions[0], FID_PU0);
@@ -1119,7 +1118,7 @@ void Hydro::calcWorkTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         Runtime *runtime) {
-    const double dt = *((const double*)task->args);
+    const double dt = task->futures[0].get_result<double>();
 
     const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
@@ -1189,7 +1188,7 @@ void Hydro::calcWorkRateTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         Runtime *runtime) {
-    const double dt = *((const double*)task->args);
+    const double dt = task->futures[0].get_result<double>();
 
     const AccessorRO<double> acc_zvol0(regions[0], FID_ZVOL0);
     const AccessorRO<double> acc_zvol(regions[0], FID_ZVOL);
@@ -1244,7 +1243,7 @@ double Hydro::calcDtTask(
     const double* args = (const double*) task->args;
     const double cfl    = args[0];
     const double cflv   = args[1];
-    const double dtlast = args[2];
+    const double dtlast = task->futures[0].get_result<double>();
 
     const AccessorRO<double> acc_zdl(regions[0], FID_ZDL);
     const AccessorRO<double> acc_zdu(regions[0], FID_ZDU);
@@ -1367,22 +1366,3 @@ void Hydro::initRadialVelTask(
 }
 
 
-void Hydro::getDtHydro(
-        double& dtnew,
-        string& msgdtnew) {
-
-    dtrec = f_cdt.get_result<double>();
-    if (dtrec < dtnew) {
-        dtnew = dtrec;
-        msgdtnew = "Hydro timestep";
-    }
-
-}
-
-
-void Hydro::resetDtHydro() {
-
-//    dtrec = 1.e99;
-//    msgdtrec = "Hydro default";
-
-}

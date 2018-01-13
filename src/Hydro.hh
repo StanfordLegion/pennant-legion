@@ -96,7 +96,6 @@ public:
     std::vector<double> bcx;    // x values of x-plane fixed boundaries
     std::vector<double> bcy;    // y values of y-plane fixed boundaries
 
-    Future f_cdt;
     double dtrec;               // maximum timestep for hydro
     std::string msgdtrec;       // message:  reason for dtrec
 
@@ -126,7 +125,8 @@ public:
             const int pfirst,
             const int plast);
 
-    void doCycle(const double dt, const int cycle);
+    Legion::Future doCycle(Legion::Future f_dt, const int cycle,
+                           Legion::Predicate p_not_done);
 
     void getFinalState();
 
@@ -207,12 +207,6 @@ public:
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,
             Legion::Runtime *runtime);
-
-    void getDtHydro(
-            double& dtnew,
-            std::string& msgdtnew);
-
-    void resetDtHydro();
 
 }; // class Hydro
 

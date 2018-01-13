@@ -106,7 +106,7 @@ void mainTask(const Task *task,
 
     Driver drv(&inp, probname, numpcs, !sequential, ctx, runtime);
 
-    drv.run(ctx, runtime);
+    drv.run();
 
 }
 

@@ -747,7 +747,7 @@ void Mesh::initParallel() {
     calcCtrsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppshr, is_piece);
     Future numsbad = 
       calcVolsParallel(runtime, ctx, lrs, lps, lrz, lpz, lrp, lppprv, lppshr, is_piece);
-    checkBadSides(-1/*init cycle*/, numsbad);
+    checkBadSides(-1/*init cycle*/, numsbad, Predicate::TRUE_PRED);
     calcSideFracsParallel(runtime, ctx, lrs, lps, lrz, lpz, is_piece);
 
     // create index spaces and fields for global vars
@@ -1385,12 +1385,12 @@ int Mesh::calcVols(
 }
 
 
-void Mesh::checkBadSides(int cycle, Future f) {
+void Mesh::checkBadSides(int cycle, Future f, Predicate pred) {
 
     // We launch a task to check this to avoid blocking
     // the top-level task
     TaskLauncher launcher(TID_CHECKBADSIDES, 
-        TaskArgument(&cycle, sizeof(cycle)));
+        TaskArgument(&cycle, sizeof(cycle)), pred);
     launcher.add_future(f);
     runtime->execute_task(ctx, launcher);
 

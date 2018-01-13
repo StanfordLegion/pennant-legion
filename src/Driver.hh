@@ -17,7 +17,13 @@
 
 #include "legion.h"
 
-using namespace Legion;
+enum DriverTaskID {
+    TID_CALCGLOBALDT = 'D' * 100,
+    TID_UPDATETIME,
+    TID_UPDATECYCLE,
+    TID_TESTNOTDONE,
+    TID_REPORTMEASUREMENT
+};
 
 // forward declarations
 class InputFile;
@@ -27,10 +33,18 @@ class Hydro;
 
 class Driver {
 public:
+    struct GlobalDtArgs {
+    public:
+      double dtinit;
+      double dtmax;
+      double dtfac;
+      double tstop;
+      int cycle;
+    };
     struct TimingMeasurement {
     public:
       int cycle;
-      Future f_time;
+      Legion::Future f_time;
       double time;
       double dt;
       std::string msgdt;
@@ -42,32 +56,85 @@ public:
     Hydro *hydro;
 
     std::string probname;          // problem name
-    double time;                   // simulation time
-    int cycle;                     // simulation cycle number
+    //double time;                   // simulation time
+    //int cycle;                     // simulation cycle number
     double tstop;                  // simulation stop time
     int cstop;                     // simulation stop cycle
     double dtmax;                  // maximum timestep size
     double dtinit;                 // initial timestep size
     double dtfac;                  // factor limiting timestep growth
     int dtreport;                  // frequency for timestep reports
-    double dt;                     // current timestep
-    double dtlast;                 // previous timestep
+    //double dt;                     // current timestep
+    //double dtlast;                 // previous timestep
     std::string msgdt;             // dt limiter message
     std::string msgdtlast;         // previous dt limiter message
+    Legion::Context ctx;
+    Legion::Runtime* runtime;
 
     Driver(
             const InputFile* inp,
             const std::string& pname,
             const int numpcs,
             const bool parallel,
-            Context ctx,
-            Runtime* runtime);
+            Legion::Context ctx,
+            Legion::Runtime* runtime);
     ~Driver();
 
-    void run(
-            Context ctx,
-            Runtime* runtime);
-    void calcGlobalDt();
+    void run(void);
+    Legion::Future calcGlobalDt(Legion::Future f_dt,
+                                Legion::Future f_cdt,
+                                Legion::Future f_time,
+                                const int cycle,
+                                Legion::Predicate pred);
+
+    Legion::Future update_time(Legion::Future f_time,
+                               Legion::Future f_dt,
+                               Legion::Predicate pred);
+
+    Legion::Future update_cycle(Legion::Future f_cycle,
+                                Legion::Predicate pred);
+
+    Legion::Future test_not_done(Legion::Future f_time,
+                                 Legion::Predicate pred);
+
+    Legion::Future report_measurement(Legion::Future f_measurement,
+                                      Legion::Future f_prev_measurement,
+                                      const int cycle,
+                                      Legion::Future f_prev_report,
+                                      Legion::Future f_time,
+                                      Legion::Future f_cycle,
+                                      Legion::Future f_dt,
+                                      Legion::Predicate pred);
+
+    static double calcGlobalDtTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static double updateTimeTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static int updateCycleTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static bool testNotDoneTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void reportMeasurementTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
 };  // class Driver
 

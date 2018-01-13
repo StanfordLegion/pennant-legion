@@ -56,7 +56,7 @@ void PolyGas::calcStateHalfTask(
     const double* args = (const double*) task->args;
     const double gamma = args[0];
     const double ssmin = args[1];
-    const double dt    = args[2];
+    const double dt    = task->futures[0].get_result<double>();
 
     const AccessorRO<double> acc_zr(regions[0], FID_ZR);
     const AccessorRO<double> acc_zvolp(regions[0], FID_ZVOLP);

@@ -53,6 +53,7 @@ GEN_GPU_SRC	:=				# .cu files
 INC_FLAGS	:= -I$(SRCDIR) 
 #CC_FLAGS	:=
 CC_FLAGS	:= -std=c++11 -Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-unused-variable
+#CC_FLAGS	+= -DENABLE_MAX_CYCLE_PREDICATION
 #CC_FLAGS	+= -DBOUNDS_CHECKS
 #CC_FLAGS	+= -DLEGION_SPY
 NVCC_FLAGS	:=

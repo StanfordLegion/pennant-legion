@@ -386,7 +386,8 @@ public:
 
     // check to see if previous volume computation had any
     // sides with negative volumes
-    void checkBadSides(int cycle, Legion::Future f);
+    void checkBadSides(int cycle, Legion::Future f,
+                       Legion::Predicate pred);
 
     // compute side mass fractions
     void calcSideFracs(

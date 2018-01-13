@@ -125,6 +125,19 @@ void PennantMapper::map_task(const MapperContext ctx,
   runtime->acquire_instances(ctx, output.chosen_instances);
 }
 
+void PennantMapper::speculate(const MapperContext ctx,
+                              const Task &task,
+                                    SpeculativeOutput &output)
+{
+#ifdef ENABLE_MAX_CYCLE_PREDICATION
+  output.speculate = true;
+  output.speculative_value = true; // not done 
+  output.speculate_mapping_only = true;
+#else
+  output.speculate = false;
+#endif
+}
+
 void PennantMapper::map_copy(const MapperContext ctx,
                              const Copy &copy,
                              const MapCopyInput &input,
@@ -140,6 +153,19 @@ void PennantMapper::map_copy(const MapperContext ctx,
     map_pennant_array(ctx, copy.dst_requirements[idx].region, local_sysmem,
                       output.dst_instances[idx]);
   runtime->acquire_instances(ctx, output.dst_instances);
+}
+
+void PennantMapper::speculate(const MapperContext ctx,
+                              const Copy &copy,
+                                    SpeculativeOutput &output)
+{
+#ifdef ENABLE_MAX_CYCLE_PREDICATION
+  output.speculate = true;
+  output.speculative_value = true; // not done 
+  output.speculate_mapping_only = true;
+#else
+  output.speculate = false;
+#endif
 }
 
 void PennantMapper::select_partition_projection(const MapperContext  ctx,
