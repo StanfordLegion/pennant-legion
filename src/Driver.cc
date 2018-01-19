@@ -340,6 +340,7 @@ void Driver::reportMeasurementTask(
   const long long tdiff = measurement - previous; 
   fprintf(stdout, "End cycle %6d, time = %11.5g, dt = %11.5g, wall = %11lld us\n", 
           cycle, time, dt, tdiff);
+  fflush(stdout);
 }
 
 
