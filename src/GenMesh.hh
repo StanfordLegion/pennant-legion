@@ -33,7 +33,9 @@ enum GenMeshTaskID {
     TID_GENPOINTS_RECT = 'G' * 100,
     TID_GENPOINTS_PIE,
     TID_GENPOINTS_HEX,
+    TID_GENZONES_RECT,
     TID_GENZONES_PIE,
+    TID_GENZONES_HEX,
     TID_GENSIDES_RECT,
     TID_GENSIDES_PIE,
     TID_GENSIDES_HEX,
@@ -174,7 +176,19 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    static void genZonesRect(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
     static void genZonesPie(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void genZonesHex(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,

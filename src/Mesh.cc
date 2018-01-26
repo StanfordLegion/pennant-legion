@@ -521,6 +521,7 @@ void Mesh::initParallel() {
       faz.allocate_field(sizeof(double), FID_ZDU);
       faz.allocate_field(sizeof(double2), FID_ZUC);
       faz.allocate_field(sizeof(double), FID_ZTMP);
+      faz.allocate_field(sizeof(Pointer), FID_PIECE);
     }
     lrz = runtime->create_logical_region(ctx, isz, fsz);
     runtime->attach_name(lrz, "lrz");
@@ -566,7 +567,6 @@ void Mesh::initParallel() {
       fas.allocate_field(sizeof(double2), FID_CQE2);
       fas.allocate_field(sizeof(double), FID_CRMU);
       fas.allocate_field(sizeof(double), FID_CW);
-      fas.allocate_field(sizeof(Pointer), FID_PIECE);
     }
     lrs = runtime->create_logical_region(ctx, iss, fss);
     runtime->attach_name(lrs, "lrs");
@@ -575,13 +575,13 @@ void Mesh::initParallel() {
     gmesh->generateSidesParallel(numpcs, runtime, ctx, lrs, 
         runtime->get_logical_partition(lrs, equal_sides), is_piece);
 
-    // Get the proper side and zone partitions for our pieces
-    IndexPartition side_pieces = 
-      runtime->create_partition_by_field(ctx, lrs, lrs, FID_PIECE, is_piece);
-    lps = runtime->get_logical_partition(lrs, side_pieces);
+    // Get the proper zone and side partitions for our pieces
     IndexPartition zone_pieces = 
-      runtime->create_partition_by_image(ctx, isz, lps, lrs, FID_MAPSZ, is_piece);
+      runtime->create_partition_by_field(ctx, lrz, lrz, FID_PIECE, is_piece);
     lpz = runtime->get_logical_partition(lrz, zone_pieces);
+    IndexPartition side_pieces = 
+      runtime->create_partition_by_preimage(ctx, zone_pieces, lrs, lrs, FID_MAPSZ, is_piece);
+    lps = runtime->get_logical_partition(lrs, side_pieces);
 
     // Now we need to compact our points and generate our point partition tree
     // First compute our owned points
@@ -604,7 +604,7 @@ void Mesh::initParallel() {
     IndexPartition ip_private_shared = 
       runtime->create_pending_partition(ctx, isp, is_private);
 
-    // Fill in the two sub-regions of the ipp index space
+    // Fill in the two sub-regions of the ip_private_shared partition
     IndexSpace is_all_shared = runtime->create_index_space_union(ctx, 
         ip_private_shared, Point<1>(1)/*color*/, ip_temp_ghost_points);
     std::vector<IndexSpace> diff_spaces(1, is_all_shared);
