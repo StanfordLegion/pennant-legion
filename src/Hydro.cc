@@ -1002,7 +1002,7 @@ void Hydro::calcCrnrMassTask(
     const AccessorRO<double> acc_zr(regions[1], FID_ZRP);
     const AccessorRO<double> acc_zarea(regions[1], FID_ZAREAP);
     const AccessorRW<double> acc_pmas_prv(regions[2], FID_PMASWT);
-    const AccessorRD<double> acc_pmas_shr(regions[3], FID_PMASWT, OPID_SUMDBL);
+    const AccessorRD<SumOp<double> > acc_pmas_shr(regions[3], FID_PMASWT, OPID_SUMDBL);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
 
@@ -1019,9 +1019,9 @@ void Hydro::calcCrnrMassTask(
         const double mf3 = acc_smf[s3];
         const double mwt = r * area * 0.5 * (mf + mf3);
         if (preg == 0)
-            acc_pmas_prv.reduce<SumOp<double>,true/*exclusive*/>(p, mwt);
+            SumOp<double>::apply<true/*exclusive*/>(acc_pmas_prv[p], mwt);
         else
-            acc_pmas_shr.reduce<SumOp<double>,false/*exclusive*/>(p, mwt);
+            acc_pmas_shr[p] <<= mwt;
     }
 }
 
@@ -1038,7 +1038,7 @@ void Hydro::sumCrnrForceTask(
     const AccessorRO<double2> acc_sfq(regions[0], FID_SFQ);
     const AccessorRO<double2> acc_sft(regions[0], FID_SFT);
     const AccessorRW<double2> acc_pf_prv(regions[1], FID_PF);
-    const AccessorRD<double2> acc_pf_shr(regions[2], FID_PF, OPID_SUMDBL2);
+    const AccessorRD<SumOp<double2> > acc_pf_shr(regions[2], FID_PF, OPID_SUMDBL2);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
 
@@ -1056,9 +1056,9 @@ void Hydro::sumCrnrForceTask(
         const double2 sft3 = acc_sft[s3];
         const double2 cf = (sfp + sfq + sft) - (sfp3 + sfq3 + sft3);
         if (preg == 0)
-            acc_pf_prv.reduce<SumOp<double2>,true/*exclusive*/>(p, cf);
+            SumOp<double2>::apply<true/*exclusive*/>(acc_pf_prv[p], cf);
         else
-            acc_pf_shr.reduce<SumOp<double2>,false/*exclusive*/>(p, cf);
+            acc_pf_shr[p] <<= cf;
     }
 }
 

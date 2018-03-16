@@ -24,9 +24,9 @@ using AccessorWD = typename Legion::FieldAccessor<WRITE_DISCARD,T,1,Legion::coor
 template <typename T>
 using AccessorRW = typename Legion::FieldAccessor<READ_WRITE,T,1,Legion::coord_t,
                                 Realm::AffineAccessor<T,1,Legion::coord_t> >;
-template <typename T>
-using AccessorRD = typename Legion::FieldAccessor<REDUCE,T,1,Legion::coord_t,
-                                Realm::AffineAccessor<T,1,Legion::coord_t> >;
+template <typename REDOP>
+using AccessorRD = typename Legion::ReductionAccessor<REDOP,false/*exclusive*/,1,
+      Legion::coord_t, Realm::AffineAccessor<typename REDOP::RHS,1,Legion::coord_t> >;
 
 typedef Legion::Point<1,Legion::coord_t> Pointer;
 
