@@ -487,6 +487,7 @@ Future Hydro::doCycle(
     launchcc.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcc.add_field(5, FID_ZXP);
+    launchcc |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcc);
 
     IndexTaskLauncher launchcv(TID_CALCVOLS, ispc, ta, am, p_not_done);
@@ -514,6 +515,7 @@ Future Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcv.add_field(5, FID_ZAREAP);
     launchcv.add_field(5, FID_ZVOLP);
+    launchcv |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     Future f_cv = runtime->execute_index_space(ctx, launchcv, OPID_SUMINT);
 
     IndexTaskLauncher launchcsv(TID_CALCSURFVECS, ispc, ta, am, p_not_done);
@@ -640,6 +642,7 @@ Future Hydro::doCycle(
     launchcft.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcft.add_field(2, FID_SFT);
+    launchcft |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcft);
 
     IndexTaskLauncher launchscd(TID_SETCORNERDIV, ispc, ta, am, p_not_done);
@@ -774,6 +777,7 @@ Future Hydro::doCycle(
             RegionRequirement(lppshr, 0, OPID_SUMDBL2,
                     SIMULTANEOUS, lrp));
     launchscf.add_field(2, FID_PF);
+    launchscf |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchscf);
 
     // 4a. apply boundary conditions
