@@ -1230,19 +1230,20 @@ void Hydro::calcWorkOMPTask(
     // and vavg is the average velocity of the node over the time period
 
     const IndexSpace& isz = task->regions[3].region.get_index_space();
-
+    // This will assert if it is not dense
+    const Rect<1> rectz = runtime->get_index_space_domain(isz);
     #pragma omp parallel for
-    for (PointIterator itz(runtime, isz); itz(); itz++)
-      acc_zw[*itz] = 0.;
+    for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
+      acc_zw[z] = 0.;
 
     const double dth = 0.5 * dt;
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
- 
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss); 
     #pragma omp parallel for
-    for (PointIterator its(runtime, iss); its(); its++)
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
-        const Pointer s = *its;
         const Pointer p1 = acc_mapsp1[s];
         const int p1reg = acc_mapsp1reg[s];
         const Pointer p2 = acc_mapsp2[s];

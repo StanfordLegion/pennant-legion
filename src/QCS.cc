@@ -484,15 +484,18 @@ void QCS::setCornerDivOMPTask(
 
     // [1] Compute a zone-centered velocity
     const IndexSpace& isz = task->regions[1].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rectz = runtime->get_index_space_domain(isz);
     #pragma omp parallel for
-    for (PointIterator itz(runtime, isz); itz(); itz++)
-        acc_zuc[*itz] = double2(0., 0.);
+    for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
+        acc_zuc[z] = double2(0., 0.);
 
-    #pragma omp parallel for
     const IndexSpace& iss = task->regions[0].region.get_index_space();
-    for (PointIterator its(runtime, iss); its(); its++)
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
+    #pragma omp parallel for
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
-        const Pointer s = *its;
         const Pointer p = acc_mapsp1[s];
         const int preg = acc_mapsp1reg[s];
         const Pointer z = acc_mapsz[s];
@@ -504,9 +507,8 @@ void QCS::setCornerDivOMPTask(
 
     // [2] Divergence at the corner
     #pragma omp parallel for
-    for (PointIterator its(runtime, iss); its(); its++)
+    for (coord_t c = rects.lo[0]; c <= rects.hi[0]; c++)
     {
-        const Pointer c = *its;
         const Pointer s2 = c;
         const Pointer s = acc_mapss3[s2];
         // Associated zone, point
@@ -619,10 +621,11 @@ void QCS::setQCnForceOMPTask(
 
     // [4.1] Compute the crmu (real Kurapatenko viscous scalar)
     const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
     #pragma omp parallel for
-    for (PointIterator its(runtime, iss); its(); its++)
+    for (coord_t c = rects.lo[0]; c <= rects.hi[0]; c++)
     {
-        const Pointer c = *its;
         const Pointer z = acc_mapsz[c];
 
         // Kurapatenko form of the viscosity
@@ -641,9 +644,8 @@ void QCS::setQCnForceOMPTask(
 
     // [4.2] Compute the cqe for each corner
     #pragma omp parallel for
-    for (PointIterator its(runtime, iss); its(); its++)
+    for (coord_t c = rects.lo[0]; c <= rects.hi[0]; c++)
     {
-        const Pointer c = *its;
         const Pointer s2 = c;
         const Pointer s = acc_mapss3[s2];
         const Pointer p = acc_mapsp2[s];
@@ -688,10 +690,11 @@ void QCS::setForceOMPTask(
 
     // [5.1] Preparation of extra variables
     const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
     #pragma omp paralel for
-    for (PointIterator its(runtime, iss); its(); its++)
+    for (coord_t c = rects.lo[0]; c <= rects.hi[0]; c++)
     {
-        const Pointer c = *its;
         const double ccos = acc_ccos[c];
         const double csin2 = 1.0 - ccos * ccos;
         const double carea = acc_carea[c];
@@ -702,9 +705,8 @@ void QCS::setForceOMPTask(
 
     // [5.2] Set-Up the forces on corners
     #pragma omp parallel for
-    for (PointIterator its(runtime, iss); its(); its++)
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
-        const Pointer s = *its;
         // Associated corners 1 and 2
         const Pointer c1 = s;
         const Pointer c2 = acc_mapss4[s];
@@ -755,15 +757,18 @@ void QCS::setVelDiffOMPTask(
     const AccessorWD<double> acc_zdu(regions[4], FID_ZDU);
 
     const IndexSpace& isz = task->regions[4].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rectz = runtime->get_index_space_domain(isz);
     #pragma omp parallel for
-    for (PointIterator itz(runtime, isz); itz(); itz++)
-        acc_ztmp[*itz] = 0.;
+    for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
+        acc_ztmp[z] = 0.;
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
     #pragma omp parallel for
-    for (PointIterator its(runtime, iss); its(); its++)
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
-        const Pointer s = *its;
         const Pointer p1 = acc_mapsp1[s];
         const int p1reg = acc_mapsp1reg[s];
         const Pointer p2 = acc_mapsp2[s];
@@ -784,9 +789,8 @@ void QCS::setVelDiffOMPTask(
     }
 
     #pragma omp parallel for
-    for (PointIterator itz(runtime, isz); itz(); itz++)
+    for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
     {
-        const Pointer z = *itz;
         const double zss  = acc_zss[z];
         const double ztmp  = acc_ztmp[z];
         const double zdu = q1 * zss + 2. * q2 * ztmp;
