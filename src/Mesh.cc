@@ -41,10 +41,22 @@ static void __attribute__ ((constructor)) registerTasks() {
       Runtime::preregister_task_variant<Mesh::calcCtrsTask>(registrar, "calcctrs");
     }
     {
+      TaskVariantRegistrar registrar(TID_CALCCTRS, "OMP calcctrs");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcCtrsOMPTask>(registrar, "calcctrs");
+    }
+    {
       TaskVariantRegistrar registrar(TID_CALCVOLS, "CPU calcvols");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
       Runtime::preregister_task_variant<int, Mesh::calcVolsTask>(registrar, "calcvols");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCVOLS, "OMP calcvols");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<int, Mesh::calcVolsOMPTask>(registrar, "calcvols");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCSIDEFRACS, "CPU calcsidefracs");
@@ -1104,6 +1116,55 @@ void Mesh::calcCtrsTask(
 }
 
 
+void Mesh::calcCtrsOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
+    const AccessorRO<int> acc_znump(regions[1], FID_ZNUMP);
+    FieldID fid_px = task->regions[2].instance_fields[0];
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[2], fid_px),
+        AccessorRO<double2>(regions[3], fid_px)
+    };
+    FieldID fid_ex = task->regions[4].instance_fields[0];
+    const AccessorWD<double2> acc_ex(regions[4], fid_ex);
+    FieldID fid_zx = task->regions[5].instance_fields[0];
+    const AccessorWD<double2> acc_zx(regions[5], fid_zx);
+
+    const IndexSpace& isz = task->regions[1].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rectz = runtime->get_index_space_domain(isz);
+    #pragma omp parallel for
+    for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
+      acc_zx[z] = double2(0., 0.);
+
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
+    #pragma omp parallel for
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
+    {
+        const Pointer p1 = acc_mapsp1[s];
+        const int p1reg = acc_mapsp1reg[s];
+        const Pointer p2 = acc_mapsp2[s];
+        const int p2reg = acc_mapsp2reg[s];
+        const Pointer z = acc_mapsz[s];
+        const double2 px1 = acc_px[p1reg][p1];
+        const double2 px2 = acc_px[p2reg][p2];
+        const double2 ex  = 0.5 * (px1 + px2);
+        acc_ex[s] = ex;
+        const int n = acc_znump[z];
+        SumOp<double2>::apply<false/*exclusive*/>(acc_zx[z], px1 / n);
+    }
+}
+
+
 Future Mesh::calcVolsParallel(
             Runtime *runtime,
             Context ctx,
@@ -1201,6 +1262,76 @@ int Mesh::calcVolsTask(
         // check for negative side volumes
         if (sv <= 0.) 
           count += 1;
+    }
+
+    return count;
+}
+
+
+int Mesh::calcVolsOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
+    FieldID fid_px = task->regions[1].instance_fields[0];
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[1], fid_px),
+        AccessorRO<double2>(regions[2], fid_px)
+    };
+    FieldID fid_zx = task->regions[3].instance_fields[0];
+    const AccessorRO<double2> acc_zx(regions[3], fid_zx);
+    FieldID fid_sarea = task->regions[4].instance_fields[0];
+    FieldID fid_svol  = task->regions[4].instance_fields[1];
+    const AccessorWD<double> acc_sarea(regions[4], fid_sarea);
+    const AccessorWD<double> acc_svol(regions[4], fid_svol);
+    FieldID fid_zarea = task->regions[5].instance_fields[0];
+    FieldID fid_zvol  = task->regions[5].instance_fields[1];
+    const AccessorWD<double> acc_zarea(regions[5], fid_zarea);
+    const AccessorWD<double> acc_zvol(regions[5], fid_zvol);
+
+    const IndexSpace& isz = task->regions[3].region.get_index_space();
+    // This will assert if it isn't dense
+    const Rect<1> rectz = runtime->get_index_space_domain(isz);
+    #pragma omp parallel for
+    for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
+    {
+        acc_zarea[z] = 0.;
+        acc_zvol[z] = 0.;
+    }
+
+    const double third = 1. / 3.;
+    int count = 0;
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it isn't dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
+    #pragma omp parallel for
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
+    {
+        const Pointer p1 = acc_mapsp1[s];
+        const int p1reg = acc_mapsp1reg[s];
+        const Pointer p2 = acc_mapsp2[s];
+        const int p2reg = acc_mapsp2reg[s];
+        const Pointer z = acc_mapsz[s];
+        const double2 px1 = acc_px[p1reg][p1];
+        const double2 px2 = acc_px[p2reg][p2];
+        const double2 zx  = acc_zx[z];
+
+        // compute side volumes, sum to zone
+        const double sa = 0.5 * cross(px2 - px1, zx - px1);
+        const double sv = third * sa * (px1.x + px2.x + zx.x);
+        acc_sarea[s] = sa;
+        acc_svol[s] = sv;
+        SumOp<double>::apply<false/*exclusive*/>(acc_zarea[z], sa);
+        SumOp<double>::apply<false/*exclusive*/>(acc_zvol[z], sv);
+
+        // check for negative side volumes
+        if (sv <= 0.) 
+          SumOp<int>::apply<false/*exclusive*/>(count, 1);
     }
 
     return count;

@@ -62,6 +62,13 @@ static void __attribute__ ((constructor)) registerTasks() {
       Runtime::preregister_task_variant<Hydro::sumCrnrForceTask>(registrar, "sumcrnrforce");
     }
     {
+      TaskVariantRegistrar registrar(TID_SUMCRNRFORCE, "OMP sumcrnrforce");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Hydro::sumCrnrForceOMPTask>(registrar, "sumcrnrforce");
+    }
+
+    {
       TaskVariantRegistrar registrar(TID_CALCACCEL, "CPU calcaccel");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
@@ -1069,6 +1076,45 @@ void Hydro::sumCrnrForceTask(
         const double2 cf = (sfp + sfq + sft) - (sfp3 + sfq3 + sft3);
         if (preg == 0)
             SumOp<double2>::apply<true/*exclusive*/>(acc_pf_prv[p], cf);
+        else
+            acc_pf_shr[p] <<= cf;
+    }
+}
+
+
+void Hydro::sumCrnrForceOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<Pointer> acc_mapss3(regions[0], FID_MAPSS3);
+    const AccessorRO<double2> acc_sfp(regions[0], FID_SFP);
+    const AccessorRO<double2> acc_sfq(regions[0], FID_SFQ);
+    const AccessorRO<double2> acc_sft(regions[0], FID_SFT);
+    const AccessorRW<double2> acc_pf_prv(regions[1], FID_PF);
+    const AccessorRD<SumOp<double2>,false/*exclusive*/> 
+      acc_pf_shr(regions[2], FID_PF, OPID_SUMDBL2);
+
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
+    #pragma omp parallel for  
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
+    {
+        const Pointer s3 = acc_mapss3[s];
+        const Pointer p = acc_mapsp1[s];
+        const int preg = acc_mapsp1reg[s];
+        const double2 sfp = acc_sfp[s];
+        const double2 sfq = acc_sfq[s];
+        const double2 sft = acc_sft[s];
+        const double2 sfp3 = acc_sfp[s3];
+        const double2 sfq3 = acc_sfq[s3];
+        const double2 sft3 = acc_sft[s3];
+        const double2 cf = (sfp + sfq + sft) - (sfp3 + sfq3 + sft3);
+        if (preg == 0)
+            SumOp<double2>::apply<false/*exclusive*/>(acc_pf_prv[p], cf);
         else
             acc_pf_shr[p] <<= cf;
     }

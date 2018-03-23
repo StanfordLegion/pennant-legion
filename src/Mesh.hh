@@ -358,7 +358,21 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    // OpenMP variant
+    static void calcCtrsOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
     static int calcVolsTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    // OpenMP variant
+    static int calcVolsOMPTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,
