@@ -222,6 +222,18 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    static void calcAccelOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void advPosFullOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
 }; // class Hydro
 
 

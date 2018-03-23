@@ -33,6 +33,12 @@ static void __attribute__ ((constructor)) registerTasks() {
     Runtime::preregister_task_variant<HydroBC::applyFixedBCTask>(registrar, "applyfixedbc");
   }
   {
+    TaskVariantRegistrar registrar(TID_APPLYFIXEDBC, "OMP applyfixedbc");
+    registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+    registrar.set_leaf();
+    Runtime::preregister_task_variant<HydroBC::applyFixedBCOMPTask>(registrar, "applyfixedbc");
+  }
+  {
     TaskVariantRegistrar registrar(TID_COUNTBCPOINTS, "CPU count BC points");
     registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
     registrar.set_leaf();
@@ -216,6 +222,43 @@ void HydroBC::applyFixedBCTask(
     {
         const Pointer p = acc_mapbp[*itb];
         const int preg = acc_mapbpreg[*itb];
+        double2 pu = acc_pu[preg][p];
+        double2 pf = acc_pf[preg][p];
+        pu = project(pu, vfix);
+        pf = project(pf, vfix);
+        acc_pu[preg][p] = pu;
+        acc_pf[preg][p] = pf;
+    }
+
+}
+
+
+void HydroBC::applyFixedBCOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const double2* args = (const double2*) task->args;
+    const double2 vfix = args[0];
+    const AccessorRO<Pointer> acc_mapbp(regions[0], FID_MAPBP);
+    const AccessorRO<int> acc_mapbpreg(regions[0], FID_MAPBPREG);
+    const AccessorRW<double2> acc_pf[2] = {
+        AccessorRW<double2>(regions[1], FID_PF),
+        AccessorRW<double2>(regions[2], FID_PF)
+    };
+    const AccessorRW<double2> acc_pu[2] = {
+        AccessorRW<double2>(regions[1], FID_PU0),
+        AccessorRW<double2>(regions[2], FID_PU0)
+    };
+
+    const IndexSpace& isb = task->regions[0].region.get_index_space();
+    // This will fail if it is not dense
+    const Rect<1> rectb = runtime->get_index_space_domain(isb);
+    #pragma omp parallel for
+    for (coord_t b = rectb.lo[0]; b <= rectb.hi[0]; b++)
+    {
+        const Pointer p = acc_mapbp[b];
+        const int preg = acc_mapbpreg[b];
         double2 pu = acc_pu[preg][p];
         double2 pf = acc_pf[preg][p];
         pu = project(pu, vfix);

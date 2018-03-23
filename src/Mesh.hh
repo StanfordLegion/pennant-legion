@@ -396,6 +396,13 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    // OpenMP variant
+    static void calcEdgeLenOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
     static void calcCharLenTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,

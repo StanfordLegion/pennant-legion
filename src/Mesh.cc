@@ -77,6 +77,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       Runtime::preregister_task_variant<Mesh::calcEdgeLenTask>(registrar, "calcedgelen");
     }
     {
+      TaskVariantRegistrar registrar(TID_CALCEDGELEN, "OMP calcedgelen");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcEdgeLenOMPTask>(registrar, "calcedgelen");
+    }
+    {
       TaskVariantRegistrar registrar(TID_CALCCHARLEN, "CPU calccharlen");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
@@ -1429,6 +1435,40 @@ void Mesh::calcEdgeLenTask(
 
         const double elen = length(px2 - px1);
         acc_elen[*itr] = elen;
+    }
+}
+
+
+void Mesh::calcEdgeLenOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[1], FID_PXP),
+        AccessorRO<double2>(regions[2], FID_PXP)
+    };
+    const AccessorWD<double> acc_elen(regions[3], FID_ELEN);
+
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
+    #pragma omp parallel for
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
+    {
+        const Pointer p1 = acc_mapsp1[s];
+        const int p1reg = acc_mapsp1reg[s];
+        const Pointer p2 = acc_mapsp2[s];
+        const int p2reg = acc_mapsp2reg[s];
+        const double2 px1 = acc_px[p1reg][p1];
+        const double2 px2 = acc_px[p2reg][p2];
+
+        const double elen = length(px2 - px1);
+        acc_elen[s] = elen;
     }
 }
 

@@ -67,7 +67,6 @@ static void __attribute__ ((constructor)) registerTasks() {
       registrar.set_leaf();
       Runtime::preregister_task_variant<Hydro::sumCrnrForceOMPTask>(registrar, "sumcrnrforce");
     }
-
     {
       TaskVariantRegistrar registrar(TID_CALCACCEL, "CPU calcaccel");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
@@ -75,10 +74,22 @@ static void __attribute__ ((constructor)) registerTasks() {
       Runtime::preregister_task_variant<Hydro::calcAccelTask>(registrar, "calcaccel"); 
     }
     {
+      TaskVariantRegistrar registrar(TID_CALCACCEL, "OMP calcaccel");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Hydro::calcAccelOMPTask>(registrar, "calcaccel"); 
+    }
+    {
       TaskVariantRegistrar registrar(TID_ADVPOSFULL, "CPU advposfull");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
       Runtime::preregister_task_variant<Hydro::advPosFullTask>(registrar, "advposfull");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_ADVPOSFULL, "OMP advposfull");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Hydro::advPosFullOMPTask>(registrar, "advposfull");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCWORK, "CPU calcwork");
@@ -547,6 +558,7 @@ Future Hydro::doCycle(
     launchcel.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcel.add_field(3, FID_ELEN);
+    launchcel.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcel);
 
     IndexTaskLauncher launchccl(TID_CALCCHARLEN, ispc, ta, am, p_not_done);
@@ -802,6 +814,7 @@ Future Hydro::doCycle(
                         READ_WRITE, EXCLUSIVE, lrp));
         launchafbc.add_field(2, FID_PF);
         launchafbc.add_field(2, FID_PU0);
+        launchafbc.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
         runtime->execute_index_space(ctx, launchafbc);
     }
 
@@ -811,6 +824,7 @@ Future Hydro::doCycle(
     IndexTaskLauncher launchca(TID_CALCACCEL, ispc, ta, am, p_not_done);
     IndexTaskLauncher launchapf(TID_ADVPOSFULL, ispc, ta, am, p_not_done);
     launchapf.add_future(f_dt);
+    launchapf.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     // do point routines twice, once each for private and master
     // partitions
     for (int part = 0; part < 2; ++part) {
@@ -827,6 +841,11 @@ Future Hydro::doCycle(
                 RegionRequirement(lppcurr, 0,
                         WRITE_DISCARD, EXCLUSIVE, lrp));
         launchca.add_field(1, FID_PAP);
+        // Only really need OpenMP for the private part
+        if (part == 0)
+          launchca.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+        else
+          launchca.tag &= ~(PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU);
         runtime->execute_index_space(ctx, launchca);
 
         // ===== Corrector step =====
@@ -843,6 +862,11 @@ Future Hydro::doCycle(
                         WRITE_DISCARD, EXCLUSIVE, lrp));
         launchapf.add_field(1, FID_PX);
         launchapf.add_field(1, FID_PU);
+        // Only really need OpenMP for the private part
+        if (part == 0)
+          launchca.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+        else
+          launchca.tag &= ~(PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU);
         runtime->execute_index_space(ctx, launchapf);
     }  // for part
 
@@ -1147,6 +1171,30 @@ void Hydro::calcAccelTask(
 }
 
 
+void Hydro::calcAccelOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<double2> acc_pf(regions[0], FID_PF);
+    const AccessorRO<double> acc_pmass(regions[0], FID_PMASWT);
+    const AccessorWD<double2> acc_pa(regions[1], FID_PAP);
+
+    const double fuzz = 1.e-99;
+    const IndexSpace& isp = task->regions[0].region.get_index_space();
+    // This will assert if its not dense
+    const Rect<1> rectp = runtime->get_index_space_domain(isp);
+    #pragma omp parallel for
+    for (coord_t p = rectp.lo[0]; p <= rectp.hi[0]; p++)
+    {
+        const double2 f = acc_pf[p];
+        const double m = acc_pmass[p];
+        const double2 a = f / max(m, fuzz);
+        acc_pa[p] = a;
+    }
+}
+
+
 void Hydro::advPosFullTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
@@ -1171,6 +1219,36 @@ void Hydro::advPosFullTask(
         acc_pu[*itp] = u;
         const double2 x = x0 + dt * 0.5 * (u0 + u);
         acc_px[*itp] = x;
+    }
+}
+
+
+void Hydro::advPosFullOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const double dt = task->futures[0].get_result<double>();
+
+    const AccessorRO<double2> acc_px0(regions[0], FID_PX0);
+    const AccessorRO<double2> acc_pu0(regions[0], FID_PU0);
+    const AccessorRO<double2> acc_pa(regions[0], FID_PAP);
+    const AccessorWD<double2> acc_px(regions[1], FID_PX);
+    const AccessorWD<double2> acc_pu(regions[1], FID_PU);
+
+    const IndexSpace& isp = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rectp = runtime->get_index_space_domain(isp);
+    #pragma omp parallel for
+    for (coord_t p = rectp.lo[0]; p <= rectp.hi[0]; p++)
+    {
+        const double2 x0 = acc_px0[p];
+        const double2 u0 = acc_pu0[p];
+        const double2 a = acc_pa[p];
+        const double2 u = u0 + dt * a;
+        acc_pu[p] = u;
+        const double2 x = x0 + dt * 0.5 * (u0 + u);
+        acc_px[p] = x;
     }
 }
 

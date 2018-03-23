@@ -77,6 +77,13 @@ public:
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,
             Legion::Runtime *runtime);
+    
+    // OpenMP variant
+    static void applyFixedBCOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void countBCPointsTask(
             const Legion::Task *task,
