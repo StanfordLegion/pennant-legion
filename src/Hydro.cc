@@ -29,6 +29,7 @@
 #include "TTS.hh"
 #include "QCS.hh"
 #include "HydroBC.hh"
+#include "PennantMapper.hh"
 
 using namespace std;
 using namespace Memory;
@@ -77,6 +78,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
       Runtime::preregister_task_variant<Hydro::calcWorkTask>(registrar, "calcwork");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCWORK, "OMP calcwork");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Hydro::calcWorkOMPTask>(registrar, "calcwork");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCWORKRATE, "CPU calcworkrate");
@@ -661,6 +668,7 @@ Future Hydro::doCycle(
     launchscd.add_field(5, FID_CDIV);
     launchscd.add_field(5, FID_CEVOL);
     launchscd.add_field(5, FID_CDU);
+    launchscd.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchscd);
 
     double sqcfargs[] = { qcs->qgamma, qcs->q1, qcs->q2 };
@@ -693,6 +701,7 @@ Future Hydro::doCycle(
     launchsqcf.add_field(4, FID_CRMU);
     launchsqcf.add_field(4, FID_CQE1);
     launchsqcf.add_field(4, FID_CQE2);
+    launchsqcf.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchsqcf);
 
     IndexTaskLauncher launchsfq(TID_SETFORCEQCS, ispc, ta, am, p_not_done);
@@ -710,6 +719,7 @@ Future Hydro::doCycle(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchsfq.add_field(2, FID_CW);
     launchsfq.add_field(2, FID_SFQ);
+    launchsfq.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchsfq);
 
     double svdargs[] = { qcs->q1, qcs->q2 };
@@ -738,6 +748,7 @@ Future Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchsvd.add_field(4, FID_ZTMP);
     launchsvd.add_field(4, FID_ZDU);
+    launchsvd.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchsvd);
 
     IndexTaskLauncher launchscf(TID_SUMCRNRFORCE, ispc, ta, am, p_not_done);
@@ -877,6 +888,7 @@ Future Hydro::doCycle(
     launchcw.add_region_requirement(
             RegionRequirement(lpz, 0, READ_WRITE, EXCLUSIVE, lrz));
     launchcw.add_field(4, FID_ZETOT);
+    launchcw.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcw);
 
     IndexTaskLauncher launchcwr(TID_CALCWORKRATE, ispc, ta, am, p_not_done);
@@ -1181,6 +1193,79 @@ void Hydro::calcWorkTask(
         acc_zw[z] += dwork;
     }
 }
+
+
+void Hydro::calcWorkOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const double dt = task->futures[0].get_result<double>();
+
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
+    const AccessorRO<double2> acc_sf(regions[0], FID_SFP);
+    const AccessorRO<double2> acc_sf2(regions[0], FID_SFQ);
+    const AccessorRO<double2> acc_pu0[2] = {
+        AccessorRO<double2>(regions[1], FID_PU0),
+        AccessorRO<double2>(regions[2], FID_PU0)
+    };
+    const AccessorRO<double2> acc_pu[2] = {
+        AccessorRO<double2>(regions[1], FID_PU),
+        AccessorRO<double2>(regions[2], FID_PU)
+    };
+    const AccessorRO<double2> acc_px[2] = {
+        AccessorRO<double2>(regions[1], FID_PXP),
+        AccessorRO<double2>(regions[2], FID_PXP)
+    };
+    const AccessorRW<double> acc_zw(regions[3], FID_ZW);
+    const AccessorRW<double> acc_zetot(regions[4], FID_ZETOT);
+
+    // Compute the work done by finding, for each element/node pair,
+    //   dwork= force * vavg
+    // where force is the force of the element on the node
+    // and vavg is the average velocity of the node over the time period
+
+    const IndexSpace& isz = task->regions[3].region.get_index_space();
+
+    #pragma omp parallel for
+    for (PointIterator itz(runtime, isz); itz(); itz++)
+      acc_zw[*itz] = 0.;
+
+    const double dth = 0.5 * dt;
+
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+ 
+    #pragma omp parallel for
+    for (PointIterator its(runtime, iss); its(); its++)
+    {
+        const Pointer s = *its;
+        const Pointer p1 = acc_mapsp1[s];
+        const int p1reg = acc_mapsp1reg[s];
+        const Pointer p2 = acc_mapsp2[s];
+        const int p2reg = acc_mapsp2reg[s];
+        const Pointer z = acc_mapsz[s];
+        const double2 sf = acc_sf[s];
+        const double2 sf2 = acc_sf2[s];
+        const double2 sftot = sf + sf2;
+        const double2 pu01 = acc_pu0[p1reg][p1];
+        const double2 pu1 = acc_pu[p1reg][p1];
+        const double sd1 = dot(sftot, (pu01 + pu1));
+        const double2 pu02 = acc_pu0[p2reg][p2];
+        const double2 pu2 = acc_pu[p2reg][p2];
+        const double sd2 = dot(-sftot, (pu02 + pu2));
+        const double2 px1 = acc_px[p1reg][p1];
+        const double2 px2 = acc_px[p2reg][p2];
+        const double dwork = -dth * (sd1 * px1.x + sd2 * px2.x);
+
+        SumOp<double>::apply<false/*exclusive*/>(acc_zetot[z], dwork);
+        SumOp<double>::apply<false/*exclusive*/>(acc_zw[z], dwork);
+    }
+}
+
 
 
 void Hydro::calcWorkRateTask(

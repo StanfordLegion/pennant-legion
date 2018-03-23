@@ -22,6 +22,12 @@
 
 class PennantMapper : public Legion::Mapping::DefaultMapper {
 public:
+  enum {
+    PREFER_CPU        = 0x0001,
+    PREFER_OMP        = 0x0002,
+    PREFER_GPU        = 0x0004,
+  };
+public:
   PennantMapper(
         Legion::Machine machine,
         Legion::Runtime *rt,
@@ -77,12 +83,15 @@ protected:
                          std::vector<Legion::Mapping::PhysicalInstance> &instances);
   Legion::VariantID find_cpu_variant(const Legion::Mapping::MapperContext ctx,
                                      Legion::TaskID task_id);
+  Legion::VariantID find_omp_variant(const Legion::Mapping::MapperContext ctx,
+                                     Legion::TaskID task_id);
   Legion::VariantID find_gpu_variant(const Legion::Mapping::MapperContext ctx,
                                      Legion::TaskID task_id);
 public:
   const char *const pennant_mapper_name;
 protected:
   std::map<Legion::TaskID,Legion::VariantID> cpu_variants;
+  std::map<Legion::TaskID,Legion::VariantID> omp_variants;
   std::map<Legion::TaskID,Legion::VariantID> gpu_variants;
 protected:
   Legion::Memory local_sysmem, local_zerocopy, local_framebuffer;

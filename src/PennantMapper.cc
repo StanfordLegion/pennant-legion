@@ -89,18 +89,34 @@ void PennantMapper::slice_task(const Legion::Mapping::MapperContext ctx,
                                      SliceTaskOutput &output)
 {
   // We've already been control replicated, so just divide our points
-  // over the local processors
-  unsigned local_cpu_index = 0;
-  for (Domain::DomainPointIterator itr(input.domain); itr; itr++)
-  {
-    TaskSlice slice;
-    slice.domain = Domain(itr.p, itr.p);
-    slice.proc = local_cpus[local_cpu_index++];
-    if (local_cpu_index == local_cpus.size())
-      local_cpu_index = 0;
-    slice.recurse = false;
-    slice.stealable = false;
-    output.slices.push_back(slice);
+  // over the local processors, depending on which kind we prefer
+  if ((task.tag & PREFER_OMP) && !local_omps.empty()) {
+    unsigned local_omp_index = 0;
+    for (Domain::DomainPointIterator itr(input.domain); itr; itr++)
+    {
+      TaskSlice slice;
+      slice.domain = Domain(itr.p, itr.p);
+      slice.proc = local_omps[local_omp_index++];
+      if (local_omp_index == local_omps.size())
+        local_omp_index = 0;
+      slice.recurse = false;
+      slice.stealable = false;
+      output.slices.push_back(slice);
+    }
+  } else {
+    // Opt for our cpus instead of our openmap processors
+    unsigned local_cpu_index = 0;
+    for (Domain::DomainPointIterator itr(input.domain); itr; itr++)
+    {
+      TaskSlice slice;
+      slice.domain = Domain(itr.p, itr.p);
+      slice.proc = local_cpus[local_cpu_index++];
+      if (local_cpu_index == local_cpus.size())
+        local_cpu_index = 0;
+      slice.recurse = false;
+      slice.stealable = false;
+      output.slices.push_back(slice);
+    }
   }
 }
 
@@ -109,8 +125,13 @@ void PennantMapper::map_task(const MapperContext ctx,
                              const MapTaskInput &input,
                                    MapTaskOutput &output)
 {
-  output.chosen_variant = find_cpu_variant(ctx, task.task_id);
-  output.target_procs = local_cpus;
+  if ((task.tag & PREFER_OMP) && !local_omps.empty()) {
+    output.chosen_variant = find_omp_variant(ctx, task.task_id);
+    output.target_procs = local_omps;
+  } else {
+    output.chosen_variant = find_cpu_variant(ctx, task.task_id);
+    output.target_procs = local_cpus;
+  }
   output.chosen_instances.resize(task.regions.size());  
   for (unsigned idx = 0; idx < task.regions.size(); idx++)
   {
@@ -287,6 +308,19 @@ VariantID PennantMapper::find_cpu_variant(const MapperContext ctx, TaskID task_i
   runtime->find_valid_variants(ctx, task_id, variants, Processor::LOC_PROC);
   assert(variants.size() == 1); // should be exactly one for pennant 
   cpu_variants[task_id] = variants[0];
+  return variants[0];
+}
+
+VariantID PennantMapper::find_omp_variant(const MapperContext ctx, TaskID task_id)
+{
+  std::map<TaskID,VariantID>::const_iterator finder = 
+    omp_variants.find(task_id);
+  if (finder != omp_variants.end())
+    return finder->second;
+  std::vector<VariantID> variants;
+  runtime->find_valid_variants(ctx, task_id, variants, Processor::OMP_PROC);
+  assert(variants.size() == 1); // should be exactly one for pennant 
+  omp_variants[task_id] = variants[0];
   return variants[0];
 }
 

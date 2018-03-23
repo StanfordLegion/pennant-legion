@@ -15,6 +15,7 @@
 #include <cmath>
 #include <iostream>
 #include <algorithm>
+#include <float.h>
 
 #include "legion.h"
 
@@ -154,14 +155,26 @@ void atomicMin(double& lhs, const double& rhs) {
 
 
 template <>
+void atomicMax(double& lhs, const double& rhs) {
+    long long *target = (long long *)&lhs;
+    union { long long as_int; double as_float; } oldval, newval;
+    do {
+      oldval.as_int = *target;
+      newval.as_float = max(oldval.as_float, rhs);
+    } while (!__sync_bool_compare_and_swap(target, oldval.as_int, newval.as_int));
+}
+
+
+template <>
 const int SumOp<int>::identity = 0;
 template <>
 const double SumOp<double>::identity = 0.;
 template <>
 const double2 SumOp<double2>::identity = double2(0., 0.);
 template <>
-const double MinOp<double>::identity = 1.e99;
-
+const double MinOp<double>::identity = DBL_MAX;
+template <>
+const double MaxOp<double>::identity = DBL_MIN;
 
 Mesh::Mesh(
         const InputFile* inp,

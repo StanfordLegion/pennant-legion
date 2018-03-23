@@ -67,6 +67,31 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    // OpenMP variants
+    static void setCornerDivOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void setQCnForceOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void setForceOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void setVelDiffOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
 };  // class QCS
 
 

@@ -133,12 +133,19 @@ void atomicAdd(T& lhs, const T& rhs);
 template <typename T>
 void atomicMin(T& lhs, const T& rhs);
 
+// atomic versions of lhs = max(lhs, rhs)
+template <typename T>
+void atomicMax(T& lhs, const T& rhs);
+
 // helper struct for reduction ops
 template <typename T, bool EXCLUSIVE>
 struct ReduceHelper {
     static void addTo(T& lhs, const T& rhs) { lhs += rhs; }
     static void minOf(T& lhs, const T& rhs) {
         lhs = std::min(lhs, rhs);
+    }
+    static void maxOf(T& lhs, const T& rhs) {
+        lhs = std::max(lhs, rhs);
     }
 };
 
@@ -147,6 +154,7 @@ template <typename T>
 struct ReduceHelper<T, false> {
     static void addTo(T& lhs, const T& rhs) { atomicAdd(lhs, rhs); }
     static void minOf(T& lhs, const T& rhs) { atomicMin(lhs, rhs); }
+    static void maxOf(T& lhs, const T& rhs) { atomicMax(lhs, rhs); }
 };
 
 template <typename T>
@@ -182,6 +190,21 @@ public:
         { ReduceHelper<T, EXCLUSIVE>::minOf(rhs1, rhs2); }
 };
 
+template <typename T>
+class MaxOp {
+public:
+    typedef T LHS;
+    typedef T RHS;
+    static const T identity;
+
+    template <bool EXCLUSIVE>
+    static void apply(LHS& lhs, RHS rhs)
+        { ReduceHelper<T, EXCLUSIVE>::minOf(lhs, rhs); }
+
+    template <bool EXCLUSIVE>
+    static void fold(RHS& rhs1, RHS rhs2)
+        { ReduceHelper<T, EXCLUSIVE>::minOf(rhs1, rhs2); }
+};
 
 class Mesh {
 public:

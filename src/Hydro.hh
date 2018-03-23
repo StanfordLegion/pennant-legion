@@ -208,6 +208,14 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    // OpenMP variants
+
+    static void calcWorkOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
 }; // class Hydro
 
 

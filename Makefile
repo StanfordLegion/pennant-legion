@@ -32,6 +32,7 @@ OUTPUT_LEVEL=LEVEL_DEBUG  # Compile time print level
 #SHARED_LOWLEVEL=1	  # Use the shared low level
 SHARED_LOWLEVEL=0
 USE_CUDA=0
+USE_OPENMP=0
 GASNET_ROOT= ${HOME}/local
 HDF_ROOT = ${HOME}/local
 #GASNET_ROOT=/users/cferenba/gasnet/1.24.0/build-mustang-gnu48
@@ -53,6 +54,9 @@ GEN_GPU_SRC	:=				# .cu files
 INC_FLAGS	:= -I$(SRCDIR) 
 #CC_FLAGS	:=
 CC_FLAGS	:= -std=c++11 -Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-unused-variable
+ifeq ($(strip $(USE_OPENMP)),1)
+CC_FLAGS	+= -fopenmp
+endif
 #CC_FLAGS	+= -DENABLE_MAX_CYCLE_PREDICATION
 #CC_FLAGS	+= -DBOUNDS_CHECKS
 #CC_FLAGS	+= -DLEGION_SPY
