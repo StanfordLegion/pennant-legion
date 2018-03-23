@@ -44,10 +44,22 @@ static void __attribute__ ((constructor)) registerTasks() {
       Runtime::preregister_task_variant<Hydro::advPosHalfTask>(registrar, "advposhalf");
     }
     {
+      TaskVariantRegistrar registrar(TID_ADVPOSHALF, "OMP advposhalf");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Hydro::advPosHalfOMPTask>(registrar, "advposhalf");
+    }
+    {
       TaskVariantRegistrar registrar(TID_CALCRHO, "CPU calcrho");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
       Runtime::preregister_task_variant<Hydro::calcRhoTask>(registrar, "calcrho");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCRHO, "OMP calcrho");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Hydro::calcRhoOMPTask>(registrar, "calcrho");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCCRNRMASS, "CPU calccrnrmass");
@@ -120,6 +132,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
       Runtime::preregister_task_variant<double, Hydro::calcDtTask>(registrar, "calcdt");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCDT, "OMP calcdt");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<double, Hydro::calcDtOMPTask>(registrar, "calcdt");
     }
     {
       TaskVariantRegistrar registrar(TID_INITSUBRGN, "CPU init subrange");
@@ -472,6 +490,11 @@ Future Hydro::doCycle(
                 RegionRequirement(lppcurr, 0,
                         WRITE_DISCARD, EXCLUSIVE, lrp));
         launchaph.add_field(1, FID_PXP);
+        // Only really need OpenMP for the private part
+        if (part == 0)
+          launchaph.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+        else
+          launchaph.tag &= ~(PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU);
         runtime->execute_index_space(ctx, launchaph);
     }  // for part
 
@@ -583,6 +606,7 @@ Future Hydro::doCycle(
     launchcr.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcr.add_field(1, FID_ZRP);
+    launchcr.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcr);
 
     IndexTaskLauncher launchccm(TID_CALCCRNRMASS, ispc, ta, am, p_not_done);
@@ -972,6 +996,7 @@ Future Hydro::doCycle(
     launchcdt.add_field(0, FID_ZSS);
     launchcdt.add_field(0, FID_ZVOL);
     launchcdt.add_field(0, FID_ZVOL0);
+    launchcdt.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     Future f_cdt = runtime->execute_index_space(ctx, launchcdt, OPID_MINDBL);
 
     // check for negative volumes on corrector step
@@ -1013,6 +1038,31 @@ void Hydro::advPosHalfTask(
 }
 
 
+void Hydro::advPosHalfOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const double dt = task->futures[0].get_result<double>();
+    const double dth = 0.5 * dt;
+    const AccessorRO<double2> acc_px0(regions[0], FID_PX0);
+    const AccessorRO<double2> acc_pu0(regions[0], FID_PU0);
+    const AccessorWD<double2> acc_pxp(regions[1], FID_PXP);
+
+    const IndexSpace& isp = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rectp = runtime->get_index_space_domain(isp);
+    #pragma omp parallel for 
+    for (coord_t p = rectp.lo[0]; p <= rectp.hi[0]; p++)
+    {
+        const double2 x0 = acc_px0[p];
+        const double2 u0 = acc_pu0[p];
+        const double2 xp = x0 + dth * u0;
+        acc_pxp[p] = xp;
+    }
+}
+
+
 void Hydro::calcRhoTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
@@ -1032,6 +1082,32 @@ void Hydro::calcRhoTask(
         const double v = acc_zvol[*itz];
         const double r = m / v;
         acc_zr[*itz] = r;
+    }
+}
+
+
+void Hydro::calcRhoOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    FieldID fid_zm = task->regions[0].instance_fields[0];
+    FieldID fid_zvol = task->regions[0].instance_fields[1];
+    const AccessorRO<double> acc_zm(regions[0], fid_zm);
+    const AccessorRO<double> acc_zvol(regions[0], fid_zvol);
+    FieldID fid_zr = task->regions[1].instance_fields[0];
+    const AccessorWD<double> acc_zr(regions[1], fid_zr);
+
+    const IndexSpace& isz = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rectz = runtime->get_index_space_domain(isz);
+    #pragma omp parallel for
+    for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
+    {
+        const double m = acc_zm[z];
+        const double v = acc_zvol[z];
+        const double r = m / v;
+        acc_zr[z] = r;
     }
 }
 
@@ -1498,6 +1574,65 @@ double Hydro::calcDtTask(
         const double zdvov = abs((zvol - zvol0) / zvol0);
         zmax = (zdvov > dvovmax ? (int) *itz : zmax);
         dvovmax = (zdvov > dvovmax ? zdvov : dvovmax);
+    }
+    double dtnew2 = dtlast * cflv / dvovmax;
+    if (dtnew2 < dtrec) {
+        dtrec = dtnew2;
+    }
+
+    return dtrec;
+}
+
+
+double Hydro::calcDtOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const double* args = (const double*) task->args;
+    const double cfl    = args[0];
+    const double cflv   = args[1];
+    const double dtlast = task->futures[0].get_result<double>();
+
+    const AccessorRO<double> acc_zdl(regions[0], FID_ZDL);
+    const AccessorRO<double> acc_zdu(regions[0], FID_ZDU);
+    const AccessorRO<double> acc_zss(regions[0], FID_ZSS);
+    const AccessorRO<double> acc_zvol(regions[0], FID_ZVOL);
+    const AccessorRO<double> acc_zvol0(regions[0], FID_ZVOL0);
+
+    double dtrec = 1.e99;
+
+    // compute dt using Courant condition
+    const double fuzz = 1.e-99;
+    double dtnew = 1.e99;
+    const IndexSpace& isz = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rectz = runtime->get_index_space_domain(isz);
+    #pragma omp parallel for 
+    for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
+    {
+        const double zdu = acc_zdu[z];
+        const double zss = acc_zss[z];
+        const double cdu = max(zdu, max(zss, fuzz));
+        const double zdl = acc_zdl[z];
+        const double zdthyd = zdl * cfl / cdu;
+        
+        MinOp<double>::apply<false/*exclusive*/>(dtnew, zdthyd);
+    }
+    if (dtnew < dtrec) {
+        dtrec = dtnew;
+    }
+
+    // compute dt using volume condition
+    double dvovmax = 1.e-99;
+    #pragma omp parallel for 
+    for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
+    {
+        const double zvol = acc_zvol[z];
+        const double zvol0 = acc_zvol0[z];
+        const double zdvov = abs((zvol - zvol0) / zvol0);
+
+        MaxOp<double>::apply<false/*exclusive*/>(dvovmax, zdvov);
     }
     double dtnew2 = dtlast * cflv / dvovmax;
     if (dtnew2 < dtrec) {
