@@ -996,7 +996,6 @@ Future Hydro::doCycle(
     launchcdt.add_field(0, FID_ZSS);
     launchcdt.add_field(0, FID_ZVOL);
     launchcdt.add_field(0, FID_ZVOL0);
-    launchcdt.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     Future f_cdt = runtime->execute_index_space(ctx, launchcdt, OPID_MINDBL);
 
     // check for negative volumes on corrector step
@@ -1546,7 +1545,6 @@ double Hydro::calcDtTask(
     // compute dt using Courant condition
     const double fuzz = 1.e-99;
     double dtnew = 1.e99;
-    int zmin = -1;
     const IndexSpace& isz = task->regions[0].region.get_index_space();
     
     for (PointIterator itz(runtime, isz); itz(); itz++)
@@ -1556,7 +1554,6 @@ double Hydro::calcDtTask(
         const double cdu = max(zdu, max(zss, fuzz));
         const double zdl = acc_zdl[*itz];
         const double zdthyd = zdl * cfl / cdu;
-        zmin = (zdthyd < dtnew ? (int) *itz : zmin);
         dtnew = (zdthyd < dtnew ? zdthyd : dtnew);
     }
     if (dtnew < dtrec) {
@@ -1565,14 +1562,12 @@ double Hydro::calcDtTask(
 
     // compute dt using volume condition
     double dvovmax = 1.e-99;
-    int zmax = -1;
     
     for (PointIterator itz(runtime, isz); itz(); itz++)
     {
         const double zvol = acc_zvol[*itz];
         const double zvol0 = acc_zvol0[*itz];
         const double zdvov = abs((zvol - zvol0) / zvol0);
-        zmax = (zdvov > dvovmax ? (int) *itz : zmax);
         dvovmax = (zdvov > dvovmax ? zdvov : dvovmax);
     }
     double dtnew2 = dtlast * cflv / dvovmax;
