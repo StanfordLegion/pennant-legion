@@ -43,6 +43,13 @@ public:
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,
             Legion::Runtime *runtime);
+    
+    // OpenMP variant
+    static void calcStateHalfOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
 
     static void calcForceTask(
             const Legion::Task *task,

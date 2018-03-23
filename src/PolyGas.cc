@@ -33,6 +33,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       Runtime::preregister_task_variant<PolyGas::calcStateHalfTask>(registrar, "calcstatehalf");
     }
     {
+      TaskVariantRegistrar registrar(TID_CALCSTATEHALF, "OMP calcstatehalf");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<PolyGas::calcStateHalfOMPTask>(registrar, "calcstatehalf");
+    }
+    {
       TaskVariantRegistrar registrar(TID_CALCFORCEPGAS, "CPU calcforcepgas");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
@@ -93,6 +99,58 @@ void PolyGas::calcStateHalfTask(
         const double src = wrate * dth * minv;
         acc_zp[*itz] = p + (per * src - r * bulk * dv) / denom;
         acc_zss[*itz] = ss;
+    }
+}
+
+
+void PolyGas::calcStateHalfOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const double* args = (const double*) task->args;
+    const double gamma = args[0];
+    const double ssmin = args[1];
+    const double dt    = task->futures[0].get_result<double>();
+
+    const AccessorRO<double> acc_zr(regions[0], FID_ZR);
+    const AccessorRO<double> acc_zvolp(regions[0], FID_ZVOLP);
+    const AccessorRO<double> acc_zvol0(regions[0], FID_ZVOL0);
+    const AccessorRO<double> acc_ze(regions[0], FID_ZE);
+    const AccessorRO<double> acc_zwrate(regions[0], FID_ZWRATE);
+    const AccessorRO<double> acc_zm(regions[0], FID_ZM);
+    const AccessorWD<double> acc_zp(regions[1], FID_ZP);
+    const AccessorWD<double> acc_zss(regions[1], FID_ZSS);
+
+    const double dth = 0.5 * dt;
+    const double gm1 = gamma - 1.;
+    const double ssmin2 = max(ssmin * ssmin, 1.e-99);
+    const IndexSpace& isz = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rectz = runtime->get_index_space_domain(isz);
+    #pragma omp parallel for
+    for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
+    {
+        // compute EOS at beginning of time step
+        const double r = acc_zr[z];
+        const double e = max(acc_ze[z], 0.);
+        const double p = gm1 * r * e;
+        const double pre = gm1 * e;
+        const double per = gm1 * r;
+        const double csqd = max(ssmin2, pre + per * p / (r * r));
+        const double ss = sqrt(csqd);
+
+        // now advance pressure to the half-step
+        const double minv = 1. / acc_zm[z];
+        const double volp = acc_zvolp[z];
+        const double vol0 = acc_zvol0[z];
+        const double wrate = acc_zwrate[z];
+        const double dv = (volp - vol0) * minv;
+        const double bulk = r * csqd;
+        const double denom = 1. + 0.5 * per * dv;
+        const double src = wrate * dth * minv;
+        acc_zp[z] = p + (per * src - r * bulk * dv) / denom;
+        acc_zss[z] = ss;
     }
 }
 

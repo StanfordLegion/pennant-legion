@@ -68,6 +68,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       Runtime::preregister_task_variant<Hydro::calcCrnrMassTask>(registrar, "calccrnrmass");
     }
     {
+      TaskVariantRegistrar registrar(TID_CALCCRNRMASS, "OMP calccrnrmass");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Hydro::calcCrnrMassOMPTask>(registrar, "calccrnrmass");
+    }
+    {
       TaskVariantRegistrar registrar(TID_SUMCRNRFORCE, "CPU sumcrnrforce");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
@@ -628,6 +634,7 @@ Future Hydro::doCycle(
             RegionRequirement(lppshr, 0, OPID_SUMDBL,
                     SIMULTANEOUS, lrp));
     launchccm.add_field(3, FID_PMASWT);
+    launchccm.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchccm);
 
     double cshargs[] = { pgas->gamma, pgas->ssmin };
@@ -659,6 +666,7 @@ Future Hydro::doCycle(
     launchcfp.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcfp.add_field(2, FID_SFP);
+    launchcfp.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcfp);
 
     double cftargs[] = { tts->alfa, tts->ssmin };
@@ -1142,6 +1150,45 @@ void Hydro::calcCrnrMassTask(
         const double mwt = r * area * 0.5 * (mf + mf3);
         if (preg == 0)
             SumOp<double>::apply<true/*exclusive*/>(acc_pmas_prv[p], mwt);
+        else
+            acc_pmas_shr[p] <<= mwt;
+    }
+}
+
+
+void Hydro::calcCrnrMassOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
+    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
+    const AccessorRO<Pointer> acc_mapss3(regions[0], FID_MAPSS3);
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double> acc_smf(regions[0], FID_SMF);
+    const AccessorRO<double> acc_zr(regions[1], FID_ZRP);
+    const AccessorRO<double> acc_zarea(regions[1], FID_ZAREAP);
+    const AccessorRW<double> acc_pmas_prv(regions[2], FID_PMASWT);
+    const AccessorRD<SumOp<double>,false/*exclusive*/> 
+      acc_pmas_shr(regions[3], FID_PMASWT, OPID_SUMDBL);
+
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
+    #pragma omp parallel for
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
+    {
+        const Pointer s3 = acc_mapss3[s];
+        const Pointer z  = acc_mapsz[s];
+        const Pointer p = acc_mapsp1[s];
+        const int preg = acc_mapsp1reg[s];
+        const double r = acc_zr[z];
+        const double area = acc_zarea[z];
+        const double mf = acc_smf[s];
+        const double mf3 = acc_smf[s3];
+        const double mwt = r * area * 0.5 * (mf + mf3);
+        if (preg == 0)
+            SumOp<double>::apply<false/*exclusive*/>(acc_pmas_prv[p], mwt);
         else
             acc_pmas_shr[p] <<= mwt;
     }
