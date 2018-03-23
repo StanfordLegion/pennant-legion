@@ -653,6 +653,7 @@ Future Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcsh.add_field(1, FID_ZP);
     launchcsh.add_field(1, FID_ZSS);
+    launchcsh.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcsh);
 
     IndexTaskLauncher launchcfp(TID_CALCFORCEPGAS, ispc, ta, am, p_not_done);
@@ -666,7 +667,6 @@ Future Hydro::doCycle(
     launchcfp.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcfp.add_field(2, FID_SFP);
-    launchcfp.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcfp);
 
     double cftargs[] = { tts->alfa, tts->ssmin };
