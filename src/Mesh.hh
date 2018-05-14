@@ -21,6 +21,7 @@
 
 #include "Vec2.hh"
 #include "GenMesh.hh"
+#include "CudaHelp.hh"
 
 // forward declarations
 class InputFile;
@@ -122,39 +123,152 @@ enum MeshOpID {
     OPID_SUMINT = 'M' * 100,
     OPID_SUMDBL,
     OPID_SUMDBL2,
-    OPID_MINDBL
+    OPID_MINDBL,
+    OPID_MAXDBL
 };
 
 // atomic versions of lhs += rhs
-template <typename T>
-void atomicAdd(T& lhs, const T& rhs);
+template <typename T> __CUDA_HD__
+inline void atomic_add(T& lhs, const T& rhs);
 
 // atomic versions of lhs = min(lhs, rhs)
-template <typename T>
-void atomicMin(T& lhs, const T& rhs);
+template <typename T> __CUDA_HD__
+inline void atomic_min(T& lhs, const T& rhs);
 
 // atomic versions of lhs = max(lhs, rhs)
-template <typename T>
-void atomicMax(T& lhs, const T& rhs);
+template <typename T> __CUDA_HD__
+inline void atomic_max(T& lhs, const T& rhs);
+
+template <> __CUDA_HD__
+inline void atomic_add(int& lhs, const int& rhs) {
+#ifdef __CUDA_ARCH__
+    atomicAdd(&lhs, rhs);
+#else
+    __sync_add_and_fetch(&lhs, rhs);
+#endif
+}
+
+
+template <> __CUDA_HD__
+inline void atomic_add(double& lhs, const double& rhs) {
+#ifdef __CUDA_ARCH__
+#if __CUDA_ARCH__ < 600
+    unsigned long long int* address_as_ull =
+                              (unsigned long long int*)&lhs;
+    unsigned long long int old = *address_as_ull, assumed;
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+                        __double_as_longlong(rhs +
+                               __longlong_as_double(assumed)));
+    } while (assumed != old);
+#else
+    atomicAdd(&lhs, rhs);
+#endif
+#else
+    long long *target = (long long *)&lhs;
+    union { long long as_int; double as_float; } oldval, newval;
+    do {
+      oldval.as_int = *target;
+      newval.as_float = oldval.as_float + rhs;
+    } while (!__sync_bool_compare_and_swap(target, oldval.as_int, newval.as_int));
+#endif
+}
+
+
+template <> __CUDA_HD__
+inline void atomic_add(double2& lhs, const double2& rhs) {
+    atomic_add(lhs.x, rhs.x);
+    atomic_add(lhs.y, rhs.y);
+}
+
+
+template <> __CUDA_HD__
+inline void atomic_min(double& lhs, const double& rhs) {
+#ifdef __CUDA_ARCH__
+#if __CUDA_ARCH__ < 350
+    unsigned long long int* address_as_ull =
+                              (unsigned long long int*)&lhs;
+    unsigned long long int old = *address_as_ull, assumed;
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+            __double_as_longlong((__longlong_as_double(assumed) < rhs) ? 
+              __longlong_as_double(assumed) : rhs));
+    } while (assumed != old);
+#else
+    atomicMin((unsigned long long*)&lhs, (unsigned long long)rhs);
+#endif
+#else
+    long long *target = (long long *)&lhs;
+    union { long long as_int; double as_float; } oldval, newval;
+    do {
+      oldval.as_int = *target;
+      newval.as_float = (oldval.as_float < rhs) ? oldval.as_float : rhs;
+    } while (!__sync_bool_compare_and_swap(target, oldval.as_int, newval.as_int));
+#endif
+}
+
+
+template <> __CUDA_HD__
+inline void atomic_max(double& lhs, const double& rhs) {
+#ifdef __CUDA_ARCH__
+#if __CUDA_ARCH__ < 350
+    unsigned long long int* address_as_ull =
+                              (unsigned long long int*)&lhs;
+    unsigned long long int old = *address_as_ull, assumed;
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+            __double_as_longlong((__longlong_as_double(assumed) > rhs) ? 
+              __longlong_as_double(assumed) : rhs));
+    } while (assumed != old);
+#else
+    atomicMax((unsigned long long*)&lhs, (unsigned long long)rhs);
+#endif
+#else
+    long long *target = (long long *)&lhs;
+    union { long long as_int; double as_float; } oldval, newval;
+    do {
+      oldval.as_int = *target;
+      newval.as_float = (oldval.as_float > rhs) ? oldval.as_float : rhs;
+    } while (!__sync_bool_compare_and_swap(target, oldval.as_int, newval.as_int));
+#endif
+}
 
 // helper struct for reduction ops
 template <typename T, bool EXCLUSIVE>
 struct ReduceHelper {
+    __CUDA_HD__
     static void addTo(T& lhs, const T& rhs) { lhs += rhs; }
+    __CUDA_HD__
     static void minOf(T& lhs, const T& rhs) {
-        lhs = std::min(lhs, rhs);
+        lhs = (lhs < rhs) ? lhs : rhs;
     }
+    __CUDA_HD__
     static void maxOf(T& lhs, const T& rhs) {
-        lhs = std::max(lhs, rhs);
+        lhs = (lhs > rhs) ? lhs : rhs;
     }
 };
 
 // if not exclusive, use an atomic operation
 template <typename T>
 struct ReduceHelper<T, false> {
-    static void addTo(T& lhs, const T& rhs) { atomicAdd(lhs, rhs); }
-    static void minOf(T& lhs, const T& rhs) { atomicMin(lhs, rhs); }
-    static void maxOf(T& lhs, const T& rhs) { atomicMax(lhs, rhs); }
+    __CUDA_HD__
+    static void addTo(T& lhs, const T& rhs) 
+    { 
+      atomic_add(lhs, rhs); 
+    }
+    __CUDA_HD__
+    static void minOf(T& lhs, const T& rhs) 
+    { 
+      atomic_min(lhs, rhs); 
+    }
+    __CUDA_HD__
+    static void maxOf(T& lhs, const T& rhs) 
+    { 
+      atomic_max(lhs, rhs); 
+    }
 };
 
 template <typename T>
@@ -164,11 +278,11 @@ public:
     typedef T RHS;
     static const T identity;
 
-    template <bool EXCLUSIVE>
+    template <bool EXCLUSIVE> __CUDA_HD__
     static void apply(LHS& lhs, RHS rhs)
         { ReduceHelper<T, EXCLUSIVE>::addTo(lhs, rhs); }
 
-    template <bool EXCLUSIVE>
+    template <bool EXCLUSIVE> __CUDA_HD__
     static void fold(RHS& rhs1, RHS rhs2)
         { ReduceHelper<T, EXCLUSIVE>::addTo(rhs1, rhs2); }
 };
@@ -181,11 +295,11 @@ public:
     typedef T RHS;
     static const T identity;
 
-    template <bool EXCLUSIVE>
+    template <bool EXCLUSIVE> __CUDA_HD__
     static void apply(LHS& lhs, RHS rhs)
         { ReduceHelper<T, EXCLUSIVE>::minOf(lhs, rhs); }
 
-    template <bool EXCLUSIVE>
+    template <bool EXCLUSIVE> __CUDA_HD__
     static void fold(RHS& rhs1, RHS rhs2)
         { ReduceHelper<T, EXCLUSIVE>::minOf(rhs1, rhs2); }
 };
@@ -197,11 +311,11 @@ public:
     typedef T RHS;
     static const T identity;
 
-    template <bool EXCLUSIVE>
+    template <bool EXCLUSIVE> __CUDA_HD__
     static void apply(LHS& lhs, RHS rhs)
         { ReduceHelper<T, EXCLUSIVE>::minOf(lhs, rhs); }
 
-    template <bool EXCLUSIVE>
+    template <bool EXCLUSIVE> __CUDA_HD__
     static void fold(RHS& rhs1, RHS rhs2)
         { ReduceHelper<T, EXCLUSIVE>::minOf(rhs1, rhs2); }
 };

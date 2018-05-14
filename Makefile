@@ -31,7 +31,7 @@ OUTPUT_LEVEL=LEVEL_DEBUG  # Compile time print level
 #OUTPUT_LEVEL=LEVEL_INFO   # Compile time print level
 #SHARED_LOWLEVEL=1	  # Use the shared low level
 SHARED_LOWLEVEL=0
-USE_CUDA=0
+USE_CUDA=1
 USE_OPENMP=0
 GASNET_ROOT= ${HOME}/local
 HDF_ROOT = ${HOME}/local
@@ -48,7 +48,7 @@ USE_GASNET=0
 OUTFILE         := pennant
 # List all the application source files here
 GEN_SRC         := $(wildcard $(SRCDIR)/*.cc)
-GEN_GPU_SRC	:=				# .cu files
+GEN_GPU_SRC	:= $(wildcard $(SRCDIR)/*.cu) # .cu files
 
 # You can modify these variables, some will be appended to by the runtime makefile
 INC_FLAGS	:= -I$(SRCDIR) 
@@ -60,7 +60,7 @@ endif
 #CC_FLAGS	+= -DENABLE_MAX_CYCLE_PREDICATION
 #CC_FLAGS	+= -DBOUNDS_CHECKS
 #CC_FLAGS	+= -DLEGION_SPY
-NVCC_FLAGS	:=
+NVCC_FLAGS	:= -std=c++11
 GASNET_FLAGS	:=
 #LD_FLAGS	:=
 LD_FLAGS := 

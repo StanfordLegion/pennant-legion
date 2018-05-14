@@ -133,54 +133,10 @@ static void __attribute__ ((constructor)) registerTasks() {
             OPID_SUMDBL2);
     Runtime::register_reduction_op<MinOp<double> >(
             OPID_MINDBL);
+    Runtime::register_reduction_op<MaxOp<double> >(
+            OPID_MAXDBL);
 }
 }; // namespace
-
-
-template <>
-void atomicAdd(int& lhs, const int& rhs) {
-    __sync_add_and_fetch(&lhs, rhs);
-}
-
-
-template <>
-void atomicAdd(double& lhs, const double& rhs) {
-    long long *target = (long long *)&lhs;
-    union { long long as_int; double as_float; } oldval, newval;
-    do {
-      oldval.as_int = *target;
-      newval.as_float = oldval.as_float + rhs;
-    } while (!__sync_bool_compare_and_swap(target, oldval.as_int, newval.as_int));
-}
-
-
-template <>
-void atomicAdd(double2& lhs, const double2& rhs) {
-    atomicAdd(lhs.x, rhs.x);
-    atomicAdd(lhs.y, rhs.y);
-}
-
-
-template <>
-void atomicMin(double& lhs, const double& rhs) {
-    long long *target = (long long *)&lhs;
-    union { long long as_int; double as_float; } oldval, newval;
-    do {
-      oldval.as_int = *target;
-      newval.as_float = min(oldval.as_float, rhs);
-    } while (!__sync_bool_compare_and_swap(target, oldval.as_int, newval.as_int));
-}
-
-
-template <>
-void atomicMax(double& lhs, const double& rhs) {
-    long long *target = (long long *)&lhs;
-    union { long long as_int; double as_float; } oldval, newval;
-    do {
-      oldval.as_int = *target;
-      newval.as_float = max(oldval.as_float, rhs);
-    } while (!__sync_bool_compare_and_swap(target, oldval.as_int, newval.as_int));
-}
 
 
 template <>

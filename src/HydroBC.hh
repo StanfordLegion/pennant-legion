@@ -85,6 +85,13 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    // GPU variant
+    static void applyFixedBCGPUTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
     static void countBCPointsTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
