@@ -479,6 +479,13 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    // GPU variant
+    static void calcCtrsGPUTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
     static int calcVolsTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
@@ -487,6 +494,13 @@ public:
 
     // OpenMP variant
     static int calcVolsOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    // GPU variant
+    static Legion::DeferredReduction<SumOp<int> > calcVolsGPUTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,
@@ -512,6 +526,13 @@ public:
 
     // OpenMP variant
     static void calcEdgeLenOMPTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    // GPU variant
+    static void calcEdgeLenGPUTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,

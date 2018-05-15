@@ -51,6 +51,13 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    // GPU variant
+    static void calcStateHalfGPUTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
     static void calcForceTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
