@@ -188,7 +188,7 @@ void QCS::setCornerDivTask(
         const double2 up2 = acc_zuc[z];
         const double2 xp2 = acc_zx[z];
         // 3 = edge e1
-        const double2 up3 = 0.5 * (acc_pu[p1reg].read(p1) + up0);
+        const double2 up3 = 0.5 * (acc_pu[p1reg][p1] + up0);
         const double2 xp3 = acc_ex[s];
 
         // compute 2d cartesian volume of corner
@@ -338,7 +338,7 @@ void QCS::setForceTask(
     const AccessorRO<double2> acc_cqe1(regions[0], FID_CQE1);
     const AccessorRO<double2> acc_cqe2(regions[0], FID_CQE2);
     const AccessorRO<double> acc_elen(regions[0], FID_ELEN);
-    const AccessorWD<double> acc_ccos(regions[1], FID_CCOS);
+    const AccessorRW<double> acc_ccos(regions[1], FID_CCOS);
     const AccessorWD<double> acc_cw(regions[2], FID_CW);
     const AccessorWD<double2> acc_sfq(regions[2], FID_SFQ);
 
@@ -477,7 +477,7 @@ void QCS::setCornerDivOMPTask(
     };
     const AccessorWD<double2> acc_zuc(regions[4], FID_ZUC);
     const AccessorWD<double> acc_carea(regions[5], FID_CAREA);
-    const AccessorWD<double> acc_ccos(regions[5], FID_CCOS);
+    const AccessorRW<double> acc_ccos(regions[5], FID_CCOS);
     const AccessorWD<double> acc_cdiv(regions[5], FID_CDIV);
     const AccessorWD<double> acc_cevol(regions[5], FID_CEVOL);
     const AccessorWD<double> acc_cdu(regions[5], FID_CDU);
@@ -500,7 +500,6 @@ void QCS::setCornerDivOMPTask(
         const int preg = acc_mapsp1reg[s];
         const Pointer z = acc_mapsz[s];
         const double2 pu = acc_pu[preg][p];
-        const double2 zuc = acc_zuc[z];
         const int n = acc_znump[z];
         SumOp<double2>::apply<false/*exclusive*/>(acc_zuc[z], pu / n);
     }
@@ -532,7 +531,7 @@ void QCS::setCornerDivOMPTask(
         const double2 up2 = acc_zuc[z];
         const double2 xp2 = acc_zx[z];
         // 3 = edge e1
-        const double2 up3 = 0.5 * (acc_pu[p1reg].read(p1) + up0);
+        const double2 up3 = 0.5 * (acc_pu[p1reg][p1] + up0);
         const double2 xp3 = acc_ex[s];
 
         // compute 2d cartesian volume of corner

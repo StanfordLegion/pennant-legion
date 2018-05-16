@@ -92,6 +92,31 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    // GPU variants
+    static void setCornerDivGPUTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void setQCnForceGPUTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void setForceGPUTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    static void setVelDiffGPUTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
 };  // class QCS
 
 
