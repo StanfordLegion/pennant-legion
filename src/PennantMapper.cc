@@ -90,7 +90,20 @@ void PennantMapper::slice_task(const Legion::Mapping::MapperContext ctx,
 {
   // We've already been control replicated, so just divide our points
   // over the local processors, depending on which kind we prefer
-  if ((task.tag & PREFER_OMP) && !local_omps.empty()) {
+  if ((task.tag & PREFER_GPU) && !local_gpus.empty()) {
+    unsigned local_gpu_index = 0;
+    for (Domain::DomainPointIterator itr(input.domain); itr; itr++)
+    {
+      TaskSlice slice;
+      slice.domain = Domain(itr.p, itr.p);
+      slice.proc = local_gpus[local_gpu_index++];
+      if (local_gpu_index == local_gpus.size())
+        local_gpu_index = 0;
+      slice.recurse = false;
+      slice.stealable = false;
+      output.slices.push_back(slice);
+    }
+  } else if ((task.tag & PREFER_OMP) && !local_omps.empty()) {
     unsigned local_omp_index = 0;
     for (Domain::DomainPointIterator itr(input.domain); itr; itr++)
     {
@@ -125,7 +138,10 @@ void PennantMapper::map_task(const MapperContext ctx,
                              const MapTaskInput &input,
                                    MapTaskOutput &output)
 {
-  if ((task.tag & PREFER_OMP) && !local_omps.empty()) {
+  if ((task.tag & PREFER_GPU) && !local_gpus.empty()) {
+    output.chosen_variant = find_gpu_variant(ctx, task.task_id);
+    output.target_procs.push_back(task.target_proc);
+  } else if ((task.tag & PREFER_OMP) && !local_omps.empty()) {
     output.chosen_variant = find_omp_variant(ctx, task.task_id);
     output.target_procs = local_omps;
   } else {
