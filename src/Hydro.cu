@@ -113,6 +113,9 @@ void Hydro::advPosHalfGPUTask(
     // This will assert if it is not dense
     const Rect<1> rectp = runtime->get_index_space_domain(isp);
     const size_t volume = rectp.volume();
+    // Points can be empty in some cases
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_adv_pos_half<<<blocks,THREADS_PER_BLOCK>>>(acc_px0, acc_pu0, acc_pxp,
                                                    rectp.lo, dth, volume);
@@ -305,6 +308,9 @@ void Hydro::calcAccelGPUTask(
     // This will assert if its not dense
     const Rect<1> rectp = runtime->get_index_space_domain(isp);
     const size_t volume = rectp.volume();
+    // Points can be empty in some cases
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_accel<<<blocks,THREADS_PER_BLOCK>>>(acc_pf, acc_pmass, acc_pa, 
                                                  fuzz, rectp.lo, volume);
@@ -350,6 +356,9 @@ void Hydro::advPosFullGPUTask(
     // This will assert if it is not dense
     const Rect<1> rectp = runtime->get_index_space_domain(isp);
     const size_t volume = rectp.volume();
+    // Points can be empty in some cases
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_adv_pos_full<<<blocks,THREADS_PER_BLOCK>>>(acc_px0, acc_pu0, acc_pa,
         acc_px, acc_pu, dt, rectp.lo, volume);
