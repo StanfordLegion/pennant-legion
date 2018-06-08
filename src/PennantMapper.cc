@@ -149,15 +149,28 @@ void PennantMapper::map_task(const MapperContext ctx,
     output.target_procs = local_cpus;
   }
   output.chosen_instances.resize(task.regions.size());  
-  for (unsigned idx = 0; idx < task.regions.size(); idx++)
-  {
-    // See if it is a reduction region requirement or not
-    if (task.regions[idx].privilege == REDUCE)
-      create_reduction_instances(ctx, task, idx, local_sysmem,
-                                 output.chosen_instances[idx]);
-    else
-      map_pennant_array(ctx, task.regions[idx].region, local_sysmem,
-                        output.chosen_instances[idx]);
+  if ((task.tag & PREFER_GPU) && !local_gpus.empty()) {
+    for (unsigned idx = 0; idx < task.regions.size(); idx++)
+    {
+      // See if it is a reduction region requirement or not
+      if (task.regions[idx].privilege == REDUCE)
+        create_reduction_instances(ctx, task, idx, local_zerocopy,
+                                   output.chosen_instances[idx]);
+      else
+        map_pennant_array(ctx, task.regions[idx].region, local_framebuffer,
+                          output.chosen_instances[idx]);
+    }
+  } else {
+    for (unsigned idx = 0; idx < task.regions.size(); idx++)
+    {
+      // See if it is a reduction region requirement or not
+      if (task.regions[idx].privilege == REDUCE)
+        create_reduction_instances(ctx, task, idx, local_sysmem,
+                                   output.chosen_instances[idx]);
+      else
+        map_pennant_array(ctx, task.regions[idx].region, local_sysmem,
+                          output.chosen_instances[idx]);
+    }
   }
   runtime->acquire_instances(ctx, output.chosen_instances);
 }
