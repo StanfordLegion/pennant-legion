@@ -93,7 +93,7 @@ void Mesh::calcCtrsGPUTask(
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
-    gpu_calc_ctrs<<<blocks,volume>>>(acc_mapsp1, acc_mapsp2, acc_mapsz,
+    gpu_calc_ctrs<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsp1, acc_mapsp2, acc_mapsz,
         acc_mapsp1reg, acc_mapsp2reg, acc_znump, acc_px[0], acc_px[1],
         acc_ex, acc_zx, rects.lo, volume);
 }
