@@ -894,14 +894,14 @@ void GenMesh::genSidesRect(
   {
     // First we can compute our side pointers since they are easy
     const int side = itr[0] % 4;
-    if (side == 3)
-      acc_ss3[*itr] = *itr - Pointer(3);
-    else
-      acc_ss3[*itr] = *itr + Pointer(1);
     if (side == 0)
-      acc_ss4[*itr] = *itr + Pointer(3);
+      acc_ss3[*itr] = *itr + Pointer(3);
     else
-      acc_ss4[*itr] = *itr - Pointer(1);
+      acc_ss3[*itr] = *itr - Pointer(1);
+    if (side == 3)
+      acc_ss4[*itr] = *itr - Pointer(3);
+    else
+      acc_ss4[*itr] = *itr + Pointer(1); 
     // Now figure out which zone we're a part of
     // zones for a piece are all contiguous
     const int zone = itr[0] / 4; // 4 sides per zone
@@ -1082,14 +1082,14 @@ void GenMesh::genSidesPie(
     if (zidy == 0)
     {
       // Side maps are all just local address from here
-      if (side == 2)
-        acc_ss3[*itr] = *itr - Pointer(2);
-      else
-        acc_ss3[*itr] = *itr + Pointer(1);
       if (side == 0)
-        acc_ss4[*itr] = *itr + Pointer(2);
+        acc_ss3[*itr] = *itr + Pointer(2);
       else
-        acc_ss4[*itr] = *itr - Pointer(1);
+        acc_ss3[*itr] = *itr - Pointer(1);
+      if (side == 2)
+        acc_ss4[*itr] = *itr - Pointer(2);
+      else
+        acc_ss4[*itr] = *itr + Pointer(1);
       const int p0 = zidx + 1;
       switch (side)
       {
@@ -1118,14 +1118,14 @@ void GenMesh::genSidesPie(
     else
     {
       // Side maps are all just local address from here
-      if (side == 3)
-        acc_ss3[*itr] = *itr - Pointer(3);
-      else
-        acc_ss3[*itr] = *itr + Pointer(1);
       if (side == 0)
-        acc_ss4[*itr] = *itr + Pointer(3);
+        acc_ss3[*itr] = *itr + Pointer(3);
       else
-        acc_ss4[*itr] = *itr - Pointer(1);
+        acc_ss3[*itr] = *itr - Pointer(1);
+      if (side == 3)
+        acc_ss4[*itr] = *itr - Pointer(3);
+      else
+        acc_ss4[*itr] = *itr + Pointer(1);
       const int p0 = (zidy - 1) * npx + zidx + 1;
       switch (side)
       {
