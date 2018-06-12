@@ -340,10 +340,7 @@ void Mesh::init() {
     // create domain over pieces
     Rect<1> task_rect(Point<1>(0), Point<1>(numpcs-1));
     dompc  = Domain(task_rect);
-#if 0 
-    IndexSpace ispc = runtime->create_index_space(ctx, dompc);
-    dompc = runtime->get_index_space_domain(ctx, ispc);
-#endif 
+    this->ispc = runtime->create_index_space(ctx, dompc);
     // create zone and side partitions
     Coloring colorz, colors;
     int z0 = 0;
@@ -451,7 +448,7 @@ void Mesh::initParallel() {
     dompc  = Domain(piece_rect);
     // Create a space for the number of pieces that we will have
     IndexSpace is_piece = runtime->create_index_space(ctx, piece_rect);
-    ispc = is_piece;
+    this->ispc = is_piece;
     IndexPartition ip_piece = runtime->create_equal_partition(ctx, is_piece, is_piece);
     ippc = ip_piece;
 
@@ -470,7 +467,7 @@ void Mesh::initParallel() {
       fap.allocate_field(sizeof(double2), FID_PF);
       fap.allocate_field(sizeof(double2), FID_PAP);
       fap.allocate_field(sizeof(coord_t), FID_PIECE);
-      fap.allocate_field(sizeof(Pointer), FID_MAPPTEMP2PDENSE);
+      fap.allocate_field(sizeof(Pointer), FID_MAPLOAD2DENSE);
     }
 
     // load fields into temp points with equal partition
@@ -671,7 +668,7 @@ void Mesh::initParallel() {
           RegionRequirement(lp_points_equal, 0/*identity projection*/, 
                             READ_ONLY, EXCLUSIVE, lr_temp_points),
           RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
-      update_launcher.add_src_field(0/*index*/, FID_MAPPTEMP2PDENSE);
+      update_launcher.add_src_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP1);
       update_launcher.add_gather_field(
           RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs), FID_MAPSP1TEMP);
@@ -683,7 +680,7 @@ void Mesh::initParallel() {
           RegionRequirement(lp_points_equal, 0/*identity projection*/, 
                             READ_ONLY, EXCLUSIVE, lr_temp_points),
           RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
-      update_launcher.add_src_field(0/*index*/, FID_MAPPTEMP2PDENSE);
+      update_launcher.add_src_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP2);
       update_launcher.add_gather_field(
           RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs), FID_MAPSP2TEMP);
@@ -694,7 +691,7 @@ void Mesh::initParallel() {
       TaskLauncher update_launcher(TID_TEMPGATHER, TaskArgument());
       update_launcher.add_region_requirement(
           RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points));
-      update_launcher.add_field(0/*index*/, FID_MAPPTEMP2PDENSE);
+      update_launcher.add_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_region_requirement(
           RegionRequirement(lrs, WRITE_DISCARD, EXCLUSIVE, lrs));
       update_launcher.add_field(1/*index*/, FID_MAPSP1);
@@ -707,7 +704,7 @@ void Mesh::initParallel() {
       TaskLauncher update_launcher(TID_TEMPGATHER, TaskArgument());
       update_launcher.add_region_requirement(
           RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points));
-      update_launcher.add_field(0/*index*/, FID_MAPPTEMP2PDENSE);
+      update_launcher.add_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_region_requirement(
           RegionRequirement(lrs, WRITE_DISCARD, EXCLUSIVE, lrs));
       update_launcher.add_field(1/*index*/, FID_MAPSP2);
@@ -1623,7 +1620,7 @@ void Mesh::compactPointsParallel(
   launcher.add_field(1/*index*/, FID_PX);
   launcher.add_region_requirement(RegionRequirement(lp_temp_points,
         0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_temp_points));
-  launcher.add_field(2/*index*/, FID_MAPPTEMP2PDENSE);
+  launcher.add_field(2/*index*/, FID_MAPLOAD2DENSE);
 
   runtime->execute_index_space(ctx, launcher);
 }
@@ -1692,7 +1689,7 @@ void Mesh::compactPointsTask(
     PointIterator itr_dst(runtime, is_dst);
     const AccessorWD<double2> acc_dst(regions[0], FID_PX);
     const AccessorRO<double2> acc_src(regions[1], FID_PX);
-    const AccessorWD<Pointer> acc_ptr(regions[2], FID_MAPPTEMP2PDENSE);
+    const AccessorWD<Pointer> acc_ptr(regions[2], FID_MAPLOAD2DENSE);
     for ( ; itr_src() && itr_dst(); itr_src++, itr_dst++)
     {
       acc_dst[*itr_dst] = acc_src[*itr_src];

@@ -40,7 +40,7 @@ enum MeshFieldID {
     FID_MAPSS4,
     FID_MAPSP1REG,
     FID_MAPSP2REG,
-    FID_MAPPTEMP2PDENSE, // map from load points to dense points
+    FID_MAPLOAD2DENSE, // map from load points to dense points
     FID_ZNUMP,
     FID_PX,
     FID_EX,
