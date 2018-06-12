@@ -72,6 +72,8 @@ void HydroBC::applyFixedBCGPUTask(
     // This will fail if it is not dense
     const Rect<1> rectb = runtime->get_index_space_domain(isb);
     const size_t volume = rectb.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_apply_fixed_bc<<<blocks,THREADS_PER_BLOCK>>>(acc_mapbp, acc_mapbpreg,
         acc_pf[0], acc_pf[1], acc_pu[0], acc_pu[1], vfix, rectb.lo, volume);
