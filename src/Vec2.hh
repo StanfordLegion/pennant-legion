@@ -169,7 +169,7 @@ inline double cross(const double2& v1, const double2& v2)
 __CUDA_HD__
 inline double length(const double2& v)
 {
-    return(std::sqrt(v.x * v.x + v.y * v.y));
+    return(sqrt(v.x * v.x + v.y * v.y));
 }
 
 // length squared
