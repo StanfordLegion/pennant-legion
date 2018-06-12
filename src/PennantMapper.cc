@@ -157,7 +157,14 @@ void PennantMapper::map_task(const MapperContext ctx,
         create_reduction_instances(ctx, task, idx, local_zerocopy,
                                    output.chosen_instances[idx]);
       else
-        map_pennant_array(ctx, task.regions[idx].region, local_framebuffer,
+        map_pennant_array(ctx, task.regions[idx].region, 
+#ifdef NAN_CHECK
+        // If we're doing nan-checks make sure things are in zero-copy
+        // so we can read-the values directly from the host
+                          local_zerocopy,
+#else
+                          local_framebuffer,
+#endif
                           output.chosen_instances[idx]);
     }
   } else {

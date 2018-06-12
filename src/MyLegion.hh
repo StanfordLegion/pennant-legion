@@ -14,19 +14,8 @@
 #define MYLEGION_HH_
 
 #include "legion.h"
-
-template <typename T>
-using AccessorRO = typename Legion::FieldAccessor<READ_ONLY,T,1,Legion::coord_t,
-                                Realm::AffineAccessor<T,1,Legion::coord_t> >;
-template <typename T>
-using AccessorWD = typename Legion::FieldAccessor<WRITE_DISCARD,T,1,Legion::coord_t,
-                                Realm::AffineAccessor<T,1,Legion::coord_t> >;
-template <typename T>
-using AccessorRW = typename Legion::FieldAccessor<READ_WRITE,T,1,Legion::coord_t,
-                                Realm::AffineAccessor<T,1,Legion::coord_t> >;
-template <typename REDOP, bool EXCLUSIVE=true>
-using AccessorRD = typename Legion::ReductionAccessor<REDOP,EXCLUSIVE,1,
-      Legion::coord_t, Realm::AffineAccessor<typename REDOP::RHS,1,Legion::coord_t> >;
+#include "Vec2.hh"
+#include <cassert>
 
 typedef Legion::Point<1,Legion::coord_t> Pointer;
 
@@ -36,5 +25,180 @@ public:
     : Legion::PointInDomainIterator<1,Legion::coord_t>(
         rt->get_index_space_domain(Legion::IndexSpaceT<1,Legion::coord_t>(is))) { }
 };
+
+#ifdef NAN_CHECK
+template<typename ACC>
+inline void check_double_nan(const ACC &acc, const Legion::PhysicalRegion &region)
+{
+  Legion::LogicalRegion handle = region.get_logical_region();  
+  for (PointIterator itr(Legion::Runtime::get_runtime(), 
+                          handle.get_index_space()); itr(); itr++)
+  {
+    const double value = acc[*itr];
+    // NaNs do not compare equal to themselves
+    assert(value == value);
+  }
+}
+
+template<typename ACC>
+inline void check_double2_nan(const ACC &acc, const Legion::PhysicalRegion &region)
+{
+  Legion::LogicalRegion handle = region.get_logical_region();  
+  for (PointIterator itr(Legion::Runtime::get_runtime(), 
+                          handle.get_index_space()); itr(); itr++)
+  {
+    const double2 value = acc[*itr];
+    // NaNs do not compare equal to themselves
+    assert(value.x == value.x);
+    assert(value.y == value.y);
+  }
+}
+
+// We provide specialized accessors here for double and double2 that check
+// for NaN values on creation for read privileges and on destruction for
+// write privileges
+template<typename T>
+class AccessorRO : public Legion::FieldAccessor<READ_ONLY,T,1,Legion::coord_t,
+                                Realm::AffineAccessor<T,1,Legion::coord_t> >
+{
+public:
+  AccessorRO(const Legion::PhysicalRegion &region, Legion::FieldID fid)
+    : Legion::FieldAccessor<READ_ONLY,T,1,Legion::coord_t,
+        Realm::AffineAccessor<T,1,Legion::coord_t> >(region, fid) { }
+};
+
+// specialization for double
+template<>
+class AccessorRO<double> : public Legion::FieldAccessor<READ_ONLY,double,1,Legion::coord_t,
+                                Realm::AffineAccessor<double,1,Legion::coord_t> >
+{
+public:
+  AccessorRO(const Legion::PhysicalRegion &region, Legion::FieldID fid)
+    : Legion::FieldAccessor<READ_ONLY,double,1,Legion::coord_t,
+        Realm::AffineAccessor<double,1,Legion::coord_t> >(region, fid) 
+  { check_double_nan(*this, region); } 
+};
+
+// specialization for double2
+template<>
+class AccessorRO<double2> : public Legion::FieldAccessor<READ_ONLY,double2,1,Legion::coord_t,
+                                Realm::AffineAccessor<double2,1,Legion::coord_t> >
+{
+public:
+  AccessorRO(const Legion::PhysicalRegion &region, Legion::FieldID fid)
+    : Legion::FieldAccessor<READ_ONLY,double2,1,Legion::coord_t,
+        Realm::AffineAccessor<double2,1,Legion::coord_t> >(region, fid)
+  { check_double2_nan(*this, region); }
+};
+
+template<typename T>
+class AccessorWD : public Legion::FieldAccessor<WRITE_DISCARD,T,1,Legion::coord_t,
+                                Realm::AffineAccessor<T,1,Legion::coord_t> >
+{
+public:
+  AccessorWD(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
+    : Legion::FieldAccessor<WRITE_DISCARD,T,1,Legion::coord_t,
+        Realm::AffineAccessor<T,1,Legion::coord_t> >(reg, fid)
+  { }
+};
+
+// specialization for double
+template<>
+class AccessorWD<double> : 
+            public Legion::FieldAccessor<WRITE_DISCARD,double,1,Legion::coord_t,
+                                Realm::AffineAccessor<double,1,Legion::coord_t> >
+{
+public:
+  AccessorWD(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
+    : Legion::FieldAccessor<WRITE_DISCARD,double,1,Legion::coord_t,
+        Realm::AffineAccessor<double,1,Legion::coord_t> >(reg, fid), 
+        region(reg), field(fid)
+  { }
+  ~AccessorWD(void)
+  { check_double_nan(*this, region); }
+public:
+  const Legion::PhysicalRegion &region;
+  const Legion::FieldID field;
+};
+
+// specialization for double2
+template<>
+class AccessorWD<double2> : 
+            public Legion::FieldAccessor<WRITE_DISCARD,double2,1,Legion::coord_t,
+                                Realm::AffineAccessor<double2,1,Legion::coord_t> >
+{
+public:
+  AccessorWD(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
+    : Legion::FieldAccessor<WRITE_DISCARD,double2,1,Legion::coord_t,
+        Realm::AffineAccessor<double2,1,Legion::coord_t> >(reg, fid), 
+        region(reg), field(fid)
+  { }
+  ~AccessorWD(void)
+  { check_double2_nan(*this, region); }
+public:
+  const Legion::PhysicalRegion &region;
+  const Legion::FieldID field;
+};
+
+template<typename T>
+class AccessorRW : public Legion::FieldAccessor<READ_WRITE,T,1,Legion::coord_t,
+                                Realm::AffineAccessor<T,1,Legion::coord_t> >
+{
+public:
+  AccessorRW(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
+    : Legion::FieldAccessor<READ_WRITE,T,1,Legion::coord_t,
+        Realm::AffineAccessor<T,1,Legion::coord_t> >(reg, fid) { }
+};
+
+// specialization for double
+template<>
+class AccessorRW<double> : public Legion::FieldAccessor<READ_WRITE,double,1,Legion::coord_t,
+                                Realm::AffineAccessor<double,1,Legion::coord_t> >
+{
+public:
+  AccessorRW(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
+    : Legion::FieldAccessor<READ_WRITE,double,1,Legion::coord_t,
+        Realm::AffineAccessor<double,1,Legion::coord_t> >(reg, fid), 
+        region(reg), field(fid)
+  { check_double_nan(*this, region); }
+  ~AccessorRW(void)
+  { check_double_nan(*this, region); }
+public:
+  const Legion::PhysicalRegion &region;
+  const Legion::FieldID field;
+};
+
+// specialization for double2
+template<>
+class AccessorRW<double2> : public Legion::FieldAccessor<READ_WRITE,double2,1,Legion::coord_t,
+                                Realm::AffineAccessor<double2,1,Legion::coord_t> >
+{
+public:
+  AccessorRW(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
+    : Legion::FieldAccessor<READ_WRITE,double2,1,Legion::coord_t,
+        Realm::AffineAccessor<double2,1,Legion::coord_t> >(reg, fid), 
+        region(reg), field(fid)
+  { check_double2_nan(*this, region); }
+  ~AccessorRW(void)
+  { check_double2_nan(*this, region); }
+public:
+  const Legion::PhysicalRegion &region;
+  const Legion::FieldID field;
+};
+#else
+template <typename T>
+using AccessorRO = typename Legion::FieldAccessor<READ_ONLY,T,1,Legion::coord_t,
+                                Realm::AffineAccessor<T,1,Legion::coord_t> >;
+template <typename T>
+using AccessorWD = typename Legion::FieldAccessor<WRITE_DISCARD,T,1,Legion::coord_t,
+                                Realm::AffineAccessor<T,1,Legion::coord_t> >;
+template <typename T>
+using AccessorRW = typename Legion::FieldAccessor<READ_WRITE,T,1,Legion::coord_t,
+                                Realm::AffineAccessor<T,1,Legion::coord_t> >;
+#endif
+
+template <typename REDOP, bool EXCLUSIVE=true>
+using AccessorRD = typename Legion::ReductionAccessor<REDOP,EXCLUSIVE,1,
+      Legion::coord_t, Realm::AffineAccessor<typename REDOP::RHS,1,Legion::coord_t> >;
 
 #endif /* MYLEGION_HH_ */
