@@ -313,11 +313,11 @@ public:
 
     template <bool EXCLUSIVE> __CUDA_HD__
     static void apply(LHS& lhs, RHS rhs)
-        { ReduceHelper<T, EXCLUSIVE>::minOf(lhs, rhs); }
+        { ReduceHelper<T, EXCLUSIVE>::maxOf(lhs, rhs); }
 
     template <bool EXCLUSIVE> __CUDA_HD__
     static void fold(RHS& rhs1, RHS rhs2)
-        { ReduceHelper<T, EXCLUSIVE>::minOf(rhs1, rhs2); }
+        { ReduceHelper<T, EXCLUSIVE>::maxOf(rhs1, rhs2); }
 };
 
 class Mesh {

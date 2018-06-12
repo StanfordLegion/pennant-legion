@@ -519,7 +519,8 @@ void QCS::setVelDiffGPUTask(
     const IndexSpace& isz = task->regions[4].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
-    cudaMemset(acc_ztmp.ptr(rectz), 0, rectz.volume() * sizeof(double));
+    const size_t volumez = rectz.volume();
+    cudaMemset(acc_ztmp.ptr(rectz), 0, volumez * sizeof(double));
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
@@ -530,7 +531,6 @@ void QCS::setVelDiffGPUTask(
         acc_mapsp2, acc_mapsp1reg, acc_mapsp2reg, acc_elen, acc_pu[0], acc_pu[1],
         acc_px[0], acc_px[1], acc_ztmp, rects.lo, volume);
 
-    const size_t volumez = rectz.volume();
     const size_t blockz = (volumez + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_set_vel_diff2<<<blockz,THREADS_PER_BLOCK>>>(acc_zss, acc_ztmp,
         acc_zdu, q1, q2, rectz.lo, volumez);
