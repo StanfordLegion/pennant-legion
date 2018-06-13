@@ -186,19 +186,21 @@ inline void atomic_add(double2& lhs, const double2& rhs) {
 template <> __CUDA_HD__
 inline void atomic_min(double& lhs, const double& rhs) {
 #ifdef __CUDA_ARCH__
-#if __CUDA_ARCH__ < 350
     unsigned long long int* address_as_ull =
                               (unsigned long long int*)&lhs;
     unsigned long long int old = *address_as_ull, assumed;
     do {
         assumed = old;
+#if __CUDA_ARCH__ < 600
         old = atomicCAS(address_as_ull, assumed,
             __double_as_longlong((__longlong_as_double(assumed) < rhs) ? 
               __longlong_as_double(assumed) : rhs));
-    } while (assumed != old);
 #else
-    atomicMin_system((unsigned long long*)&lhs, (unsigned long long)rhs);
+        old = atomicCAS_system(address_as_ull, assumed,
+            __double_as_longlong((__longlong_as_double(assumed) < rhs) ? 
+              __longlong_as_double(assumed) : rhs));
 #endif
+    } while (assumed != old);
 #else
     long long *target = (long long *)&lhs;
     union { long long as_int; double as_float; } oldval, newval;
@@ -213,19 +215,21 @@ inline void atomic_min(double& lhs, const double& rhs) {
 template <> __CUDA_HD__
 inline void atomic_max(double& lhs, const double& rhs) {
 #ifdef __CUDA_ARCH__
-#if __CUDA_ARCH__ < 350
     unsigned long long int* address_as_ull =
                               (unsigned long long int*)&lhs;
     unsigned long long int old = *address_as_ull, assumed;
     do {
         assumed = old;
+#if __CUDA_ARCH__ < 600
         old = atomicCAS(address_as_ull, assumed,
             __double_as_longlong((__longlong_as_double(assumed) > rhs) ? 
               __longlong_as_double(assumed) : rhs));
-    } while (assumed != old);
 #else
-    atomicMax_system((unsigned long long*)&lhs, (unsigned long long)rhs);
+        old = atomicCAS_system(address_as_ull, assumed,
+            __double_as_longlong((__longlong_as_double(assumed) > rhs) ? 
+              __longlong_as_double(assumed) : rhs));
 #endif
+    } while (assumed != old);
 #else
     long long *target = (long long *)&lhs;
     union { long long as_int; double as_float; } oldval, newval;
