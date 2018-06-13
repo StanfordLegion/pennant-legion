@@ -518,7 +518,7 @@ Future Hydro::doCycle(
         if (part == 0)
           launchaph.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
         else
-          launchaph.tag &= ~(PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU);
+          launchaph.tag &= ~(PennantMapper::PREFER_OMP);
         runtime->execute_index_space(ctx, launchaph);
     }  // for part
 
@@ -898,7 +898,7 @@ Future Hydro::doCycle(
         if (part == 0)
           launchca.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
         else
-          launchca.tag &= ~(PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU);
+          launchca.tag &= ~(PennantMapper::PREFER_OMP);
         runtime->execute_index_space(ctx, launchca);
 
         // ===== Corrector step =====
@@ -919,7 +919,7 @@ Future Hydro::doCycle(
         if (part == 0)
           launchca.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
         else
-          launchca.tag &= ~(PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU);
+          launchca.tag &= ~(PennantMapper::PREFER_OMP);
         runtime->execute_index_space(ctx, launchapf);
     }  // for part
 
