@@ -27,6 +27,18 @@ static void __attribute__ ((constructor)) registerTasks() {
       registrar.set_leaf();
       Runtime::preregister_task_variant<Mesh::calcEdgeLenGPUTask>(registrar, "calcedgelen");
     }
+    {
+      TaskVariantRegistrar registrar(TID_CALCSURFVECS, "GPU calcsurfvecs");
+      registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcSurfVecsGPUTask>(registrar, "calcsurfvecs");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCCHARLEN, "GPU calccharlen");
+      registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcCharLenGPUTask>(registrar, "calccharlen");
+    }
 }
 }; // namespace
 
@@ -241,3 +253,104 @@ void Mesh::calcEdgeLenGPUTask(
         rects.lo, volume);
 }
 
+__global__ void
+__launch_bounds__(THREADS_PER_BLOCK,MIN_CTAS_PER_SM)
+gpu_calc_surf_vecs(const AccessorRO<Pointer> acc_mapsz,
+                   const AccessorRO<double2> acc_ex,
+                   const AccessorRO<double2> acc_zx,
+                   const AccessorWD<double2> acc_ssurf,
+                   const Point<1> origin, const size_t max)
+{
+  const size_t offset = blockIdx.x * blockDim.x + threadIdx.x;
+  if (offset >= max)
+    return;
+  const coord_t s = origin[0] + offset;
+  const Pointer z = acc_mapsz[s];
+  const double2 ex = acc_ex[s];
+  const double2 zx = acc_zx[z];
+  const double2 ss = rotateCCW(ex - zx);
+  acc_ssurf[s] = ss;
+}
+
+__host__
+void Mesh::calcSurfVecsGPUTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double2> acc_ex(regions[0], FID_EXP);
+    const AccessorRO<double2> acc_zx(regions[1], FID_ZXP);
+    const AccessorWD<double2> acc_ssurf(regions[2], FID_SSURFP);
+
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
+    const size_t volume = rects.volume();
+    const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    gpu_calc_surf_vecs<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsz, acc_ex,
+        acc_zx, acc_ssurf, rects.lo, volume);
+}
+
+__global__ void
+__launch_bounds__(THREADS_PER_BLOCK,MIN_CTAS_PER_SM)
+gpu_calc_char_len_init(const AccessorWD<double> acc_zdl, const double value,
+                       const Point<1> origin, const size_t max)
+{
+  const size_t offset = blockIdx.x * blockDim.x + threadIdx.x;
+  if (offset >= max)
+    return;
+  const coord_t z = origin[0] + offset;   
+  acc_zdl[z] = value;
+}
+
+__global__ void
+__launch_bounds__(THREADS_PER_BLOCK,MIN_CTAS_PER_SM)
+gpu_calc_char_len(const AccessorRO<Pointer> acc_mapsz,
+                  const AccessorRO<double> acc_elen,
+                  const AccessorRO<double> acc_sarea,
+                  const AccessorRO<int> acc_znump,
+                  const AccessorWD<double> acc_zdl,
+                  const Point<1> origin, const size_t max)
+{
+  const size_t offset = blockIdx.x * blockDim.x + threadIdx.x;
+  if (offset >= max)
+    return;
+  const coord_t s = origin[0] + offset;
+  const Pointer z = acc_mapsz[s];
+  const double area = acc_sarea[s];
+  const double base = acc_elen[s];
+  const int np = acc_znump[z];
+  const double fac = (np == 3 ? 3. : 4.);
+  const double sdl = fac * area / base;
+  MinOp<double>::apply<false/*exclusive*/>(acc_zdl[z], sdl);
+}
+
+__host__
+void Mesh::calcCharLenGPUTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double> acc_elen(regions[0], FID_ELEN);
+    const AccessorRO<double> acc_sarea(regions[0], FID_SAREAP);
+    const AccessorRO<int> acc_znump(regions[1], FID_ZNUMP);
+    const AccessorWD<double> acc_zdl(regions[2], FID_ZDL);
+
+    const IndexSpace& isz = task->regions[1].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rectz = runtime->get_index_space_domain(isz);
+    const size_t volumez = rectz.volume();
+    const size_t blockz = (volumez + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    gpu_calc_char_len_init<<<blockz,THREADS_PER_BLOCK>>>(acc_zdl, 1.e99, 
+        rectz.lo, volumez);
+    
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
+    const size_t volume = rects.volume();
+    const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    gpu_calc_char_len<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsz, acc_elen,
+        acc_sarea, acc_znump, acc_zdl, rects.lo, volume);
+}

@@ -522,6 +522,13 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    // GPU variant
+    static void calcSurfVecsGPUTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
     static void calcEdgeLenTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
@@ -542,6 +549,13 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    static void calcCharLenTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
+    // GPU variant
     static void calcCharLenTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
