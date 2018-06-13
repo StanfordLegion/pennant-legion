@@ -1031,6 +1031,7 @@ Future Hydro::doCycle(
         RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
     launchdvol.add_field(0, FID_ZVOL);
     launchdvol.add_field(0, FID_ZVOL0);
+    launchdvol.tag |= PennantMapper::PREFER_GPU;
     Future f_dvol = runtime->execute_index_space(ctx, launchdvol, OPID_MAXDBL);
 
     // Single task launch to compute the future result
