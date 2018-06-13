@@ -64,6 +64,13 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    // GPU variant
+    static void calcForceGPUTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
 };  // class PolyGas
 
 

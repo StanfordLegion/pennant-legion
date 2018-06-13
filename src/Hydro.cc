@@ -687,6 +687,7 @@ Future Hydro::doCycle(
     launchcfp.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcfp.add_field(2, FID_SFP);
+    launchcfp.tag |= PenanntMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcfp);
 
     double cftargs[] = { tts->alfa, tts->ssmin };
@@ -989,6 +990,7 @@ Future Hydro::doCycle(
     launchcwr.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcwr.add_field(1, FID_ZWRATE);
+    launchcwr.tag |= PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcwr);
 
     // 8. update state variables
@@ -1000,6 +1002,7 @@ Future Hydro::doCycle(
     launchce.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchce.add_field(1, FID_ZE);
+    launchce.tag |= PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchce);
 
     // reuse launcher from earlier, with corrector-step fields
@@ -1020,6 +1023,7 @@ Future Hydro::doCycle(
     launchdtnew.add_field(0, FID_ZDL);
     launchdtnew.add_field(0, FID_ZDU);
     launchdtnew.add_field(0, FID_ZSS);
+    launchdtnew.tag |= PennantMapper::PREFER_GPU;
     Future f_dtnew = runtime->execute_index_space(ctx, launchdtnew, OPID_MINDBL);
 
     IndexTaskLauncher launchdvol(TID_CALCDVOL, ispc, ta, am, p_not_done);
