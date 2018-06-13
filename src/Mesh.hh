@@ -142,7 +142,7 @@ inline void atomic_max(T& lhs, const T& rhs);
 template <> __CUDA_HD__
 inline void atomic_add(int& lhs, const int& rhs) {
 #ifdef __CUDA_ARCH__
-    atomicAdd(&lhs, rhs);
+    atomicAdd_system(&lhs, rhs);
 #else
     __sync_add_and_fetch(&lhs, rhs);
 #endif
@@ -163,7 +163,7 @@ inline void atomic_add(double& lhs, const double& rhs) {
                                __longlong_as_double(assumed)));
     } while (assumed != old);
 #else
-    atomicAdd(&lhs, rhs);
+    atomicAdd_system(&lhs, rhs);
 #endif
 #else
     long long *target = (long long *)&lhs;
@@ -197,7 +197,7 @@ inline void atomic_min(double& lhs, const double& rhs) {
               __longlong_as_double(assumed) : rhs));
     } while (assumed != old);
 #else
-    atomicMin((unsigned long long*)&lhs, (unsigned long long)rhs);
+    atomicMin_system((unsigned long long*)&lhs, (unsigned long long)rhs);
 #endif
 #else
     long long *target = (long long *)&lhs;
@@ -224,7 +224,7 @@ inline void atomic_max(double& lhs, const double& rhs) {
               __longlong_as_double(assumed) : rhs));
     } while (assumed != old);
 #else
-    atomicMax((unsigned long long*)&lhs, (unsigned long long)rhs);
+    atomicMax_system((unsigned long long*)&lhs, (unsigned long long)rhs);
 #endif
 #else
     long long *target = (long long *)&lhs;
