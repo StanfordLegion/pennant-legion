@@ -556,7 +556,7 @@ public:
             Legion::Runtime *runtime);
 
     // GPU variant
-    static void calcCharLenTask(
+    static void calcCharLenGPUTask(
             const Legion::Task *task,
             const std::vector<Legion::PhysicalRegion> &regions,
             Legion::Context ctx,
