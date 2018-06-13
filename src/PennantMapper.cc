@@ -201,14 +201,23 @@ void PennantMapper::map_copy(const MapperContext ctx,
                                    MapCopyOutput &output)
 {
   output.src_instances.resize(copy.src_requirements.size());
-  for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
-    map_pennant_array(ctx, copy.src_requirements[idx].region, local_sysmem,
-                      output.src_instances[idx]);
-  runtime->acquire_instances(ctx, output.src_instances);
   output.dst_instances.resize(copy.dst_requirements.size());
-  for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
-    map_pennant_array(ctx, copy.dst_requirements[idx].region, local_sysmem,
-                      output.dst_instances[idx]);
+  if (!local_gpus.empty()) {
+    for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
+      map_pennant_array(ctx, copy.src_requirements[idx].region, local_framebuffer,
+                        output.src_instances[idx]);
+    for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
+      map_pennant_array(ctx, copy.dst_requirements[idx].region, local_framebuffer,
+                        output.dst_instances[idx]);
+  } else {
+    for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
+      map_pennant_array(ctx, copy.src_requirements[idx].region, local_sysmem,
+                        output.src_instances[idx]);
+    for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
+      map_pennant_array(ctx, copy.dst_requirements[idx].region, local_sysmem,
+                        output.dst_instances[idx]);
+  }
+  runtime->acquire_instances(ctx, output.src_instances);
   runtime->acquire_instances(ctx, output.dst_instances);
 }
 
