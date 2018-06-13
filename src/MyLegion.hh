@@ -27,6 +27,9 @@ public:
 };
 
 #ifdef NAN_CHECK
+#ifdef __CUDACC__
+#include <cuda_runtime.h>
+#endif
 template<typename ACC>
 inline void check_double_nan(const ACC &acc, const Legion::PhysicalRegion &region)
 {
@@ -115,7 +118,11 @@ public:
         region(reg), field(fid)
   { }
   ~AccessorWD(void)
+#ifdef __CUDACC__
+  { cudaStreamSynchronize(); check_double_nan(*this, region); }
+#else
   { check_double_nan(*this, region); }
+#endif
 public:
   const Legion::PhysicalRegion &region;
   const Legion::FieldID field;
@@ -134,7 +141,11 @@ public:
         region(reg), field(fid)
   { }
   ~AccessorWD(void)
+#ifdef __CUDACC__
+  { cudaStreamSynchronize(); check_double2_nan(*this, region); }
+#else
   { check_double2_nan(*this, region); }
+#endif
 public:
   const Legion::PhysicalRegion &region;
   const Legion::FieldID field;
@@ -162,7 +173,11 @@ public:
         region(reg), field(fid)
   { check_double_nan(*this, region); }
   ~AccessorRW(void)
+#ifdef __CUDACC__
+  { cudaStreamSynchronize(); check_double_nan(*this, region); }
+#else
   { check_double_nan(*this, region); }
+#endif
 public:
   const Legion::PhysicalRegion &region;
   const Legion::FieldID field;
@@ -180,7 +195,11 @@ public:
         region(reg), field(fid)
   { check_double2_nan(*this, region); }
   ~AccessorRW(void)
+#ifdef __CUDACC__
+  { cudaStreamSynchronize(); check_double2_nan(*this, region); }
+#else
   { check_double2_nan(*this, region); }
+#endif
 public:
   const Legion::PhysicalRegion &region;
   const Legion::FieldID field;
