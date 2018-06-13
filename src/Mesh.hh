@@ -142,7 +142,7 @@ inline void atomic_max(T& lhs, const T& rhs);
 template <> __CUDA_HD__
 inline void atomic_add(int& lhs, const int& rhs) {
 #ifdef __CUDA_ARCH__
-    atomicAdd_system(&lhs, rhs);
+    atomicAdd(&lhs, rhs);
 #else
     __sync_add_and_fetch(&lhs, rhs);
 #endif
@@ -163,7 +163,7 @@ inline void atomic_add(double& lhs, const double& rhs) {
                                __longlong_as_double(assumed)));
     } while (assumed != old);
 #else
-    atomicAdd_system(&lhs, rhs);
+    atomicAdd(&lhs, rhs);
 #endif
 #else
     long long *target = (long long *)&lhs;
@@ -188,19 +188,17 @@ inline void atomic_min(double& lhs, const double& rhs) {
 #ifdef __CUDA_ARCH__
     unsigned long long int* address_as_ull =
                               (unsigned long long int*)&lhs;
+#if __CUDA_ARCH__ < 350
     unsigned long long int old = *address_as_ull, assumed;
     do {
         assumed = old;
-#if __CUDA_ARCH__ < 600
         old = atomicCAS(address_as_ull, assumed,
             __double_as_longlong((__longlong_as_double(assumed) < rhs) ? 
               __longlong_as_double(assumed) : rhs));
-#else
-        old = atomicCAS_system(address_as_ull, assumed,
-            __double_as_longlong((__longlong_as_double(assumed) < rhs) ? 
-              __longlong_as_double(assumed) : rhs));
-#endif
     } while (assumed != old);
+#else
+    atomicMin(address_as_ull, __double_as_longlong(rhs));
+#endif
 #else
     long long *target = (long long *)&lhs;
     union { long long as_int; double as_float; } oldval, newval;
@@ -217,19 +215,17 @@ inline void atomic_max(double& lhs, const double& rhs) {
 #ifdef __CUDA_ARCH__
     unsigned long long int* address_as_ull =
                               (unsigned long long int*)&lhs;
+#if __CUDA_ARCH__ < 350
     unsigned long long int old = *address_as_ull, assumed;
     do {
         assumed = old;
-#if __CUDA_ARCH__ < 600
         old = atomicCAS(address_as_ull, assumed,
             __double_as_longlong((__longlong_as_double(assumed) > rhs) ? 
               __longlong_as_double(assumed) : rhs));
-#else
-        old = atomicCAS_system(address_as_ull, assumed,
-            __double_as_longlong((__longlong_as_double(assumed) > rhs) ? 
-              __longlong_as_double(assumed) : rhs));
-#endif
     } while (assumed != old);
+#else
+    atomicMax(address_as_ull, __double_as_longlong(rhs));
+#endif
 #else
     long long *target = (long long *)&lhs;
     union { long long as_int; double as_float; } oldval, newval;
