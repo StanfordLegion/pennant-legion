@@ -687,7 +687,7 @@ Future Hydro::doCycle(
     launchcfp.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcfp.add_field(2, FID_SFP);
-    launchcfp.tag |= PenanntMapper::PREFER_GPU;
+    launchcfp.tag |= PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcfp);
 
     double cftargs[] = { tts->alfa, tts->ssmin };
