@@ -587,6 +587,7 @@ Future Hydro::doCycle(
     launchcsv.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcsv.add_field(2, FID_SSURFP);
+    launchcsv.tag |= PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcsv);
 
     IndexTaskLauncher launchcel(TID_CALCEDGELEN, ispc, ta, am, p_not_done);
@@ -620,6 +621,7 @@ Future Hydro::doCycle(
     launchccl.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchccl.add_field(2, FID_ZDL);
+    launchccl.tag |= PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchccl);
 
     IndexTaskLauncher launchcr(TID_CALCRHO, ispc, ta, am, p_not_done);
