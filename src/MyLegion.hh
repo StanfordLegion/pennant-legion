@@ -119,7 +119,7 @@ public:
   { }
   ~AccessorWD(void)
 #ifdef __CUDACC__
-  { cudaStreamSynchronize(); check_double_nan(*this, region); }
+  { cudaDeviceSynchronize(); check_double_nan(*this, region); }
 #else
   { check_double_nan(*this, region); }
 #endif
@@ -142,7 +142,7 @@ public:
   { }
   ~AccessorWD(void)
 #ifdef __CUDACC__
-  { cudaStreamSynchronize(); check_double2_nan(*this, region); }
+  { cudaDeviceSynchronize(); check_double2_nan(*this, region); }
 #else
   { check_double2_nan(*this, region); }
 #endif
@@ -174,7 +174,7 @@ public:
   { check_double_nan(*this, region); }
   ~AccessorRW(void)
 #ifdef __CUDACC__
-  { cudaStreamSynchronize(); check_double_nan(*this, region); }
+  { cudaDeviceSynchronize(); check_double_nan(*this, region); }
 #else
   { check_double_nan(*this, region); }
 #endif
@@ -196,7 +196,7 @@ public:
   { check_double2_nan(*this, region); }
   ~AccessorRW(void)
 #ifdef __CUDACC__
-  { cudaStreamSynchronize(); check_double2_nan(*this, region); }
+  { cudaDeviceSynchronize(); check_double2_nan(*this, region); }
 #else
   { check_double2_nan(*this, region); }
 #endif
