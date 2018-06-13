@@ -203,11 +203,17 @@ void PennantMapper::map_copy(const MapperContext ctx,
   output.src_instances.resize(copy.src_requirements.size());
   output.dst_instances.resize(copy.dst_requirements.size());
   if (!local_gpus.empty()) {
+    assert(copy.is_index_space);
+    const coord_t point = copy.index_point[0];
+    const unsigned index = point % local_gpus.size();
+    const Processor gpu = local_gpus[index];
+    const Memory fbmem = 
+      default_policy_select_target_memory(ctx, gpu, copy.src_requirements[0]);
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
-      map_pennant_array(ctx, copy.src_requirements[idx].region, local_framebuffer,
+      map_pennant_array(ctx, copy.src_requirements[idx].region, fbmem,
                         output.src_instances[idx]);
     for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
-      map_pennant_array(ctx, copy.dst_requirements[idx].region, local_framebuffer,
+      map_pennant_array(ctx, copy.dst_requirements[idx].region, fbmem,
                         output.dst_instances[idx]);
   } else {
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
