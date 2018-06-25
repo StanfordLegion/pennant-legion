@@ -1113,7 +1113,7 @@ void GenMesh::genSidesRect(
       default:
         assert(false);
     }
-#ifdef REORDER_RECT_POINTS
+#ifdef PRECOMPACTED_RECT_POINTS
     acc_sp1[*itr] = Pointer(rect_point_coord_to_index(args, pidx1, pidy1));
     acc_sp2[*itr] = Pointer(rect_point_coord_to_index(args, pidx2, pidy2));
 #else
