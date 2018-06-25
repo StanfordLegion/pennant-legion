@@ -888,7 +888,7 @@ Future Hydro::doCycle(
         launchca.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
                         READ_ONLY, EXCLUSIVE, lrp,
-                        (part == 0) ? 0 : PenanntMapper::PREFER_ZCOPY));
+                        (part == 0) ? 0 : PennantMapper::PREFER_ZCOPY));
         launchca.add_field(0, FID_PF);
         launchca.add_field(0, FID_PMASWT);
         launchca.add_region_requirement(
