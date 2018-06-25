@@ -658,8 +658,13 @@ void GenMesh::generateSidesParallel(
     RegionRequirement req(sides_lp, 0/*identity projection*/,
                           WRITE_DISCARD, EXCLUSIVE, sides_lr);
     // Only fill in the load pointers here
+#ifdef PRECOMPACTED_RECT_POINTS
+    req.add_field(FID_MAPSP1);
+    req.add_field(FID_MAPSP2);
+#else
     req.add_field(FID_MAPSP1TEMP);
     req.add_field(FID_MAPSP2TEMP);
+#endif
     req.add_field(FID_MAPSZ);
     req.add_field(FID_MAPSS3);
     req.add_field(FID_MAPSS4);
@@ -1015,8 +1020,13 @@ void GenMesh::genSidesRect(
   const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
   
   const IndexSpace &iss = task->regions[0].region.get_index_space();
+#ifdef PRECOMPACTED_RECT_POINTS
+  const AccessorWD<Pointer> acc_sp1(regions[0], FID_MAPSP1);
+  const AccessorWD<Pointer> acc_sp2(regions[0], FID_MAPSP2);
+#else
   const AccessorWD<Pointer> acc_sp1(regions[0], FID_MAPSP1TEMP);
   const AccessorWD<Pointer> acc_sp2(regions[0], FID_MAPSP2TEMP);
+#endif
   const AccessorWD<Pointer> acc_sz(regions[0], FID_MAPSZ);
   const AccessorWD<Pointer> acc_ss3(regions[0], FID_MAPSS3);
   const AccessorWD<Pointer> acc_ss4(regions[0], FID_MAPSS4);

@@ -522,9 +522,13 @@ void Mesh::initParallel() {
     {
       FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
       fas.allocate_field(sizeof(Pointer), FID_MAPSP1);
+#ifndef PRECOMPACTED_RECT_POINTS
       fas.allocate_field(sizeof(Pointer), FID_MAPSP1TEMP);
+#endif
       fas.allocate_field(sizeof(Pointer), FID_MAPSP2);
+#ifndef PRECOMPACTED_RECT_POINTS
       fas.allocate_field(sizeof(Pointer), FID_MAPSP2TEMP);
+#endif
       fas.allocate_field(sizeof(Pointer), FID_MAPSZ);
       fas.allocate_field(sizeof(Pointer), FID_MAPSS3);
       fas.allocate_field(sizeof(Pointer), FID_MAPSS4);
@@ -575,7 +579,13 @@ void Mesh::initParallel() {
     
     // Now find the set of points that we can reach from our points through all our sides
     IndexPartition ip_reachable_points = runtime->create_partition_by_image(ctx, isp,
-                                                  lps, lrs, FID_MAPSP1TEMP, is_piece);
+                                                  lps, lrs, 
+#ifdef PRECOMPACTED_RECT_POINTS
+                                                  FID_MAPSP1,
+#else
+                                                  FID_MAPSP1TEMP, 
+#endif
+                                                  is_piece);
     runtime->attach_name(ip_reachable_points, "reachable points");
 
     // Now we can make the temp ghost partition
