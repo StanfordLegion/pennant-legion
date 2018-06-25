@@ -157,12 +157,14 @@ void GenMesh::generate(
     if (meshtype == "pie")
         generatePie(pointpos, pointcolors, pointmcolors,
                 zonestart, zonesize, zonepoints, zonecolors);
+#ifndef PRECOMPACTED_RECT_POINTS
     else if (meshtype == "rect")
         generateRect(pointpos, pointcolors, pointmcolors,
                 zonestart, zonesize, zonepoints, zonecolors);
     else if (meshtype == "hex")
         generateHex(pointpos, pointcolors, pointmcolors,
                 zonestart, zonesize, zonepoints, zonecolors);
+#endif
     else
       assert(false);
 }
@@ -681,6 +683,129 @@ void GenMesh::generateSidesParallel(
     }
 }
 
+#ifdef PRECOMPACTED_RECT_POINTS
+static void rect_point_index_to_coord(const GenMesh::GenPointArgs *args,
+				      int index, int &i, int &j)
+{
+  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
+
+  // due to the rounding up above, some pieces can actually be empty
+  const int eff_numpcx = (args->nzx + zones_per_piecex - 1) / zones_per_piecex;
+  const int eff_numpcy = (args->nzy + zones_per_piecey - 1) / zones_per_piecey;
+  assert(eff_numpcx <= args->numpcx);
+  assert(eff_numpcy <= args->numpcy);
+
+  const int num_points = (args->nzx + 1) * (args->nzy + 1);
+  const int num_private = (args->nzx - eff_numpcx + 2) * (args->nzy - eff_numpcy + 2);
+  const bool is_shared = (index >= num_private);
+  if(is_shared) index -= num_private;
+  // not the most efficient, but hopefully easier to read: step through each 
+  //  piece and compute its local size, stopping on our piece
+  for(int y = 0; y < eff_numpcy; y++) {
+    const int pppy = ((y < (eff_numpcy - 1)) ?
+		        zones_per_piecey :
+		        (args->nzy + 1 - (eff_numpcy - 1) * zones_per_piecey));
+    const int local_shared_y = ((y > 0) ? 1 : 0);
+    const int local_private_y = pppy - local_shared_y;
+    for(int x = 0; x < eff_numpcx; x++) {
+      const int pppx = ((x < (eff_numpcx - 1)) ?
+		        zones_per_piecex :
+		        (args->nzx + 1 - (eff_numpcx - 1) * zones_per_piecex));
+      const int local_shared_x = ((x > 0) ? 1 : 0);
+      const int local_private_x = pppx - local_shared_x;
+
+      if(is_shared) {
+	if(local_shared_y > 0) {
+	  if(index < pppx) {
+	    i = x * zones_per_piecex + index;
+	    j = y * zones_per_piecey;
+	    return;
+	  } else
+	    index -= pppx;
+	}
+	if(local_shared_x > 0) {
+	  if(index < local_private_y) {
+	    i = x * zones_per_piecex;
+	    j = y * zones_per_piecey + index + local_shared_y;
+	    return;
+	  } else
+	    index -= local_private_y;
+	}
+      } else {
+	const int local_private = local_private_x * local_private_y;
+	if(index < local_private) {
+	  i = x * zones_per_piecex + (index % local_private_x) + local_shared_x;
+	  j = y * zones_per_piecey + (index / local_private_x) + local_shared_y;
+	  return;
+	} else
+	  index -= local_private;
+      }
+    }
+  }
+  // should never get here
+  assert(0);
+}
+
+static int rect_point_coord_to_index(const GenMesh::GenSideArgs *args,
+				     int i, int j)
+{
+  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
+
+  // due to the rounding up above, some pieces can actually be empty
+  const int eff_numpcx = (args->nzx + zones_per_piecex - 1) / zones_per_piecex;
+  const int eff_numpcy = (args->nzy + zones_per_piecey - 1) / zones_per_piecey;
+  assert(eff_numpcx <= args->numpcx);
+  assert(eff_numpcy <= args->numpcy);
+
+  const int piecex = std::min(i / zones_per_piecex, eff_numpcx - 1);
+  const int piecey = std::min(j / zones_per_piecey, eff_numpcy - 1);
+  const int subpiecex = i - piecex * zones_per_piecex;
+  const int subpiecey = j - piecey * zones_per_piecey;
+  const bool is_shared = (((i > 0) && (subpiecex == 0)) ||
+			  ((j > 0) && (subpiecey == 0)));
+  const int num_points = (args->nzx + 1) * (args->nzy + 1);
+  const int num_private = (args->nzx - eff_numpcx + 2) * (args->nzy - eff_numpcy + 2);
+  int index = 0;
+  if(is_shared) index += num_private;
+  // not the most efficient, but hopefully easier to read: step through each 
+  //  piece and compute its local size, stopping on our piece
+  for(int y = 0; y < eff_numpcy; y++) {
+    const int pppy = ((y < (eff_numpcy - 1)) ?
+		        zones_per_piecey :
+		        (args->nzy + 1 - (eff_numpcy - 1) * zones_per_piecey));
+    for(int x = 0; x < eff_numpcx; x++) {
+      const int pppx = ((x < (eff_numpcx - 1)) ?
+		        zones_per_piecex :
+		        (args->nzx + 1 - (eff_numpcx - 1) * zones_per_piecex));
+      if((x == piecex) && (y == piecey)) {
+	if(is_shared) {
+	  if(piecey > 0)
+	    index += ((subpiecey > 0) ? pppx + subpiecey - 1 : subpiecex);
+	  else
+	    index += subpiecey;
+	} else {
+	  index += ((subpiecey - ((piecey > 0) ? 1 : 0)) * 
+		    (pppx - ((piecex > 0) ? 1 : 0)));
+	  index += (subpiecex - ((piecex > 0) ? 1 : 0));
+	}
+	return index;
+      } else {
+	const int local_shared = ((x > 0) ?
+				    ((y > 0) ? (pppx + pppy - 1) : pppy) :
+				    ((y > 0) ? pppx : 0));
+	const int local_private = pppx * pppy - local_shared;
+	index += (is_shared ? local_shared : local_private);
+      }
+    }
+  }
+  // should never get here
+  assert(0);
+  return index;
+}
+#endif
+
 void GenMesh::genPointsRect(
             const Task *task,
             const std::vector<PhysicalRegion> &regions,
@@ -702,8 +827,13 @@ void GenMesh::genPointsRect(
   for (PointIterator itr(runtime, isp); itr(); itr++)
   {
     // Figure out the physical location based on the logical ID
+#ifdef PRECOMPACTED_RECT_POINTS
+    int i, j;
+    rect_point_index_to_coord(args, itr[0], i, j);
+#else
     const int i = itr[0] % npx;
     const int j = itr[0] / npx;
+#endif
     const double x = dx * double(i);
     const double y = dy * double(j);
     acc_px[*itr] = make_double2(x, y);
@@ -973,8 +1103,13 @@ void GenMesh::genSidesRect(
       default:
         assert(false);
     }
+#ifdef REORDER_RECT_POINTS
+    acc_sp1[*itr] = Pointer(rect_point_coord_to_index(args, pidx1, pidy1));
+    acc_sp2[*itr] = Pointer(rect_point_coord_to_index(args, pidx2, pidy2));
+#else
     acc_sp1[*itr] = Pointer(pidy1 * (args->nzx + 1) + pidx1);
     acc_sp2[*itr] = Pointer(pidy2 * (args->nzx + 1) + pidx2);
+#endif
   }
 }
 

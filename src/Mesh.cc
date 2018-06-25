@@ -657,6 +657,7 @@ void Mesh::initParallel() {
         runtime->get_logical_partition_by_tree(ip_temp_master, fsp, 
           lr_temp_points.get_tree_id()), lrp, lppmstr, is_piece);
 
+#ifndef PRECOMPACTED_RECT_POINTS
     // Update the side pointers to points with a gather copy
     // Gather copies aren't quite ready yet so we'll do this with
     // a very simple gather copy task for now, but we will switch
@@ -713,6 +714,7 @@ void Mesh::initParallel() {
       update_launcher.add_field(2/*index*/, FID_MAPSP2TEMP);
       runtime->execute_task(ctx, update_launcher);
     }
+#endif
 #endif
 
     // Lastly we need to get the shared partition by performing an image
@@ -1692,6 +1694,11 @@ void Mesh::compactPointsTask(
     const AccessorWD<Pointer> acc_ptr(regions[2], FID_MAPLOAD2DENSE);
     for ( ; itr_src() && itr_dst(); itr_src++, itr_dst++)
     {
+#ifdef PRECOMPACTED_RECT_POINTS
+      // the whole point of this code is that "compaction" should be an
+      //  identity map
+      assert(*itr_src == *itr_dst);
+#endif
       acc_dst[*itr_dst] = acc_src[*itr_src];
       acc_ptr[*itr_src] = *itr_dst;
     }
