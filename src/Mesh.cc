@@ -229,15 +229,18 @@ Mesh::Mesh(
     wxy = new WriteXY(this);
     egold = new ExportGold(this);
 
-    if (parallel)
-        initParallel();
-    else
-        init();
 #ifdef CTRL_REPL
+    // Call this to populate the numpcx and numpcy fields
+    gmesh->calcNumPieces(numpcs);
     PennantShardingFunctor *functor = 
       new PennantShardingFunctor(gmesh->numpcx, gmesh->numpcy);
     runtime->register_sharding_functor(PENNANT_SHARD_ID, functor);
 #endif
+
+    if (parallel)
+        initParallel();
+    else
+        init();
 }
 
 
