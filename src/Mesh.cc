@@ -162,6 +162,9 @@ ShardID PennantShardingFunctor::shard(const DomainPoint &p,
     // Figure out our sharding information
     // Tile pieces on shards the same way we tile
     // pieces on the original mesh
+    // Check that we're doing this for the right thing
+    const Rect<1> space = full_space;
+    assert((numpcx * numpcy) == space.volume());
     // pick nsx, nsy such that shards are as close to square
     // as possible
     // we would like:  numpcx / nsx == numpcy / nsy,
