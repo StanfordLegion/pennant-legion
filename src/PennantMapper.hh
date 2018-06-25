@@ -56,6 +56,12 @@ public:
   virtual void speculate(const Legion::Mapping::MapperContext ctx,
                          const Legion::Task &task,
                                SpeculativeOutput &output);
+#ifdef CTRL_REPL
+  virtual void select_sharding_functor(const Legion::Mapping::MapperContext ctx,
+                                       const Legion::Task &task,
+                                       const SelectShardingFunctorInput &input,
+                                             SelectShardingFunctorOutput &output);
+#endif
 public:
   virtual void map_copy(const Legion::Mapping::MapperContext ctx,
                         const Legion::Copy &copy,
@@ -64,6 +70,12 @@ public:
   virtual void speculate(const Legion::Mapping::MapperContext ctx,
                          const Legion::Copy &copy,
                                SpeculativeOutput &output);
+#ifdef CTRL_REPL
+  virtual void select_sharding_functor(const Legion::Mapping::MapperContext ctx,
+                                       const Legion::Copy &copy,
+                                       const SelectShardingFunctorInput &input,
+                                             SelectShardingFunctorOutput &output);
+#endif
 public:
   virtual void select_partition_projection(const Legion::Mapping::MapperContext  ctx,
                                            const Legion::Partition& partition,
@@ -73,6 +85,12 @@ public:
                              const Legion::Partition& partition,
                              const MapPartitionInput&   input,
                                    MapPartitionOutput&  output);
+#ifdef CTRL_REPL
+  virtual void select_sharding_functor(const Legion::Mapping::MapperContext ctx,
+                                       const Legion::Partition &partition,
+                                       const SelectShardingFunctorInput &input,
+                                             SelectShardingFunctorOutput &output);
+#endif
 protected:
   static const char* get_name(Legion::Processor p);
   void map_pennant_array(const Legion::Mapping::MapperContext ctx, 

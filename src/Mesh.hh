@@ -127,6 +127,12 @@ enum MeshOpID {
     OPID_MAXDBL
 };
 
+#ifdef CTRL_REPL
+enum ShardingID {
+    PENNANT_SHARD_ID = 1,
+};
+#endif
+
 // atomic versions of lhs += rhs
 template <typename T> __CUDA_HD__
 inline void atomic_add(T& lhs, const T& rhs);
@@ -319,6 +325,24 @@ public:
     static void fold(RHS& rhs1, RHS rhs2)
         { ReduceHelper<T, EXCLUSIVE>::maxOf(rhs1, rhs2); }
 };
+
+#ifdef CTRL_REPL
+class PennantShardingFunctor : public Legion::ShardingFunctor {
+public:
+  PennantShardingFunctor(const Legion::coord_t numpcx, const Legion::coord_t numpcy);
+public:
+  virtual Legion::ShardID shard(const Legion::DomainPoint &point,
+                                const Legion::Domain &full_space,
+                                const size_t total_shards);
+protected:
+  const Legion::coord_t numpcx;
+  const Legion::coord_t numpcy;
+  Legion::coord_t nsx;
+  Legion::coord_t nsy;
+  Legion::coord_t shards;
+  bool sharded; 
+};
+#endif
 
 class Mesh {
 public:

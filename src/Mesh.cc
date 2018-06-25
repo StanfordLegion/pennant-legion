@@ -150,6 +150,62 @@ const double MinOp<double>::identity = DBL_MAX;
 template <>
 const double MaxOp<double>::identity = DBL_MIN;
 
+#ifdef CTRL_REPL
+PennantShardingFunctor::PennantShardingFunctor(const coord_t nx, const coord_t ny)
+  : ShardingFunctor(), numpcx(nx), numpcy(ny), sharded(false) { }
+
+ShardID PennantShardingFunctor::shard(const DomainPoint &p,
+                                      const Domain &full_space,
+                                      const size_t total_shards)
+{
+  if (!sharded) {
+    // Figure out our sharding information
+    // Tile pieces on shards the same way we tile
+    // pieces on the original mesh
+    // pick nsx, nsy such that shards are as close to square
+    // as possible
+    // we would like:  numpcx / nsx == numpcy / nsy,
+    // where nsx * nxy = total_shards (total number of shards)
+    // this solves to:  nsx = sqrt(total_shards * numpcx / numpcy)
+    // we compute this, assuming numpcx <= numpcy (swap if necessary)
+    double nx = static_cast<double>(numpcx);
+    double ny = static_cast<double>(numpcy);
+    bool swapflag = (nx > ny);
+    if (swapflag) swap(nx, ny);
+    double n = sqrt(total_shards * nx / ny);
+    // need to constrain n to be an integer with numpcs % n == 0
+    // try rounding n both up and down
+    int n1 = floor(n + 1.e-12);
+    n1 = max(n1, 1);
+    while (total_shards % n1 != 0) --n1;
+    int n2 = ceil(n - 1.e-12);
+    while (total_shards % n2 != 0) ++n2;
+    // pick whichever of n1 and n2 gives blocks closest to square,
+    // i.e. gives the shortest long side
+    double longside1 = max(nx / n1, ny / (total_shards/n1));
+    double longside2 = max(nx / n2, ny / (total_shards/n2));
+    nsx = (longside1 <= longside2 ? n1 : n2);
+    nsy = total_shards / nsx;
+    if (swapflag) swap(nsx, nsy);
+    // When we're done we can save everything
+    shards = (coord_t)total_shards;
+    // Make sure all the writes are flushed
+    __sync_synchronize();
+    sharded = true;
+  } else {
+    // Sanity check we're using the right thing
+    assert(shards == ((coord_t)total_shards));
+  }
+  // Then we can compute our point information
+  const Point<1> point = p; 
+  const coord_t sx = point % nsx;
+  const coord_t sy = point / nsy;
+  ShardID result = sy * nsx + sx;
+  assert(result < total_shards);
+  return result;
+}
+#endif
+
 Mesh::Mesh(
         const InputFile* inp,
         const int numpcsa,
@@ -174,6 +230,11 @@ Mesh::Mesh(
         initParallel();
     else
         init();
+#ifdef CTRL_REPL
+    PennantShardingFunctor *functor = 
+      new PennantShardingFunctor(gmesh->numpcx, gmesh->numpcy);
+    runtime->register_sharding_functor(PENNANT_SHARD_ID, functor);
+#endif
 }
 
 

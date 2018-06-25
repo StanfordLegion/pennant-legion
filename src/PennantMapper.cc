@@ -10,6 +10,7 @@
  * license; see top-level LICENSE file for full license text.
  */
 
+#include "Mesh.hh"
 #include "PennantMapper.hh"
 
 #include <cstdlib>
@@ -199,6 +200,16 @@ void PennantMapper::speculate(const MapperContext ctx,
 #endif
 }
 
+#ifdef CTRL_REPL
+void PennantMapper::select_sharding_functor(const MapperContext ctx,
+                                            const Task &task,
+                                            const SelectShardingFunctorInput &input,
+                                                  SelectShardingFunctorOutput &output)
+{
+  output.chosen_functor = PENNANT_SHARD_ID; 
+}
+#endif
+
 void PennantMapper::map_copy(const MapperContext ctx,
                              const Copy &copy,
                              const MapCopyInput &input,
@@ -244,6 +255,16 @@ void PennantMapper::speculate(const MapperContext ctx,
 #endif
 }
 
+#ifdef CTRL_REPL
+void PennantMapper::select_sharding_functor(const MapperContext ctx,
+                                            const Copy &copy,
+                                            const SelectShardingFunctorInput &input,
+                                                  SelectShardingFunctorOutput &output)
+{
+  output.chosen_functor = PENNANT_SHARD_ID; 
+}
+#endif
+
 void PennantMapper::select_partition_projection(const MapperContext  ctx,
                                                 const Partition& partition,
                                                 const SelectPartitionProjectionInput& input,
@@ -285,6 +306,16 @@ void PennantMapper::map_partition(const MapperContext ctx,
   snprintf(result, 256, "Pennant Mapper on Processor %llx", p.id);
   return result;
 }
+
+#ifdef CTRL_REPL
+void PennantMapper::select_sharding_functor(const MapperContext ctx,
+                                            const Partition &partition,
+                                            const SelectShardingFunctorInput &input,
+                                                  SelectShardingFunctorOutput &output)
+{
+  output.chosen_functor = PENNANT_SHARD_ID; 
+}
+#endif
 
 void PennantMapper::map_pennant_array(const MapperContext ctx,
                                       LogicalRegion region, Memory target,
