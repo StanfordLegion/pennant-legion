@@ -864,7 +864,7 @@ Future Hydro::doCycle(
         launchafbc.add_field(1, FID_PU0);
         launchafbc.add_region_requirement(
                 RegionRequirement(lppmstr, 0,
-                        READ_WRITE, EXCLUSIVE, lrp));
+                        READ_WRITE, EXCLUSIVE, lrp, PennantMapper::PREFER_ZCOPY));
         launchafbc.add_field(2, FID_PF);
         launchafbc.add_field(2, FID_PU0);
         launchafbc.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
@@ -887,7 +887,8 @@ Future Hydro::doCycle(
         launchca.region_requirements.clear();
         launchca.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        READ_ONLY, EXCLUSIVE, lrp));
+                        READ_ONLY, EXCLUSIVE, lrp,
+                        (part == 0) ? 0 : PenanntMapper::PREFER_ZCOPY));
         launchca.add_field(0, FID_PF);
         launchca.add_field(0, FID_PMASWT);
         launchca.add_region_requirement(

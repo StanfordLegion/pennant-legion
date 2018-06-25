@@ -156,6 +156,10 @@ void PennantMapper::map_task(const MapperContext ctx,
       if (task.regions[idx].privilege == REDUCE)
         create_reduction_instances(ctx, task, idx, local_zerocopy,
                                    output.chosen_instances[idx]);
+      else if (task.regions[idx].tag & PREFER_ZCOPY)
+        map_pennant_array(ctx, task.regions[idx].region,
+                          local_zerocopy,
+                          output.chosen_instances[idx]);
       else
         map_pennant_array(ctx, task.regions[idx].region, 
 #ifdef NAN_CHECK
