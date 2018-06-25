@@ -339,6 +339,8 @@ protected:
   const Legion::coord_t numpcy;
   Legion::coord_t nsx;
   Legion::coord_t nsy;
+  Legion::coord_t pershardx;
+  Legion::coord_t pershardy;
   Legion::coord_t shards;
   bool sharded; 
 };

@@ -190,6 +190,8 @@ ShardID PennantShardingFunctor::shard(const DomainPoint &p,
     nsx = (longside1 <= longside2 ? n1 : n2);
     nsy = total_shards / nsx;
     if (swapflag) swap(nsx, nsy);
+    pershardx = (numpcx + nsx - 1) / nsx;
+    pershardy = (numpcy + nsy - 1) / nsy;
     // When we're done we can save everything
     shards = (coord_t)total_shards;
     // Make sure all the writes are flushed
@@ -201,8 +203,10 @@ ShardID PennantShardingFunctor::shard(const DomainPoint &p,
   }
   // Then we can compute our point information
   const Point<1> point = p; 
-  const coord_t sx = point % nsx;
-  const coord_t sy = point / nsy;
+  const coord_t pcx = point % numpcx;
+  const coord_t pcy = point / numpcx;
+  const coord_t sx = pcx / pershardx;
+  const coord_t sy = pcy / pershardy;
   ShardID result = sy * nsx + sx;
   assert(result < total_shards);
   return result;
