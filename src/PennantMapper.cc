@@ -333,7 +333,8 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
   if (!runtime->find_or_create_physical_instance(ctx, target, layout_constraints,
         regions, result, created, true/*acquire*/, 
         initialization_instance ? 0/*normal GC priority*/ : GC_NEVER_PRIORITY)) {
-    fprintf(stderr,"ERROR: Pennant mapper failed to allocate instance!\n");
+    fprintf(stderr,"ERROR: Pennant mapper failed to allocate instance in "
+            "memory kind %d!\n", target.kind());
     assert(false);
   }
   instances.push_back(result);
@@ -348,9 +349,14 @@ void PennantMapper::create_reduction_instances(const MapperContext ctx,
 {
   std::set<FieldID> dummy_fields;
   TaskLayoutConstraintSet dummy_constraints;
-  default_create_custom_instances(ctx, task.target_proc, target_memory,
+  if (!default_create_custom_instances(ctx, task.target_proc, target_memory,
       task.regions[index], index, dummy_fields,
-      dummy_constraints, false/*need check*/, instances);
+      dummy_constraints, false/*need check*/, instances)) {
+    fprintf(stderr,"ERROR: Pennant mapper failed to allocate reduction instance "
+            "in memory kind %d for region %d of task %s!\n",
+            target_memory.kind(), index, task.get_task_name());
+    assert(false);
+  }
 }
 
 VariantID PennantMapper::find_cpu_variant(const MapperContext ctx, TaskID task_id)
