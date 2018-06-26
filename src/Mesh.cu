@@ -104,6 +104,8 @@ void Mesh::calcCtrsGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_ctrs<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsp1, acc_mapsp2, acc_mapsz,
         acc_mapsp1reg, acc_mapsp2reg, acc_znump, acc_px[0], acc_px[1],
@@ -193,6 +195,8 @@ DeferredReduction<SumOp<int> > Mesh::calcVolsGPUTask(
     // This will assert if it isn't dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return result;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_vols<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsp1, acc_mapsp2,
         acc_mapsz, acc_mapsp1reg, acc_mapsp2reg, acc_px[0], acc_px[1],
@@ -247,6 +251,8 @@ void Mesh::calcEdgeLenGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_edge_length<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsp1, acc_mapsp2,
         acc_mapsp1reg, acc_mapsp2reg, acc_px[0], acc_px[1], acc_elen,
@@ -287,6 +293,8 @@ void Mesh::calcSurfVecsGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_surf_vecs<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsz, acc_ex,
         acc_zx, acc_ssurf, rects.lo, volume);
