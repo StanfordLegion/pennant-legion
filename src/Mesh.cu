@@ -350,6 +350,8 @@ void Mesh::calcCharLenGPUTask(
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
     const size_t volumez = rectz.volume();
+    if (volumez == 0)
+      return;
     const size_t blockz = (volumez + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_char_len_init<<<blockz,THREADS_PER_BLOCK>>>(acc_zdl, 1.e99, 
         rectz.lo, volumez);
@@ -358,6 +360,8 @@ void Mesh::calcCharLenGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_char_len<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsz, acc_elen,
         acc_sarea, acc_znump, acc_zdl, rects.lo, volume);
