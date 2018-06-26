@@ -92,6 +92,8 @@ void PolyGas::calcStateHalfGPUTask(
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
     const size_t volume = rectz.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_state_half<<<blocks,THREADS_PER_BLOCK>>>(acc_zr, acc_zvolp, acc_zvol0,
         acc_ze, acc_zwrate, acc_zm, acc_zp, acc_zss, dth, gm1, ssmin2,
@@ -132,6 +134,8 @@ void PolyGas::calcForceGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_force_pgas<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsz, acc_ssurf,
         acc_zp, acc_sf, rects.lo, volume);
