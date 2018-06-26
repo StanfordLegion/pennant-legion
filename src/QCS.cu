@@ -211,6 +211,8 @@ void QCS::setCornerDivGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_zone_centered_velocity<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsp1,
         acc_mapsp1reg, acc_mapsz, acc_pu[0], acc_pu[1], acc_znump, acc_zuc,
@@ -338,6 +340,8 @@ void QCS::setQCnForceGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_compute_crmu<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsz, acc_cdu, acc_zss, 
         acc_zrp, acc_cevol, acc_cdiv, acc_crmu, q1, q2, gammap1, rects.lo, volume);
@@ -422,6 +426,8 @@ void QCS::setForceGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_set_force1<<<blocks,THREADS_PER_BLOCK>>>(acc_ccos, acc_carea,
                                                  acc_cw, rects.lo, volume);
@@ -526,6 +532,8 @@ void QCS::setVelDiffGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_set_vel_diff1<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsz, acc_mapsp1,
         acc_mapsp2, acc_mapsp1reg, acc_mapsp2reg, acc_elen, acc_pu[0], acc_pu[1],
