@@ -158,11 +158,11 @@ void PennantMapper::map_task(const MapperContext ctx,
         create_reduction_instances(ctx, task, idx, local_zerocopy,
                                    output.chosen_instances[idx]);
       else if (task.regions[idx].tag & PREFER_ZCOPY)
-        map_pennant_array(ctx, task.regions[idx].region,
+        map_pennant_array(ctx, task, idx, task.regions[idx].region,
                           local_zerocopy,
                           output.chosen_instances[idx]);
       else
-        map_pennant_array(ctx, task.regions[idx].region, 
+        map_pennant_array(ctx, task, idx, task.regions[idx].region, 
 #ifdef NAN_CHECK
         // If we're doing nan-checks make sure things are in zero-copy
         // so we can read-the values directly from the host
@@ -180,8 +180,8 @@ void PennantMapper::map_task(const MapperContext ctx,
         create_reduction_instances(ctx, task, idx, local_sysmem,
                                    output.chosen_instances[idx]);
       else
-        map_pennant_array(ctx, task.regions[idx].region, local_sysmem,
-                          output.chosen_instances[idx]);
+        map_pennant_array(ctx, task, idx, task.regions[idx].region, 
+                          local_sysmem, output.chosen_instances[idx]);
     }
   }
   runtime->acquire_instances(ctx, output.chosen_instances);
@@ -225,17 +225,19 @@ void PennantMapper::map_copy(const MapperContext ctx,
     const Memory fbmem = 
       default_policy_select_target_memory(ctx, gpu, copy.src_requirements[0]);
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
-      map_pennant_array(ctx, copy.src_requirements[idx].region, fbmem,
+      map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, fbmem,
                         output.src_instances[idx]);
     for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
-      map_pennant_array(ctx, copy.dst_requirements[idx].region, fbmem,
+      map_pennant_array(ctx, copy, idx + copy.src_requirements.size(),
+                        copy.dst_requirements[idx].region, fbmem,
                         output.dst_instances[idx]);
   } else {
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
-      map_pennant_array(ctx, copy.src_requirements[idx].region, local_sysmem,
+      map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, local_sysmem,
                         output.src_instances[idx]);
     for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
-      map_pennant_array(ctx, copy.dst_requirements[idx].region, local_sysmem,
+      map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
+                        copy.dst_requirements[idx].region, local_sysmem,
                         output.dst_instances[idx]);
   }
   runtime->acquire_instances(ctx, output.src_instances);
@@ -295,7 +297,7 @@ void PennantMapper::map_partition(const MapperContext ctx,
                                   const MapPartitionInput&   input,
                                         MapPartitionOutput&  output)
 {
-  map_pennant_array(ctx, partition.requirement.region, local_sysmem,
+  map_pennant_array(ctx, partition, 0, partition.requirement.region, local_sysmem,
                     output.chosen_instances);
   runtime->acquire_instances(ctx, output.chosen_instances);
 }
@@ -318,6 +320,7 @@ void PennantMapper::select_sharding_functor(const MapperContext ctx,
 #endif
 
 void PennantMapper::map_pennant_array(const MapperContext ctx,
+                                      const Mappable &mappable, unsigned index, 
                                       LogicalRegion region, Memory target,
                                       std::vector<PhysicalInstance> &instances,
                                       bool initialization_instance)
@@ -364,8 +367,36 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
   if (!runtime->find_or_create_physical_instance(ctx, target, layout_constraints,
         regions, result, created, true/*acquire*/, 
         initialization_instance ? 0/*normal GC priority*/ : GC_NEVER_PRIORITY)) {
-    fprintf(stderr,"ERROR: Pennant mapper failed to allocate instance in "
-            "memory kind %d!\n", target.kind());
+    fprintf(stderr,"Pennant mapper is out of memory!\n");
+    switch (mappable.get_mappable_type())
+    {
+      case Mappable::TASK_MAPPABLE:
+        {
+          const Task *task = mappable.as_task();
+          fprintf(stderr,"ERROR: Pennant mapper %s failed to allocate instance in "
+                  "memory " IDFMT " of kind %d for region requirement %d of task %s!\n",
+                  get_mapper_name(), target.id, target.kind(), index, task->get_task_name());
+          break;
+        }
+      case Mappable::COPY_MAPPABLE:
+        {
+          fprintf(stderr,"ERROR: Pennant mapper %s failed to allocate instance in "
+                  "memory " IDFMT " of kind %d for region requirement %d of copy!\n",
+                  get_mapper_name(), target.id, target.kind(), index);
+          break;
+        }
+      case Mappable::PARTITION_MAPPABLE:
+        {
+          fprintf(stderr,"ERROR: Pennant mapper %s failed to allocate instance in "
+                  "memory " IDFMT " of kind %d for region requirement %d of partition!\n",
+                  get_mapper_name(), target.id, target.kind(), index);
+          break;
+        }
+      default:
+        fprintf(stderr,"ERROR: Pennant mapper %s failed to allocate instance in "
+                "memory " IDFMT " of kind %d for region requirement %d of unknown mappable!\n",
+                get_mapper_name(), target.id, target.kind(), index);
+    }
     assert(false);
   }
   instances.push_back(result);
@@ -383,9 +414,11 @@ void PennantMapper::create_reduction_instances(const MapperContext ctx,
   if (!default_create_custom_instances(ctx, task.target_proc, target_memory,
       task.regions[index], index, dummy_fields,
       dummy_constraints, false/*need check*/, instances)) {
-    fprintf(stderr,"ERROR: Pennant mapper failed to allocate reduction instance "
-            "in memory kind %d for region %d of task %s!\n",
-            target_memory.kind(), index, task.get_task_name());
+    fprintf(stderr,"Pennant mapper is out of memory!\n");
+    fprintf(stderr,"ERROR: Pennant mapper %s failed to allocate reduction instance "
+            "in memory " IDFMT " of kind %d for region requirement %d of task %s!\n",
+            get_mapper_name(), target_memory.id, target_memory.kind(), 
+            index, task.get_task_name());
     assert(false);
   }
 }

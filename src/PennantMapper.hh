@@ -94,6 +94,7 @@ public:
 protected:
   static const char* get_name(Legion::Processor p);
   void map_pennant_array(const Legion::Mapping::MapperContext ctx, 
+                         const Legion::Mappable &mapple, unsigned index,
                          Legion::LogicalRegion region, Legion::Memory target,
                          std::vector<Legion::Mapping::PhysicalInstance> &instances,
                          bool initialization_instance = false);
