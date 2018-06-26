@@ -723,6 +723,16 @@ void Mesh::initParallel() {
         lp_shared_range, lr_shared_range, FID_RANGE, is_piece);
 
     // Now make the actual point logical region, get the partitions, and copy over data
+#ifdef PRECOMPACTED_RECT_POINTS
+    // This is a very special case where we can just using the existing region
+    // without needing to ever copy anything
+    lrp = lr_temp_points;
+    runtime->attach_name(lrp, "lrp");
+    lppprv = runtime->get_logical_partition_by_tree(ip_prv, fsp, lrp.get_tree_id());
+    runtime->attach_name(lppprv, "lppprv");
+    lppmstr = runtime->get_logical_partition_by_tree(ip_mstr, fsp, lrp.get_tree_id());
+    runtime->attach_name(lppmstr, "lppmstr");
+#else
     lrp = runtime->create_logical_region(ctx, isp, fsp);
     runtime->attach_name(lrp, "lrp");
     lppprv = runtime->get_logical_partition_by_tree(ip_prv, fsp, lrp.get_tree_id());
@@ -738,7 +748,6 @@ void Mesh::initParallel() {
         runtime->get_logical_partition_by_tree(ip_temp_master, fsp, 
           lr_temp_points.get_tree_id()), lrp, lppmstr, is_piece);
 
-#ifndef PRECOMPACTED_RECT_POINTS
     // Update the side pointers to points with a gather copy
     // Gather copies aren't quite ready yet so we'll do this with
     // a very simple gather copy task for now, but we will switch
@@ -834,7 +843,9 @@ void Mesh::initParallel() {
     }
 
     // Delete our temporary regions
+#ifndef PRECOMPACTED_RECT_POINTS
     runtime->destroy_logical_region(ctx, lr_temp_points);
+#endif
     runtime->destroy_logical_region(ctx, lr_all_range);
     runtime->destroy_logical_region(ctx, lr_private_range);
     runtime->destroy_logical_region(ctx, lr_shared_range);
