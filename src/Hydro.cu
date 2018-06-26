@@ -155,6 +155,8 @@ void Hydro::calcRhoGPUTask(
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
     const size_t volume = rectz.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_rho<<<blocks,THREADS_PER_BLOCK>>>(acc_zm, acc_zvol, acc_zr,
                                                rectz.lo, volume);
@@ -213,6 +215,8 @@ void Hydro::calcCrnrMassGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_crnr_mass<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsp1, acc_mapsp1reg,
         acc_mapss3, acc_mapsz, acc_smf, acc_zr, acc_zarea, acc_pmas_prv,
@@ -271,6 +275,8 @@ void Hydro::sumCrnrForceGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_sum_crnr_force<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsp1, acc_mapsp1reg,
         acc_mapss3, acc_sfp, acc_sfq, acc_sft, acc_pf_prv, acc_pf_shr, rects.lo, volume);
@@ -455,6 +461,8 @@ void Hydro::calcWorkGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss); 
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_work<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsp1, acc_mapsp2, acc_mapsz,
         acc_mapsp1reg, acc_mapsp2reg, acc_sf, acc_sf2, acc_pu0[0], acc_pu0[1],
@@ -504,6 +512,8 @@ void Hydro::calcWorkRateGPUTask(
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
     const size_t volume = rectz.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_work_rate<<<blocks,THREADS_PER_BLOCK>>>(acc_zvol0, acc_zvol,
         acc_zw, acc_zp, acc_zwrate, dtinv, rectz.lo, volume);
@@ -541,6 +551,8 @@ void Hydro::calcEnergyGPUTask(
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
     const size_t volume = rectz.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_energy<<<blocks,THREADS_PER_BLOCK>>>(acc_zetot, acc_zm, acc_ze,
                                                   fuzz, rectz.lo, volume);
@@ -597,6 +609,8 @@ DeferredReduction<MinOp<double> > Hydro::calcDtNewGPUTask(
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
     const size_t volume = rectz.volume();
+    if (volume == 0)
+      return dtnew;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     if (blocks >= MAX_REDUCTION_CTAS) {
       const size_t iters = (blocks + MAX_REDUCTION_CTAS - 1) / MAX_REDUCTION_CTAS;
@@ -650,6 +664,8 @@ DeferredReduction<MaxOp<double> > Hydro::calcDvolGPUTask(
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
     const size_t volume = rectz.volume();
+    if (volume == 0)
+      return dvol;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     if (blocks >= MAX_REDUCTION_CTAS) {
       const size_t iters = (blocks + MAX_REDUCTION_CTAS - 1) / MAX_REDUCTION_CTAS;
