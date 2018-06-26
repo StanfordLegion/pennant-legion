@@ -98,10 +98,6 @@ protected:
                          Legion::LogicalRegion region, Legion::Memory target,
                          std::vector<Legion::Mapping::PhysicalInstance> &instances,
                          bool initialization_instance = false);
-  void find_pennant_array(const Legion::Mapping::MapperContext ctx,
-                          const Legion::Mappable &mapple, unsigned index,
-                          Legion::LogicalRegion region, Legion::Memory::Kind kind,
-                          std::vector<Legion::Mapping::PhysicalInstance> &instances);
   void create_reduction_instances(const Legion::Mapping::MapperContext ctx,
                          const Legion::Task &task, unsigned index, Legion::Memory target,
                          std::vector<Legion::Mapping::PhysicalInstance> &instances);
@@ -111,6 +107,9 @@ protected:
                                      Legion::TaskID task_id);
   Legion::VariantID find_gpu_variant(const Legion::Mapping::MapperContext ctx,
                                      Legion::TaskID task_id);
+  Legion::coord_t compute_shard_index(Legion::Point<1> point);
+public:
+  void update_mesh_information(Legion::coord_t numpcx, Legion::coord_t numpcy);
 public:
   const char *const pennant_mapper_name;
 protected:
@@ -121,6 +120,11 @@ protected:
   Legion::Memory local_sysmem, local_zerocopy, local_framebuffer;
   std::map<std::pair<Legion::LogicalRegion,Legion::Memory>,
            Legion::Mapping::PhysicalInstance> local_instances;
+protected:
+  // For helping with sharded copy operations
+  Legion::coord_t numpcx, numpcy;
+  Legion::Rect<2> shard_rect;
+  bool sharded;
 };
 
 

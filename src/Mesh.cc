@@ -26,6 +26,7 @@
 #include "GenMesh.hh"
 #include "WriteXY.hh"
 #include "ExportGold.hh"
+#include "PennantMapper.hh"
 
 using namespace std;
 using namespace Memory;
@@ -165,31 +166,7 @@ ShardID PennantShardingFunctor::shard(const DomainPoint &p,
     // Check that we're doing this for the right thing
     const Rect<1> space = full_space;
     assert((numpcx * numpcy) == space.volume());
-    // pick nsx, nsy such that shards are as close to square
-    // as possible
-    // we would like:  numpcx / nsx == numpcy / nsy,
-    // where nsx * nxy = total_shards (total number of shards)
-    // this solves to:  nsx = sqrt(total_shards * numpcx / numpcy)
-    // we compute this, assuming numpcx <= numpcy (swap if necessary)
-    double nx = static_cast<double>(numpcx);
-    double ny = static_cast<double>(numpcy);
-    bool swapflag = (nx > ny);
-    if (swapflag) swap(nx, ny);
-    double n = sqrt(total_shards * nx / ny);
-    // need to constrain n to be an integer with numpcs % n == 0
-    // try rounding n both up and down
-    int n1 = floor(n + 1.e-12);
-    n1 = max(n1, 1);
-    while (total_shards % n1 != 0) --n1;
-    int n2 = ceil(n - 1.e-12);
-    while (total_shards % n2 != 0) ++n2;
-    // pick whichever of n1 and n2 gives blocks closest to square,
-    // i.e. gives the shortest long side
-    double longside1 = max(nx / n1, ny / (total_shards/n1));
-    double longside2 = max(nx / n2, ny / (total_shards/n2));
-    nsx = (longside1 <= longside2 ? n1 : n2);
-    nsy = total_shards / nsx;
-    if (swapflag) swap(nsx, nsy);
+    calc_pieces_helper(total_shards, numpcx, numpcy, nsx, nsy);
     pershardx = (numpcx + nsx - 1) / nsx;
     pershardy = (numpcy + nsy - 1) / nsy;
     // When we're done we can save everything
@@ -212,6 +189,8 @@ ShardID PennantShardingFunctor::shard(const DomainPoint &p,
   return result;
 }
 #endif
+
+/*static*/ std::vector<PennantMapper*> Mesh::local_mappers;
 
 Mesh::Mesh(
         const InputFile* inp,
@@ -240,6 +219,12 @@ Mesh::Mesh(
       new PennantShardingFunctor(gmesh->numpcx, gmesh->numpcy);
     runtime->register_sharding_functor(PENNANT_SHARD_ID, functor);
 #endif
+    // This is a little bit brittle but for now we need to tell our
+    // mappers about the size of the mesh which we are about to 
+    // load so that it knows how to shard things
+    for (std::vector<PennantMapper*>::const_iterator it = 
+          local_mappers.begin(); it != local_mappers.end(); it++)
+      (*it)->update_mesh_information(gmesh->numpcx, gmesh->numpcy);
 
     if (parallel)
         initParallel();

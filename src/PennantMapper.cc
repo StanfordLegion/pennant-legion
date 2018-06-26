@@ -29,7 +29,7 @@ PennantMapper::PennantMapper(
         Runtime *rt,
         Processor p)
   : DefaultMapper(rt->get_mapper_runtime(), m, p), 
-    pennant_mapper_name(get_name(p))
+    pennant_mapper_name(get_name(p)), numpcx(0), numpcy(0), sharded(false)
 {
   // Get our local memories
   {
@@ -219,13 +219,19 @@ void PennantMapper::map_copy(const MapperContext ctx,
   output.dst_instances.resize(copy.dst_requirements.size());
   if (!local_gpus.empty()) {
     assert(copy.is_index_space);
+    const Point<1> point = copy.index_point;
+    const coord_t index = compute_shard_index(point);
+    const Processor gpu = local_gpus[index % local_gpus.size()];
+    const Memory fbmem = default_policy_select_target_memory(ctx, gpu,
+                                        copy.src_requirements.front());
+    assert(fbmem.kind() == Memory::GPU_FB_MEM);
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
-      find_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region,
-                         Memory::GPU_FB_MEM, output.src_instances[idx]);
+      map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, fbmem,
+                        output.src_instances[idx]);
     for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
-      find_pennant_array(ctx, copy, idx + copy.src_requirements.size(),
-                         copy.dst_requirements[idx].region,
-                         Memory::GPU_FB_MEM, output.dst_instances[idx]);
+      map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
+                        copy.dst_requirements[idx].region, fbmem,
+                        output.dst_instances[idx]);
   } else {
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
       map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, local_sysmem,
@@ -399,81 +405,6 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
   local_instances[key] = result;
 }
 
-void PennantMapper::find_pennant_array(const MapperContext ctx,
-                                       const Mappable &mappable, unsigned index, 
-                                       LogicalRegion region, Memory::Kind kind,
-                                       std::vector<PhysicalInstance> &instances)
-{
-  for (std::map<std::pair<LogicalRegion,Memory>,PhysicalInstance>::const_iterator
-        it = local_instances.begin(); it != local_instances.end(); it++)
-  {
-    if (it->first.first != region)
-      continue;
-    if (it->first.second.kind() != kind)
-      continue;
-    instances.push_back(it->second);
-    return;
-  }
-  LayoutConstraintSet empty_constraints;
-  std::vector<LogicalRegion> regions(1, region);
-  switch (kind)
-  {
-    case Memory::GPU_FB_MEM:
-      {
-        for (std::vector<Processor>::const_iterator it = 
-              local_gpus.begin(); it != local_gpus.end(); it++) {
-          Machine::MemoryQuery fb_query(machine);
-          fb_query.local_address_space();
-          fb_query.only_kind(Memory::GPU_FB_MEM);
-          fb_query.best_affinity_to(*it);
-          Memory gpu_framebuffer = fb_query.first();
-          assert(gpu_framebuffer.exists());
-          PhysicalInstance result;
-          if (runtime->find_physical_instance(ctx, gpu_framebuffer,
-                empty_constraints, regions, result, true/*acquire*/)) {
-            const std::pair<LogicalRegion,Memory> key(region, gpu_framebuffer);
-            local_instances[key] = result;
-            instances.push_back(result);
-            return;
-          }
-        }
-        break;
-      }
-    default:
-      assert(false); // add support for more memory kinds
-  }
-  switch (mappable.get_mappable_type())
-  {
-    case Mappable::TASK_MAPPABLE:
-      {
-        const Task *task = mappable.as_task();
-        fprintf(stderr,"ERROR: Pennant mapper %s failed to find instance in "
-                "memory of kind %d for region requirement %d of task %s!\n",
-                get_mapper_name(), kind, index, task->get_task_name());
-        break;
-      }
-    case Mappable::COPY_MAPPABLE:
-      {
-        fprintf(stderr,"ERROR: Pennant mapper %s failed to find instance in "
-                "memory of kind %d for region requirement %d of copy!\n",
-                get_mapper_name(), kind, index);
-        break;
-      }
-    case Mappable::PARTITION_MAPPABLE:
-      {
-        fprintf(stderr,"ERROR: Pennant mapper %s failed to find instance in "
-                "memory of kind %d for region requirement %d of partition!\n",
-                get_mapper_name(), kind, index);
-        break;
-      }
-    default:
-      fprintf(stderr,"ERROR: Pennant mapper %s failed to find instance in "
-              "memory of kind %d for region requirement %d of unknown mappable!\n",
-              get_mapper_name(), kind, index);
-  }
-  assert(false);
-}
-
 void PennantMapper::create_reduction_instances(const MapperContext ctx,
                                                const Task &task, unsigned index,
                                                Memory target_memory,
@@ -530,5 +461,39 @@ VariantID PennantMapper::find_gpu_variant(const MapperContext ctx, TaskID task_i
   assert(variants.size() == 1); // should be exactly one for pennant 
   gpu_variants[task_id] = variants[0];
   return variants[0];
+}
+
+void PennantMapper::update_mesh_information(coord_t npcx, coord_t npcy)
+{
+  assert(numpcx == 0);
+  assert(numpcy == 0);
+  assert(!sharded);
+  numpcx = npcx;
+  numpcy = npcy;
+}
+
+coord_t PennantMapper::compute_shard_index(Point<1> p)
+{
+  if (!sharded) {
+    assert(numpcx > 0);
+    assert(numpcy > 0);
+    coord_t nsx, nsy;
+    calc_pieces_helper(total_nodes/*number of shards*/, numpcx, numpcy, nsx, nsy);
+    // Figure out which shard we are in x and y
+    const Point<2> shard_point(node_id % nsx, node_id / nsx);
+    const coord_t pershardx = (numpcx + nsx - 1) / nsx;
+    const coord_t pershardy = (numpcy + nsy - 1) / nsy;
+    const Rect<2> rect(Point<2>(shard_point[0] * pershardx, shard_point[1] * pershardy),
+                       Point<2>((shard_point[0] + 1) * pershardx - 1,
+                                (shard_point[1] + 1) * pershardy - 1));
+    const Rect<2> full(Point<2>(0, 0), Point<2>(numpcx-1, numpcy-1));
+    shard_rect = rect.intersection(full);
+    sharded = true;
+  }
+  const Point<2> point(p[0] % numpcx, p[0] / numpcx);
+  assert(shard_rect.contains(point));
+  const coord_t x = point[0] - shard_rect.lo[0];
+  const coord_t y = point[1] - shard_rect.lo[1];
+  return y * ((shard_rect.hi[0] - shard_rect.lo[0]) + 1) + x;
 }
 

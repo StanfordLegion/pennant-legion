@@ -13,6 +13,7 @@
 #ifndef MESH_HH_
 #define MESH_HH_
 
+#include <cmath>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -27,7 +28,7 @@
 class InputFile;
 class WriteXY;
 class ExportGold;
-
+class PennantMapper;
 
 enum MeshFieldID {
     FID_NUMSBAD = 'M' * 100,
@@ -422,6 +423,8 @@ public:
     Legion::Domain dompc;
                                    // domain of legion pieces
 
+    static std::vector<PennantMapper*> local_mappers;
+
     Mesh(
             const InputFile* inp,
             const int numpcsa,
@@ -769,5 +772,38 @@ void Mesh::setField(
     runtime->unmap_region(ctx, pr);
 }
 
+// Helper method for computing pieces
+static inline void calc_pieces_helper(const Legion::coord_t numpcs,
+                                      const Legion::coord_t inx,
+                                      const Legion::coord_t iny,
+                                      Legion::coord_t &numpcx, 
+                                      Legion::coord_t &numpcy)
+{
+  // pick numpcx, numpcy such that pieces are as close to square
+  // as possible
+  // we would like:  nzx / numpcx == nzy / numpcy,
+  // where numpcx * numpcy = numpcs (total number of pieces)
+  // this solves to:  numpcx = sqrt(numpcs * nzx / nzy)
+  // we compute this, assuming nzx <= nzy (swap if necessary)
+  double nx = static_cast<double>(inx);
+  double ny = static_cast<double>(iny);
+  const bool swapflag = (nx > ny);
+  if (swapflag) std::swap(nx, ny);
+  double n = sqrt(numpcs * nx / ny);
+  // need to constrain n to be an integer with numpcs % n == 0
+  // try rounding n both up and down
+  Legion::coord_t n1 = floor(n + 1.e-12);
+  n1 = std::max(n1, 1LL);
+  while (numpcs % n1 != 0) --n1;
+  Legion::coord_t n2 = ceil(n - 1.e-12);
+  while (numpcs % n2 != 0) ++n2;
+  // pick whichever of n1 and n2 gives blocks closest to square,
+  // i.e. gives the shortest long side
+  double longside1 = std::max(nx / n1, ny / (numpcs/n1));
+  double longside2 = std::max(nx / n2, ny / (numpcs/n2));
+  numpcx = (longside1 <= longside2 ? n1 : n2);
+  numpcy = numpcs / numpcx;
+  if (swapflag) std::swap(numpcx, numpcy);
+}
 
 #endif /* MESH_HH_ */

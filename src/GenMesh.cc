@@ -461,31 +461,7 @@ void GenMesh::calcNumPieces(const int numpcs) {
 
     // If we already computed this then we don't need to do it again
     if (pieces) return;
-    // pick numpcx, numpcy such that pieces are as close to square
-    // as possible
-    // we would like:  nzx / numpcx == nzy / numpcy,
-    // where numpcx * numpcy = numpcs (total number of pieces)
-    // this solves to:  numpcx = sqrt(numpcs * nzx / nzy)
-    // we compute this, assuming nzx <= nzy (swap if necessary)
-    double nx = static_cast<double>(nzx);
-    double ny = static_cast<double>(nzy);
-    bool swapflag = (nx > ny);
-    if (swapflag) swap(nx, ny);
-    double n = sqrt(numpcs * nx / ny);
-    // need to constrain n to be an integer with numpcs % n == 0
-    // try rounding n both up and down
-    int n1 = floor(n + 1.e-12);
-    n1 = max(n1, 1);
-    while (numpcs % n1 != 0) --n1;
-    int n2 = ceil(n - 1.e-12);
-    while (numpcs % n2 != 0) ++n2;
-    // pick whichever of n1 and n2 gives blocks closest to square,
-    // i.e. gives the shortest long side
-    double longside1 = max(nx / n1, ny / (numpcs/n1));
-    double longside2 = max(nx / n2, ny / (numpcs/n2));
-    numpcx = (longside1 <= longside2 ? n1 : n2);
-    numpcy = numpcs / numpcx;
-    if (swapflag) swap(numpcx, numpcy);
+    calc_pieces_helper(numpcs, nzx, nzy, numpcx, numpcy); 
     // Record that we computed this
     pieces = true;
 }

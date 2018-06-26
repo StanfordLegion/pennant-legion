@@ -19,6 +19,7 @@
 #include "PennantMapper.hh"
 #include "InputFile.hh"
 #include "Driver.hh"
+#include "Mesh.hh"
 
 using namespace std;
 using namespace Legion;
@@ -26,7 +27,6 @@ using namespace Legion;
 enum TaskID {
     TID_MAIN
 };
-
 
 void registerMappers(
         Machine machine,
@@ -36,8 +36,9 @@ void registerMappers(
     for (set<Processor>::const_iterator it = local_procs.begin();
         it != local_procs.end(); it++)
     {
-        rt->replace_default_mapper(
-                new PennantMapper(machine, rt, *it), *it);
+        PennantMapper *mapper = new PennantMapper(machine, rt, *it);
+        rt->replace_default_mapper(mapper, *it);
+        Mesh::local_mappers.push_back(mapper);
     }
 }
 
