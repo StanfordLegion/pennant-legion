@@ -414,6 +414,34 @@ void PennantMapper::find_pennant_array(const MapperContext ctx,
     instances.push_back(it->second);
     return;
   }
+  LayoutConstraintSet empty_constraints;
+  std::vector<LogicalRegion> regions(1, region);
+  switch (kind)
+  {
+    case Memory::GPU_FB_MEM:
+      {
+        for (std::vector<Processor>::const_iterator it = 
+              local_gpus.begin(); it != local_gpus.end(); it++) {
+          Machine::MemoryQuery fb_query(machine);
+          fb_query.local_address_space();
+          fb_query.only_kind(Memory::GPU_FB_MEM);
+          fb_query.best_affinity_to(*it);
+          Memory gpu_framebuffer = fb_query.first();
+          assert(gpu_framebuffer.exists());
+          PhysicalInstance result;
+          if (runtime->find_physical_instance(ctx, gpu_framebuffer,
+                empty_constraints, regions, result, true/*acquire*/)) {
+            const std::pair<LogicalRegion,Memory> key(region, gpu_framebuffer);
+            local_instances[key] = result;
+            instances.push_back(result);
+            return;
+          }
+        }
+        break;
+      }
+    default:
+      assert(false); // add support for more memory kinds
+  }
   switch (mappable.get_mappable_type())
   {
     case Mappable::TASK_MAPPABLE:
