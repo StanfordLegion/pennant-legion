@@ -87,6 +87,8 @@ void TTS::calcForceGPUTask(
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
     const size_t volume = rects.volume();
+    if (volume == 0)
+      return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_force_tts<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsz, acc_sarea, 
         acc_smf, acc_ssurf, acc_zarea, acc_zr, acc_zss, acc_sf, alfa, ssmin,
