@@ -219,18 +219,13 @@ void PennantMapper::map_copy(const MapperContext ctx,
   output.dst_instances.resize(copy.dst_requirements.size());
   if (!local_gpus.empty()) {
     assert(copy.is_index_space);
-    const coord_t point = copy.index_point[0];
-    const unsigned index = point % local_gpus.size();
-    const Processor gpu = local_gpus[index];
-    const Memory fbmem = 
-      default_policy_select_target_memory(ctx, gpu, copy.src_requirements[0]);
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
-      map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, fbmem,
-                        output.src_instances[idx]);
+      find_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region,
+                         Memory::GPU_FB_MEM, output.src_instances[idx]);
     for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
-      map_pennant_array(ctx, copy, idx + copy.src_requirements.size(),
-                        copy.dst_requirements[idx].region, fbmem,
-                        output.dst_instances[idx]);
+      find_pennant_array(ctx, copy, idx + copy.src_requirements.size(),
+                         copy.dst_requirements[idx].region,
+                         Memory::GPU_FB_MEM, output.dst_instances[idx]);
   } else {
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
       map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, local_sysmem,
@@ -402,6 +397,53 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
   instances.push_back(result);
   // Save the result for future use
   local_instances[key] = result;
+}
+
+void PennantMapper::find_pennant_array(const MapperContext ctx,
+                                       const Mappable &mappable, unsigned index, 
+                                       LogicalRegion region, Memory::Kind kind,
+                                       std::vector<PhysicalInstance> &instances)
+{
+  for (std::map<std::pair<LogicalRegion,Memory>,PhysicalInstance>::const_iterator
+        it = local_instances.begin(); it != local_instances.end(); it++)
+  {
+    if (it->first.first != region)
+      continue;
+    if (it->first.second.kind() != kind)
+      continue;
+    instances.push_back(it->second);
+    return;
+  }
+  switch (mappable.get_mappable_type())
+  {
+    case Mappable::TASK_MAPPABLE:
+      {
+        const Task *task = mappable.as_task();
+        fprintf(stderr,"ERROR: Pennant mapper %s failed to find instance in "
+                "memory of kind %d for region requirement %d of task %s!\n",
+                get_mapper_name(), kind, index, task->get_task_name());
+        break;
+      }
+    case Mappable::COPY_MAPPABLE:
+      {
+        fprintf(stderr,"ERROR: Pennant mapper %s failed to find instance in "
+                "memory of kind %d for region requirement %d of copy!\n",
+                get_mapper_name(), kind, index);
+        break;
+      }
+    case Mappable::PARTITION_MAPPABLE:
+      {
+        fprintf(stderr,"ERROR: Pennant mapper %s failed to find instance in "
+                "memory of kind %d for region requirement %d of partition!\n",
+                get_mapper_name(), kind, index);
+        break;
+      }
+    default:
+      fprintf(stderr,"ERROR: Pennant mapper %s failed to find instance in "
+              "memory of kind %d for region requirement %d of unknown mappable!\n",
+              get_mapper_name(), kind, index);
+  }
+  assert(false);
 }
 
 void PennantMapper::create_reduction_instances(const MapperContext ctx,

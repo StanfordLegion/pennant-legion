@@ -98,6 +98,10 @@ protected:
                          Legion::LogicalRegion region, Legion::Memory target,
                          std::vector<Legion::Mapping::PhysicalInstance> &instances,
                          bool initialization_instance = false);
+  void find_pennant_array(const Legion::Mapping::MapperContext ctx,
+                          const Legion::Mappable &mapple, unsigned index,
+                          Legion::LogicalRegion region, Legion::Memory::Kind kind,
+                          std::vector<Legion::Mapping::PhysicalInstance> &instances);
   void create_reduction_instances(const Legion::Mapping::MapperContext ctx,
                          const Legion::Task &task, unsigned index, Legion::Memory target,
                          std::vector<Legion::Mapping::PhysicalInstance> &instances);
