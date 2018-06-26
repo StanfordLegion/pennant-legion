@@ -374,7 +374,7 @@ public:
     // mesh variables
     // (See documentation for more details on the mesh
     //  data structures...)
-    int nump, nume, numz, nums, numc;
+    Legion::coord_t nump, nume, numz, nums, numc;
                        // number of points, edges, zones,
                        // sides, corners, resp.
     int numpcs;        // number of pieces in Legion partition

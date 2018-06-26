@@ -50,8 +50,8 @@ public:
           numpcx(gmesh->numpcx), numpcy(gmesh->numpcy),
           lenx(gmesh->lenx), leny(gmesh->leny) { }
     public:
-      const int nzx, nzy;
-      const int numpcx, numpcy;
+      const Legion::coord_t nzx, nzy;
+      const Legion::coord_t numpcx, numpcy;
       const double lenx, leny;
     };
     struct GenZoneArgs {
@@ -60,8 +60,8 @@ public:
         : nzx(gmesh->nzx), nzy(gmesh->nzy),
           numpcx(gmesh->numpcx), numpcy(gmesh->numpcy) { }
     public:
-      const int nzx, nzy;
-      const int numpcx, numpcy;
+      const Legion::coord_t nzx, nzy;
+      const Legion::coord_t numpcx, numpcy;
     };
     struct GenSideArgs {
     public:
@@ -69,17 +69,17 @@ public:
         : nzx(gmesh->nzx), nzy(gmesh->nzy),
           numpcx(gmesh->numpcx), numpcy(gmesh->numpcy) { }
     public:
-      const int nzx, nzy;
-      const int numpcx, numpcy;
+      const Legion::coord_t nzx, nzy;
+      const Legion::coord_t numpcx, numpcy;
     };
 public:
 
     std::string meshtype;       // generated mesh type
-    int nzx, nzy;               // number of zones, in x and y
+    Legion::coord_t nzx, nzy;               // number of zones, in x and y
                                 // directions
     double lenx, leny;          // length of mesh sides, in x and y
                                 // directions
-    int numpcx, numpcy;         // number of pieces to generate,
+    Legion::coord_t numpcx, numpcy;         // number of pieces to generate,
     bool pieces;
                                 // in x and y directions
     std::vector<int> zxbounds, zybounds;
@@ -128,11 +128,11 @@ public:
 
     void calcNumPieces(const int numpc);
 
-    int calcNumPoints(const int numpc);
+    Legion::coord_t calcNumPoints(const int numpc);
 
-    int calcNumZones(const int numpc);
+    Legion::coord_t calcNumZones(const int numpc);
 
-    int calcNumSides(const int numpc);
+    Legion::coord_t calcNumSides(const int numpc);
 
     void generatePointsParallel(
             const int numpcs,

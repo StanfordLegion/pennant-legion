@@ -899,7 +899,7 @@ void Mesh::initChunks() {
     // use 'chunksize' for maximum chunksize; decrease as needed
     // to ensure that no zone has its sides split across chunk
     // boundaries
-    int s1, s2 = 0;
+    coord_t s1, s2 = 0;
     while (s2 < nums) {
         s1 = s2;
         s2 = min(s2 + chunksize, nums);
@@ -913,7 +913,7 @@ void Mesh::initChunks() {
     numsch = schsfirst.size();
 
     // compute point chunks
-    int p1, p2 = 0;
+    coord_t p1, p2 = 0;
     while (p2 < nump) {
         p1 = p2;
         p2 = min(p2 + chunksize, nump);
@@ -923,7 +923,7 @@ void Mesh::initChunks() {
     numpch = pchpfirst.size();
 
     // compute zone chunks
-    int z1, z2 = 0;
+    coord_t z1, z2 = 0;
     while (z2 < numz) {
         z1 = z2;
         z2 = min(z2 + chunksize, numz);
@@ -937,20 +937,20 @@ void Mesh::initChunks() {
 
 void Mesh::writeStats() {
 
-    int gnump = nump;
-    int gnumz = numz;
-    int gnums = nums;
-    int gnumpch = numpch;
-    int gnumzch = numzch;
-    int gnumsch = numsch;
+    coord_t gnump = nump;
+    coord_t gnumz = numz;
+    coord_t gnums = nums;
+    coord_t gnumpch = numpch;
+    coord_t gnumzch = numzch;
+    coord_t gnumsch = numsch;
 
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "--- Mesh Information ---\n");
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Points:  %d\n", gnump);
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Zones:   %d\n", gnumz);
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Sides:   %d\n", gnums);
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Side chunks:  %d\n", gnumsch);
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Point chunks: %d\n", gnumpch);
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Zone chunks:  %d\n", gnumzch);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Points:  %lld\n", gnump);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Zones:   %lld\n", gnumz);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Sides:   %lld\n", gnums);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Side chunks:  %lld\n", gnumsch);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Point chunks: %lld\n", gnumpch);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Zone chunks:  %lld\n", gnumzch);
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "Chunk size:   %d\n", chunksize);
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "------------------------\n");
 }

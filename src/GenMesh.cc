@@ -490,23 +490,23 @@ void GenMesh::calcNumPieces(const int numpcs) {
     pieces = true;
 }
 
-int GenMesh::calcNumPoints(const int numpcs) {
+coord_t GenMesh::calcNumPoints(const int numpcs) {
     // First calculate the number of pieces if we haven't done so yet
     calcNumPieces(numpcs);
     if (meshtype == "rect") {
-      const int npx = nzx + 1;
-      const int npy = nzy + 1;
-      const int np = npx * npy;
+      const coord_t npx = nzx + 1;
+      const coord_t npy = nzy + 1;
+      const coord_t np = npx * npy;
       return np;
     } else if (meshtype == "pie") {
-      const int npx = nzx + 1;
-      const int npy = nzy + 1;
-      const int np = npx * (npy - 1) + 1;
+      const coord_t npx = nzx + 1;
+      const coord_t npy = nzy + 1;
+      const coord_t np = npx * (npy - 1) + 1;
       return np;
     } else if (meshtype == "hex") {
-      const int npx = nzx + 1;
-      const int npy = nzy + 1;
-      const int np = 2 * npx * npy;
+      const coord_t npx = nzx + 1;
+      const coord_t npy = nzy + 1;
+      const coord_t np = 2 * npx * npy;
       return np;
     } else {
       assert(false);
@@ -514,17 +514,17 @@ int GenMesh::calcNumPoints(const int numpcs) {
     }
 }
 
-int GenMesh::calcNumZones(const int numpcs) {
+coord_t GenMesh::calcNumZones(const int numpcs) {
     // First calculate the number of pieces if we haven't done so yet
     calcNumPieces(numpcs);
     if (meshtype == "rect") {
-      const int nz = nzx * nzy;
+      const coord_t nz = nzx * nzy;
       return nz;
     } else if (meshtype == "pie") {
-      const int nz = nzx * nzy;
+      const coord_t nz = nzx * nzy;
       return nz;
     } else if (meshtype == "hex") {
-      const int nz = nzx * nzy;
+      const coord_t nz = nzx * nzy;
       return nz;
     } else {
       assert(false);
@@ -532,16 +532,16 @@ int GenMesh::calcNumZones(const int numpcs) {
     }
 }
 
-int GenMesh::calcNumSides(const int numpcs) {
+coord_t GenMesh::calcNumSides(const int numpcs) {
     if (meshtype == "rect") {
-      const int nz = calcNumZones(numpcs);
+      const coord_t nz = calcNumZones(numpcs);
       return 4 * nz;
     } else if (meshtype == "pie") {
       calcNumPieces(numpcs);
       // 4 sides on most of the zones, but only 3 on the inner ones near the origin
       return 4 * nzx * (nzy - 1) + 3 * nzx; 
     } else if (meshtype == "hex") {
-      const int nz = calcNumZones(numpcs);
+      const coord_t nz = calcNumZones(numpcs);
       return 6 * nz;
     } else {
       assert(false);
