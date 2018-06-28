@@ -185,6 +185,8 @@ DeferredReduction<SumOp<int> > Mesh::calcVolsGPUTask(
     const AccessorWD<double> acc_zarea(regions[5], fid_zarea);
     const AccessorWD<double> acc_zvol(regions[5], fid_zvol);
 
+    DeferredReduction<SumOp<int> > result;
+
     const IndexSpace& isz = task->regions[3].region.get_index_space();
     // This will assert if it isn't dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
@@ -192,8 +194,6 @@ DeferredReduction<SumOp<int> > Mesh::calcVolsGPUTask(
       return result;
     cudaMemset(acc_zarea.ptr(rectz), 0, rectz.volume() * sizeof(double));
     cudaMemset(acc_zvol.ptr(rectz), 0, rectz.volume() * sizeof(double));
-
-    DeferredReduction<SumOp<int> > result;
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it isn't dense
