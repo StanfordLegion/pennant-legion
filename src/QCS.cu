@@ -205,6 +205,8 @@ void QCS::setCornerDivGPUTask(
     const IndexSpace& isz = task->regions[1].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
+    if (rectz.empty())
+      return;
     cudaMemset(acc_zuc.ptr(rectz), 0, rectz.volume() * sizeof(double2));
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
@@ -526,6 +528,8 @@ void QCS::setVelDiffGPUTask(
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
     const size_t volumez = rectz.volume();
+    if (volumez == 0)
+      return;
     cudaMemset(acc_ztmp.ptr(rectz), 0, volumez * sizeof(double));
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
