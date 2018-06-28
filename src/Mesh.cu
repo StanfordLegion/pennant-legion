@@ -98,6 +98,8 @@ void Mesh::calcCtrsGPUTask(
     const IndexSpace& isz = task->regions[1].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
+    if (rectz.empty())
+      return 0;
     cudaMemset(acc_zx.ptr(rectz), 0, rectz.volume() * sizeof(double2));
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
@@ -186,6 +188,8 @@ DeferredReduction<SumOp<int> > Mesh::calcVolsGPUTask(
     const IndexSpace& isz = task->regions[3].region.get_index_space();
     // This will assert if it isn't dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
+    if (rectz.empty())
+      return result;
     cudaMemset(acc_zarea.ptr(rectz), 0, rectz.volume() * sizeof(double));
     cudaMemset(acc_zvol.ptr(rectz), 0, rectz.volume() * sizeof(double));
 
