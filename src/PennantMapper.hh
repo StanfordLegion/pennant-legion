@@ -45,7 +45,8 @@ public:
 public:
   // Default mapper almost does the right thing for select_task_options
   virtual Legion::Processor default_policy_select_initial_processor(
-                                MapperContext ctx, const Task &task);
+                                Legion::Mapping::MapperContext ctx, 
+                                const Legion::Task &task);
   virtual void slice_task(const Legion::Mapping::MapperContext ctx,
                           const Legion::Task &task,
                           const SliceTaskInput &input,
