@@ -43,7 +43,9 @@ public:
                                     const SelectTunableInput& input,
                                           SelectTunableOutput& output);
 public:
-  // Default mapper does the right thing for select_task_options
+  // Default mapper almost does the right thing for select_task_options
+  virtual Processor default_policy_select_initial_processor(
+                              MapperContext ctx, const Task &task);
   virtual void slice_task(const Legion::Mapping::MapperContext ctx,
                           const Legion::Task &task,
                           const SliceTaskInput &input,

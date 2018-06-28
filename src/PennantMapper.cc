@@ -84,6 +84,14 @@ void PennantMapper::select_tunable_value(const MapperContext ctx,
   DefaultMapper::select_tunable_value(ctx, task, input, output);
 }
 
+Processor PennantMapper::default_policy_select_initial_processor(
+                                    MapperContext ctx, const Task &task)
+{
+  // Always keep it on our local processor
+  // Index tasks will get distributed by sharding, single tasks will stay local
+  return task.current_proc;
+}
+
 void PennantMapper::slice_task(const Legion::Mapping::MapperContext ctx,
                                const Legion::Task &task,
                                const SliceTaskInput &input,
