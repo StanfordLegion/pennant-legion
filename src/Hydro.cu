@@ -453,6 +453,8 @@ void Hydro::calcWorkGPUTask(
     const IndexSpace& isz = task->regions[3].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
+    if (rectz.empty())
+      return;
     cudaMemset(acc_zw.ptr(rectz), 0, rectz.volume() * sizeof(double));
 
     const double dth = 0.5 * dt;
