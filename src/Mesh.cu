@@ -99,7 +99,7 @@ void Mesh::calcCtrsGPUTask(
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
     if (rectz.empty())
-      return 0;
+      return;
     cudaMemset(acc_zx.ptr(rectz), 0, rectz.volume() * sizeof(double2));
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
