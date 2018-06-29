@@ -179,10 +179,10 @@ void GenMesh::generateRect(
         vector<int>& zonepoints,
         vector<int>& zonecolors) {
 
-    const int nz = nzx * nzy;
-    const int npx = nzx + 1;
-    const int npy = nzy + 1;
-    const int np = npx * npy;
+    const coord_t nz = nzx * nzy;
+    const coord_t npx = nzx + 1;
+    const coord_t npy = nzy + 1;
+    const coord_t np = npx * npy;
 
     // generate point coordinates
     pointpos.reserve(np);
@@ -247,10 +247,10 @@ void GenMesh::generatePie(
         vector<int>& zonepoints,
         vector<int>& zonecolors) {
 
-    const int nz = nzx * nzy;
-    const int npx = nzx + 1;
-    const int npy = nzy + 1;
-    const int np = npx * (npy - 1) + 1;
+    const coord_t nz = nzx * nzy;
+    const coord_t npx = nzx + 1;
+    const coord_t npy = nzy + 1;
+    const coord_t np = npx * (npy - 1) + 1;
 
     // generate point coordinates
     pointpos.reserve(np);
@@ -337,9 +337,9 @@ void GenMesh::generateHex(
         vector<int>& zonepoints,
         vector<int>& zonecolors) {
 
-    const int nz = nzx * nzy;
-    const int npx = nzx + 1;
-    const int npy = nzy + 1;
+    const coord_t nz = nzx * nzy;
+    const coord_t npx = nzx + 1;
+    const coord_t npy = nzy + 1;
 
     // generate point coordinates
     pointpos.resize(2 * npx * npy);  // upper bound
@@ -678,7 +678,7 @@ static void rect_point_index_to_coord(const GenMesh::GenPointArgs *args,
   assert(eff_numpcy <= args->numpcy);
 
   const coord_t num_points = (args->nzx + 1) * (args->nzy + 1);
-  const coord_ num_private = (args->nzx - eff_numpcx + 2) * (args->nzy - eff_numpcy + 2);
+  const coord_t num_private = (args->nzx - eff_numpcx + 2) * (args->nzy - eff_numpcy + 2);
   const bool is_shared = (index >= num_private);
   if(is_shared) index -= num_private;
   // not the most efficient, but hopefully easier to read: step through each 
@@ -794,13 +794,13 @@ void GenMesh::genPointsRect(
             Runtime *runtime)
 {
   const GenPointArgs *args = reinterpret_cast<const GenPointArgs*>(task->args);
-  const int npx = args->nzx + 1;
+  const coord_t npx = args->nzx + 1;
 
   const double dx = args->lenx / (double) args->nzx;
   const double dy = args->leny / (double) args->nzy;
 
-  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
-  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
+  const coord_t zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const coord_t zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
 
   const IndexSpace &isp = task->regions[0].region.get_index_space();
   const AccessorWD<double2> acc_px(regions[0], FID_PX);
@@ -809,20 +809,20 @@ void GenMesh::genPointsRect(
   {
     // Figure out the physical location based on the logical ID
 #ifdef PRECOMPACTED_RECT_POINTS
-    int i, j;
+    coord_t i, j;
     rect_point_index_to_coord(args, itr[0], i, j);
 #else
-    const int i = itr[0] % npx;
-    const int j = itr[0] / npx;
+    const coord_t i = itr[0] % npx;
+    const coord_t j = itr[0] / npx;
 #endif
     const double x = dx * double(i);
     const double y = dy * double(j);
     acc_px[*itr] = make_double2(x, y);
     // Tile the mesh so pieces are dense rectangles 
     // Boundary zones will own a few extra points
-    const int piecex = ((i == args->nzx) ? i-1 : i) / zones_per_piecex;
+    const coord_t piecex = ((i == args->nzx) ? i-1 : i) / zones_per_piecex;
     assert(piecex < args->numpcx);
-    const int piecey = ((j == args->nzy) ? j-1 : j) / zones_per_piecey;
+    const coord_t piecey = ((j == args->nzy) ? j-1 : j) / zones_per_piecey;
     assert(piecey < args->numpcy);
     acc_piece[*itr] = piecey * args->numpcx + piecex;
   }
@@ -835,13 +835,13 @@ void GenMesh::genPointsPie(
             Runtime *runtime)
 {
   const GenPointArgs *args = reinterpret_cast<const GenPointArgs*>(task->args);
-  const int npx = args->nzx + 1;
+  const coord_t npx = args->nzx + 1;
 
   const double dth = args->lenx / (double) args->nzx;
   const double dr  = args->leny / (double) args->nzy;
 
-  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
-  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
+  const coord_t zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const coord_t zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
 
   const IndexSpace &isp = task->regions[0].region.get_index_space();
   const AccessorWD<double2> acc_px(regions[0], FID_PX);
@@ -854,8 +854,8 @@ void GenMesh::genPointsPie(
       acc_px[*itr] = make_double2(0., 0.);
       acc_piece[*itr] = 0;
     } else {
-      const int i = (itr[0]-1) % npx;
-      const int j = (itr[0]-1) / npx + 1;
+      const coord_t i = (itr[0]-1) % npx;
+      const coord_t j = (itr[0]-1) / npx + 1;
       const double th = dth * (double)(args->nzx - i);
       const double r = dr * (double) j;
       const double x = r * cos(th);
@@ -863,9 +863,9 @@ void GenMesh::genPointsPie(
       acc_px[*itr] = make_double2(x, y);
       // Tile the mesh so pieces are dense rectangles 
       // Boundary zones will own a few extra points
-      const int piecex = ((i == args->nzx) ? i-1 : i) / zones_per_piecex;
+      const coord_t piecex = ((i == args->nzx) ? i-1 : i) / zones_per_piecex;
       assert(piecex < args->numpcx);
-      const int piecey = ((j == args->nzy) ? j-1 : j) / zones_per_piecey;
+      const coord_t piecey = ((j == args->nzy) ? j-1 : j) / zones_per_piecey;
       assert(piecey < args->numpcy);
       acc_piece[*itr] = piecey * args->numpcx + piecex;
     }
@@ -880,7 +880,7 @@ void GenMesh::genPointsHex(
 {
 #if 0
   const GenPointArgs *args = reinterpret_cast<const GenPointArgs*>(task->args);
-  const int npx = args->nzx + 1;
+  const coord_t npx = args->nzx + 1;
 
   const double dx = args->lenx / (double) (args->nzx - 1);
   const double dy = args->leny / (double) (args->nzy - 1);
@@ -903,27 +903,27 @@ void GenMesh::genZonesRect(
 {
   const GenZoneArgs *args = reinterpret_cast<const GenZoneArgs*>(task->args);
 
-  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
-  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
+  const coord_t zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const coord_t zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
 
   const IndexSpace &isz = task->regions[0].region.get_index_space();
   const AccessorWD<Pointer> acc_piece(regions[0], FID_PIECE);
   for (PointIterator itr(runtime, isz); itr(); itr++)
   {
-    const int zone = itr[0];
+    const coord_t zone = itr[0];
     // Get the simulation x-y coorindate of our zone
     // This is tricky since there can be truncated zones on the edges
-    const int piecey = zone / (zones_per_piecey * args->nzx);
+    const coord_t piecey = zone / (zones_per_piecey * args->nzx);
     assert(piecey < args->numpcy);
-    const int remainder = zone % (zones_per_piecey * args->nzx);
+    const coord_t remainder = zone % (zones_per_piecey * args->nzx);
 
-    const int local_zones_per_piecey = 
+    const coord_t local_zones_per_piecey = 
       piecey < (args->numpcy-1) ? zones_per_piecey : // not the last
         ((args->nzy % zones_per_piecey) == 0) ? // last so see if evently divisible
           zones_per_piecey : args->nzy % zones_per_piecey;
-    const int zones_per_row_piece = local_zones_per_piecey * zones_per_piecex;
+    const coord_t zones_per_row_piece = local_zones_per_piecey * zones_per_piecex;
 
-    const int piecex = remainder / zones_per_row_piece;
+    const coord_t piecex = remainder / zones_per_row_piece;
     assert(piecex < args->numpcx);
     acc_piece[*itr] = piecey * args->numpcx + piecex;
   }
@@ -937,35 +937,35 @@ void GenMesh::genZonesPie(
 {
   const GenZoneArgs *args = reinterpret_cast<const GenZoneArgs*>(task->args);
 
-  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
-  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
+  const coord_t zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const coord_t zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
 
   const IndexSpace &isz = task->regions[0].region.get_index_space();
   const AccessorWD<int> acc_nump(regions[0], FID_ZNUMP);
   const AccessorWD<Pointer> acc_piece(regions[0], FID_PIECE);
   for (PointIterator itr(runtime, isz); itr(); itr++)
   {
-    const int piecey = itr[0] / (zones_per_piecey * args->nzx);
+    const coord_t piecey = itr[0] / (zones_per_piecey * args->nzx);
     assert(piecey < args->numpcy);
-    const int remainder = itr[0] % (zones_per_piecey * args->nzx);
+    const coord_t remainder = itr[0] % (zones_per_piecey * args->nzx);
 
-    const int local_zones_per_piecey = 
+    const coord_t local_zones_per_piecey = 
       piecey < (args->numpcy-1) ? zones_per_piecey : // not the last
         ((args->nzy % zones_per_piecey) == 0) ? // last so see if evenly divisible
           zones_per_piecey : args->nzy % zones_per_piecey;
-    const int zones_per_row_piece = local_zones_per_piecey * zones_per_piecex;
+    const coord_t zones_per_row_piece = local_zones_per_piecey * zones_per_piecex;
 
-    const int piecex = remainder / zones_per_row_piece;
+    const coord_t piecex = remainder / zones_per_row_piece;
     assert(piecex < args->numpcx);
-    const int piece_zone = remainder % zones_per_row_piece;
+    const coord_t piece_zone = remainder % zones_per_row_piece;
 
-    const int local_zones_per_piecex =
+    const coord_t local_zones_per_piecex =
       piecex < (args->numpcx-1) ? zones_per_piecex : // not the last
         ((args->nzx % zones_per_piecex) == 0) ? // last so see if evenly divisible 
           zones_per_piecex : args->nzx % zones_per_piecex;
 
-    const int localy = piece_zone / local_zones_per_piecex;
-    const int zidy = piecey * zones_per_piecey + localy;
+    const coord_t localy = piece_zone / local_zones_per_piecex;
+    const coord_t zidy = piecey * zones_per_piecey + localy;
 
     // Three points if it is at the bottom, otherwise four
     acc_nump[*itr] = (zidy == 0) ? 3 : 4;
@@ -992,8 +992,8 @@ void GenMesh::genSidesRect(
 {
   const GenSideArgs *args = reinterpret_cast<const GenSideArgs*>(task->args);
 
-  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
-  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
+  const coord_t zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const coord_t zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
   
   const IndexSpace &iss = task->regions[0].region.get_index_space();
 #ifdef PRECOMPACTED_RECT_POINTS
@@ -1009,7 +1009,7 @@ void GenMesh::genSidesRect(
   for (PointIterator itr(runtime, iss); itr(); itr++)
   {
     // First we can compute our side pointers since they are easy
-    const int side = itr[0] % 4;
+    const coord_t side = itr[0] % 4;
     if (side == 0)
       acc_ss3[*itr] = *itr + Pointer(3);
     else
@@ -1020,35 +1020,35 @@ void GenMesh::genSidesRect(
       acc_ss4[*itr] = *itr + Pointer(1); 
     // Now figure out which zone we're a part of
     // zones for a piece are all contiguous
-    const int zone = itr[0] / 4; // 4 sides per zone
+    const coord_t zone = itr[0] / 4; // 4 sides per zone
     acc_sz[*itr] = zone;
     // Get the simulation x-y coorindate of our zone
     // This is tricky since there can be truncated zones on the edges
-    const int piecey = zone / (zones_per_piecey * args->nzx);
+    const coord_t piecey = zone / (zones_per_piecey * args->nzx);
     assert(piecey < args->numpcy);
-    const int remainder = zone % (zones_per_piecey * args->nzx);
+    const coord_t remainder = zone % (zones_per_piecey * args->nzx);
 
-    const int local_zones_per_piecey = 
+    const coord_t local_zones_per_piecey = 
       piecey < (args->numpcy-1) ? zones_per_piecey : // not the last
         ((args->nzy % zones_per_piecey) == 0) ? // last so see if evently divisible
           zones_per_piecey : args->nzy % zones_per_piecey;
-    const int zones_per_row_piece = local_zones_per_piecey * zones_per_piecex;
+    const coord_t zones_per_row_piece = local_zones_per_piecey * zones_per_piecex;
 
-    const int piecex = remainder / zones_per_row_piece;
+    const coord_t piecex = remainder / zones_per_row_piece;
     assert(piecex < args->numpcx);
-    const int piece_zone = remainder % zones_per_row_piece; 
+    const coord_t piece_zone = remainder % zones_per_row_piece; 
     // Now figure out the local zone count in the x dimension
-    const int local_zones_per_piecex = 
+    const coord_t local_zones_per_piecex = 
       piecex < (args->numpcx-1) ? zones_per_piecex : // not the last
         ((args->nzx % zones_per_piecex) == 0) ? // last so see if evenly divisible
           zones_per_piecex : args->nzx % zones_per_piecex;
 
-    const int localx = piece_zone % local_zones_per_piecex; 
-    const int localy = piece_zone / local_zones_per_piecex;
+    const coord_t localx = piece_zone % local_zones_per_piecex; 
+    const coord_t localy = piece_zone / local_zones_per_piecex;
 
-    const int zidx = piecex * zones_per_piecex + localx;
+    const coord_t zidx = piecex * zones_per_piecex + localx;
     assert(zidx < args->nzx);
-    const int zidy = piecey * zones_per_piecey + localy; 
+    const coord_t zidy = piecey * zones_per_piecey + localy; 
     assert(zidy < args->nzy);
     // Last we can figure out the indexes for our points
     int pidx1, pidx2, pidy1, pidy2;
@@ -1107,9 +1107,9 @@ void GenMesh::genSidesPie(
 {
   const GenSideArgs *args = reinterpret_cast<const GenSideArgs*>(task->args);
 
-  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
-  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
-  const int npx = args->nzx + 1;
+  const coord_t zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const coord_t zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
+  const coord_t npx = args->nzx + 1;
   
   const IndexSpace &iss = task->regions[0].region.get_index_space();
   const AccessorWD<Pointer> acc_sp1(regions[0], FID_MAPSP1TEMP);
@@ -1124,20 +1124,20 @@ void GenMesh::genSidesPie(
     // We'll find this a dumb way for now
     bool found = false;
     int current_side = 0;
-    const int target_side = itr[0];
+    const coord_t target_side = itr[0];
     for (int j1 = 0; (j1 < args->numpcy) && !found; j1++)
     {
-      const int local_zones_per_piecey = (j1 < (args->numpcy-1)) ? zones_per_piecey :
+      const coord_t local_zones_per_piecey = (j1 < (args->numpcy-1)) ? zones_per_piecey :
         ((args->nzy % zones_per_piecey) == 0) ? // last so see if divisible
           zones_per_piecey : args->nzy % zones_per_piecey;
       
       for (int i1 = 0; (i1 < args->numpcx) && !found; i1++)
       {
-        const int local_zones_per_piecex = (i1 < (args->numpcx-1)) ? zones_per_piecex :
+        const coord_t local_zones_per_piecex = (i1 < (args->numpcx-1)) ? zones_per_piecex :
           ((args->nzx % zones_per_piecex) == 0) ? // last so see if divisible
             zones_per_piecex : args->nzx % zones_per_piecex;
         // See how many sides we have in this piece
-        const int sides_in_this_piece = (j1 == 0) ? 
+        const coord_t sides_in_this_piece = (j1 == 0) ? 
           3 * local_zones_per_piecex + 4 * (local_zones_per_piecey - 1) * local_zones_per_piecex : 
           4 * local_zones_per_piecex * local_zones_per_piecey;
         
@@ -1189,16 +1189,16 @@ void GenMesh::genSidesPie(
     }
     assert(found);
     // Now we can assign our zone pointer
-    const int local_zones_per_piecey = 
+    const coord_t local_zones_per_piecey = 
       piecey < (args->numpcy-1) ? zones_per_piecey : // not the last
         ((args->nzy % zones_per_piecey) == 0) ? // last so see if evenly divisible
           zones_per_piecey : args->nzy % zones_per_piecey;
-    const int zones_per_row_piece = local_zones_per_piecey * zones_per_piecex;
+    const coord_t zones_per_row_piece = local_zones_per_piecey * zones_per_piecex;
     acc_sz[*itr] = piecey * zones_per_piecey * args->nzx + 
                     piecex * zones_per_row_piece + piece_zone;
     // Then figure out our zone coordinates
-    const int zidx = piecex * zones_per_piecex + piece_zonex;
-    const int zidy = piecey * zones_per_piecey + piece_zoney; 
+    const coord_t zidx = piecex * zones_per_piecex + piece_zonex;
+    const coord_t zidy = piecey * zones_per_piecey + piece_zoney; 
     // Do different things for sides from inner most zones from sides for other zones
     if (zidy == 0)
     {
@@ -1211,7 +1211,7 @@ void GenMesh::genSidesPie(
         acc_ss4[*itr] = *itr - Pointer(2);
       else
         acc_ss4[*itr] = *itr + Pointer(1);
-      const int p0 = zidx + 1;
+      const coord_t p0 = zidx + 1;
       switch (side)
       {
         case 0:
@@ -1247,7 +1247,7 @@ void GenMesh::genSidesPie(
         acc_ss4[*itr] = *itr - Pointer(3);
       else
         acc_ss4[*itr] = *itr + Pointer(1);
-      const int p0 = (zidy - 1) * npx + zidx + 1;
+      const coord_t p0 = (zidy - 1) * npx + zidx + 1;
       switch (side)
       {
         case 0:
