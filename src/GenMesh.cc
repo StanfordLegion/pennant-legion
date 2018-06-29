@@ -666,35 +666,35 @@ void GenMesh::generateSidesParallel(
 
 #ifdef PRECOMPACTED_RECT_POINTS
 static void rect_point_index_to_coord(const GenMesh::GenPointArgs *args,
-				      int index, int &i, int &j)
+				      coord_t index, coord_t&i, coord_t &j)
 {
-  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
-  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
+  const coord_t zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const coord_t zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
 
   // due to the rounding up above, some pieces can actually be empty
-  const int eff_numpcx = (args->nzx + zones_per_piecex - 1) / zones_per_piecex;
-  const int eff_numpcy = (args->nzy + zones_per_piecey - 1) / zones_per_piecey;
+  const coord_t eff_numpcx = (args->nzx + zones_per_piecex - 1) / zones_per_piecex;
+  const coord_t eff_numpcy = (args->nzy + zones_per_piecey - 1) / zones_per_piecey;
   assert(eff_numpcx <= args->numpcx);
   assert(eff_numpcy <= args->numpcy);
 
-  const int num_points = (args->nzx + 1) * (args->nzy + 1);
-  const int num_private = (args->nzx - eff_numpcx + 2) * (args->nzy - eff_numpcy + 2);
+  const coord_t num_points = (args->nzx + 1) * (args->nzy + 1);
+  const coord_ num_private = (args->nzx - eff_numpcx + 2) * (args->nzy - eff_numpcy + 2);
   const bool is_shared = (index >= num_private);
   if(is_shared) index -= num_private;
   // not the most efficient, but hopefully easier to read: step through each 
   //  piece and compute its local size, stopping on our piece
-  for(int y = 0; y < eff_numpcy; y++) {
-    const int pppy = ((y < (eff_numpcy - 1)) ?
+  for(coord_t y = 0; y < eff_numpcy; y++) {
+    const coord_t pppy = ((y < (eff_numpcy - 1)) ?
 		        zones_per_piecey :
 		        (args->nzy + 1 - (eff_numpcy - 1) * zones_per_piecey));
-    const int local_shared_y = ((y > 0) ? 1 : 0);
-    const int local_private_y = pppy - local_shared_y;
-    for(int x = 0; x < eff_numpcx; x++) {
-      const int pppx = ((x < (eff_numpcx - 1)) ?
+    const coord_t local_shared_y = ((y > 0) ? 1 : 0);
+    const coord_t local_private_y = pppy - local_shared_y;
+    for(coord_t x = 0; x < eff_numpcx; x++) {
+      const coord_t pppx = ((x < (eff_numpcx - 1)) ?
 		        zones_per_piecex :
 		        (args->nzx + 1 - (eff_numpcx - 1) * zones_per_piecex));
-      const int local_shared_x = ((x > 0) ? 1 : 0);
-      const int local_private_x = pppx - local_shared_x;
+      const coord_t local_shared_x = ((x > 0) ? 1 : 0);
+      const coord_t local_private_x = pppx - local_shared_x;
 
       if(is_shared) {
 	if(local_shared_y > 0) {
@@ -714,7 +714,7 @@ static void rect_point_index_to_coord(const GenMesh::GenPointArgs *args,
 	    index -= local_private_y;
 	}
       } else {
-	const int local_private = local_private_x * local_private_y;
+	const coord_t local_private = local_private_x * local_private_y;
 	if(index < local_private) {
 	  i = x * zones_per_piecex + (index % local_private_x) + local_shared_x;
 	  j = y * zones_per_piecey + (index / local_private_x) + local_shared_y;
@@ -728,36 +728,36 @@ static void rect_point_index_to_coord(const GenMesh::GenPointArgs *args,
   assert(0);
 }
 
-static int rect_point_coord_to_index(const GenMesh::GenSideArgs *args,
-				     int i, int j)
+static coord_t rect_point_coord_to_index(const GenMesh::GenSideArgs *args,
+				         coord_t i, coord_t j)
 {
-  const int zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
-  const int zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
+  const coord_t zones_per_piecex = (args->nzx + args->numpcx - 1) / args->numpcx;
+  const coord_t zones_per_piecey = (args->nzy + args->numpcy - 1) / args->numpcy;
 
   // due to the rounding up above, some pieces can actually be empty
-  const int eff_numpcx = (args->nzx + zones_per_piecex - 1) / zones_per_piecex;
-  const int eff_numpcy = (args->nzy + zones_per_piecey - 1) / zones_per_piecey;
+  const coord_t eff_numpcx = (args->nzx + zones_per_piecex - 1) / zones_per_piecex;
+  const coord_t eff_numpcy = (args->nzy + zones_per_piecey - 1) / zones_per_piecey;
   assert(eff_numpcx <= args->numpcx);
   assert(eff_numpcy <= args->numpcy);
 
-  const int piecex = std::min(i / zones_per_piecex, eff_numpcx - 1);
-  const int piecey = std::min(j / zones_per_piecey, eff_numpcy - 1);
-  const int subpiecex = i - piecex * zones_per_piecex;
-  const int subpiecey = j - piecey * zones_per_piecey;
+  const coord_t piecex = std::min(i / zones_per_piecex, eff_numpcx - 1);
+  const coord_t piecey = std::min(j / zones_per_piecey, eff_numpcy - 1);
+  const coord_t subpiecex = i - piecex * zones_per_piecex;
+  const coord_t subpiecey = j - piecey * zones_per_piecey;
   const bool is_shared = (((i > 0) && (subpiecex == 0)) ||
 			  ((j > 0) && (subpiecey == 0)));
-  const int num_points = (args->nzx + 1) * (args->nzy + 1);
-  const int num_private = (args->nzx - eff_numpcx + 2) * (args->nzy - eff_numpcy + 2);
-  int index = 0;
+  const coord_t num_points = (args->nzx + 1) * (args->nzy + 1);
+  const coord_t num_private = (args->nzx - eff_numpcx + 2) * (args->nzy - eff_numpcy + 2);
+  coord_t index = 0;
   if(is_shared) index += num_private;
   // not the most efficient, but hopefully easier to read: step through each 
   //  piece and compute its local size, stopping on our piece
-  for(int y = 0; y < eff_numpcy; y++) {
-    const int pppy = ((y < (eff_numpcy - 1)) ?
+  for(coord_t y = 0; y < eff_numpcy; y++) {
+    const coord_t pppy = ((y < (eff_numpcy - 1)) ?
 		        zones_per_piecey :
 		        (args->nzy + 1 - (eff_numpcy - 1) * zones_per_piecey));
-    for(int x = 0; x < eff_numpcx; x++) {
-      const int pppx = ((x < (eff_numpcx - 1)) ?
+    for(coord_t x = 0; x < eff_numpcx; x++) {
+      const coord_t pppx = ((x < (eff_numpcx - 1)) ?
 		        zones_per_piecex :
 		        (args->nzx + 1 - (eff_numpcx - 1) * zones_per_piecex));
       if((x == piecex) && (y == piecey)) {
@@ -773,10 +773,10 @@ static int rect_point_coord_to_index(const GenMesh::GenSideArgs *args,
 	}
 	return index;
       } else {
-	const int local_shared = ((x > 0) ?
+	const coord_t local_shared = ((x > 0) ?
 				    ((y > 0) ? (pppx + pppy - 1) : pppy) :
 				    ((y > 0) ? pppx : 0));
-	const int local_private = pppx * pppy - local_shared;
+	const coord_t local_private = pppx * pppy - local_shared;
 	index += (is_shared ? local_shared : local_private);
       }
     }
