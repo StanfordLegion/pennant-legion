@@ -193,6 +193,11 @@ void PennantMapper::map_task(const MapperContext ctx,
     }
   }
   runtime->acquire_instances(ctx, output.chosen_instances);
+  // Finally set the priority for the task
+  if (task.tag & CRITICAL)
+    output.task_priority = 1;
+  else
+    output.task_priority = 0;
 }
 
 void PennantMapper::speculate(const MapperContext ctx,
@@ -214,7 +219,10 @@ void PennantMapper::select_sharding_functor(const MapperContext ctx,
                                             const SelectShardingFunctorInput &input,
                                                   SelectShardingFunctorOutput &output)
 {
-  output.chosen_functor = PENNANT_SHARD_ID; 
+  if (task.is_index_space)
+    output.chosen_functor = PENNANT_SHARD_ID; 
+  else
+    output.chosen_functor = 0; // default sharding functor so everything is on node 0
 }
 #endif
 

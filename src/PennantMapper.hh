@@ -27,6 +27,7 @@ public:
     PREFER_OMP        = 0x0002,
     PREFER_GPU        = 0x0004,
     PREFER_ZCOPY      = 0x0008,
+    CRITICAL          = 0x0010,
   };
 public:
   PennantMapper(

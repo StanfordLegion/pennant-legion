@@ -516,7 +516,8 @@ Future Hydro::doCycle(
         launchaph.add_field(1, FID_PXP);
         // Only really need OpenMP for the private part
         if (part == 0)
-          launchaph.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+          launchaph.tag |= PennantMapper::CRITICAL |
+            PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
         else
           launchaph.tag &= ~(PennantMapper::PREFER_OMP);
         runtime->execute_index_space(ctx, launchaph);
@@ -545,7 +546,8 @@ Future Hydro::doCycle(
     launchcc.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcc.add_field(5, FID_ZXP);
-    launchcc.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+    launchcc.tag |= PennantMapper::CRITICAL | 
+      PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcc);
 
     IndexTaskLauncher launchcv(TID_CALCVOLS, ispc, ta, am, p_not_done);
@@ -573,7 +575,8 @@ Future Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcv.add_field(5, FID_ZAREAP);
     launchcv.add_field(5, FID_ZVOLP);
-    launchcv.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+    launchcv.tag |= PennantMapper::CRITICAL | 
+      PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     Future f_cv = runtime->execute_index_space(ctx, launchcv, OPID_SUMINT);
 
     IndexTaskLauncher launchcsv(TID_CALCSURFVECS, ispc, ta, am, p_not_done);
@@ -606,7 +609,8 @@ Future Hydro::doCycle(
     launchcel.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcel.add_field(3, FID_ELEN);
-    launchcel.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+    launchcel.tag |= PennantMapper::CRITICAL | 
+      PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcel);
 
     IndexTaskLauncher launchccl(TID_CALCCHARLEN, ispc, ta, am, p_not_done);
@@ -632,7 +636,8 @@ Future Hydro::doCycle(
     launchcr.add_region_requirement(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcr.add_field(1, FID_ZRP);
-    launchcr.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+    launchcr.tag |= PennantMapper::CRITICAL | 
+      PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcr);
 
     IndexTaskLauncher launchccm(TID_CALCCRNRMASS, ispc, ta, am, p_not_done);
@@ -673,7 +678,8 @@ Future Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchcsh.add_field(1, FID_ZP);
     launchcsh.add_field(1, FID_ZSS);
-    launchcsh.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+    launchcsh.tag |= PennantMapper::CRITICAL | 
+      PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcsh);
 
     IndexTaskLauncher launchcfp(TID_CALCFORCEPGAS, ispc, ta, am, p_not_done);
@@ -687,7 +693,7 @@ Future Hydro::doCycle(
     launchcfp.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcfp.add_field(2, FID_SFP);
-    launchcfp.tag |= PennantMapper::PREFER_GPU;
+    launchcfp.tag |= PennantMapper::CRITICAL | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcfp);
 
     double cftargs[] = { tts->alfa, tts->ssmin };
@@ -707,7 +713,8 @@ Future Hydro::doCycle(
     launchcft.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchcft.add_field(2, FID_SFT);
-    launchcft.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+    launchcft.tag |= PennantMapper::CRITICAL | 
+      PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcft);
 
     IndexTaskLauncher launchscd(TID_SETCORNERDIV, ispc, ta, am, p_not_done);
@@ -743,7 +750,8 @@ Future Hydro::doCycle(
     launchscd.add_field(5, FID_CDIV);
     launchscd.add_field(5, FID_CEVOL);
     launchscd.add_field(5, FID_CDU);
-    launchscd.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+    launchscd.tag |= PennantMapper::CRITICAL | 
+      PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchscd);
 
     double sqcfargs[] = { qcs->qgamma, qcs->q1, qcs->q2 };
@@ -776,7 +784,8 @@ Future Hydro::doCycle(
     launchsqcf.add_field(4, FID_CRMU);
     launchsqcf.add_field(4, FID_CQE1);
     launchsqcf.add_field(4, FID_CQE2);
-    launchsqcf.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+    launchsqcf.tag |= PennantMapper::CRITICAL | 
+      PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchsqcf);
 
     IndexTaskLauncher launchsfq(TID_SETFORCEQCS, ispc, ta, am, p_not_done);
@@ -794,7 +803,8 @@ Future Hydro::doCycle(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
     launchsfq.add_field(2, FID_CW);
     launchsfq.add_field(2, FID_SFQ);
-    launchsfq.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+    launchsfq.tag |= PennantMapper::CRITICAL | 
+      PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchsfq);
 
     double svdargs[] = { qcs->q1, qcs->q2 };
@@ -823,7 +833,8 @@ Future Hydro::doCycle(
             RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
     launchsvd.add_field(4, FID_ZTMP);
     launchsvd.add_field(4, FID_ZDU);
-    launchsvd.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+    launchsvd.tag |= PennantMapper::CRITICAL | 
+      PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchsvd);
 
     IndexTaskLauncher launchscf(TID_SUMCRNRFORCE, ispc, ta, am, p_not_done);
@@ -867,7 +878,8 @@ Future Hydro::doCycle(
                         READ_WRITE, EXCLUSIVE, lrp, PennantMapper::PREFER_ZCOPY));
         launchafbc.add_field(2, FID_PF);
         launchafbc.add_field(2, FID_PU0);
-        launchafbc.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
+        launchafbc.tag |= PennantMapper::CRITICAL | 
+          PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
         runtime->execute_index_space(ctx, launchafbc);
     }
 
@@ -896,10 +908,14 @@ Future Hydro::doCycle(
                         WRITE_DISCARD, EXCLUSIVE, lrp));
         launchca.add_field(1, FID_PAP);
         // Only really need OpenMP for the private part
+        // But the shared part is the one on the critical path
         if (part == 0)
           launchca.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
         else
+        {
           launchca.tag &= ~(PennantMapper::PREFER_OMP);
+          launchca.tag |= PennantMapper::CRITICAL;
+        }
         runtime->execute_index_space(ctx, launchca);
 
         // ===== Corrector step =====
@@ -920,7 +936,10 @@ Future Hydro::doCycle(
         if (part == 0)
           launchca.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
         else
+        {
           launchca.tag &= ~(PennantMapper::PREFER_OMP);
+          launchca.tag |= PennantMapper::CRITICAL;
+        }
         runtime->execute_index_space(ctx, launchapf);
     }  // for part
 
@@ -1032,7 +1051,7 @@ Future Hydro::doCycle(
         RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
     launchdvol.add_field(0, FID_ZVOL);
     launchdvol.add_field(0, FID_ZVOL0);
-    launchdvol.tag |= PennantMapper::PREFER_GPU;
+    launchdvol.tag |= PennantMapper::CRITICAL | PennantMapper::PREFER_GPU;
     Future f_dvol = runtime->execute_index_space(ctx, launchdvol, OPID_MAXDBL);
 
     // Single task launch to compute the future result
