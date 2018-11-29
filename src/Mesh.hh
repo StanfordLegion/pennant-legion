@@ -128,7 +128,7 @@ enum MeshOpID {
     OPID_MAXDBL
 };
 
-#ifdef CTRL_REPL
+#ifndef NO_LEGION_CONTROL_REPLICATION
 enum ShardingID {
     PENNANT_SHARD_ID = 1,
 };
@@ -327,7 +327,7 @@ public:
         { ReduceHelper<T, EXCLUSIVE>::maxOf(rhs1, rhs2); }
 };
 
-#ifdef CTRL_REPL
+#ifndef NO_LEGION_CONTROL_REPLICATION
 class PennantShardingFunctor : public Legion::ShardingFunctor {
 public:
   PennantShardingFunctor(const Legion::coord_t numpcx, const Legion::coord_t numpcy);

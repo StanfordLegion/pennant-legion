@@ -151,7 +151,7 @@ const double MinOp<double>::identity = DBL_MAX;
 template <>
 const double MaxOp<double>::identity = DBL_MIN;
 
-#ifdef CTRL_REPL
+#ifndef NO_LEGION_CONTROL_REPLICATION
 PennantShardingFunctor::PennantShardingFunctor(const coord_t nx, const coord_t ny)
   : ShardingFunctor(), numpcx(nx), numpcy(ny), sharded(false) { }
 
@@ -212,12 +212,13 @@ Mesh::Mesh(
     wxy = new WriteXY(this);
     egold = new ExportGold(this);
 
-#ifdef CTRL_REPL
+#ifndef NO_LEGION_CONTROL_REPLICATION
     // Call this to populate the numpcx and numpcy fields
     gmesh->calcNumPieces(numpcs);
     PennantShardingFunctor *functor = 
       new PennantShardingFunctor(gmesh->numpcx, gmesh->numpcy);
-    runtime->register_sharding_functor(PENNANT_SHARD_ID, functor);
+    runtime->register_sharding_functor(PENNANT_SHARD_ID, functor, 
+                                       true/*silence warnings*/);
 #endif
     // This is a little bit brittle but for now we need to tell our
     // mappers about the size of the mesh which we are about to 

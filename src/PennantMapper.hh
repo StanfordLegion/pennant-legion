@@ -60,7 +60,7 @@ public:
   virtual void speculate(const Legion::Mapping::MapperContext ctx,
                          const Legion::Task &task,
                                SpeculativeOutput &output);
-#ifdef CTRL_REPL
+#ifndef NO_LEGION_CONTROL_REPLICATION
   virtual void select_sharding_functor(const Legion::Mapping::MapperContext ctx,
                                        const Legion::Task &task,
                                        const SelectShardingFunctorInput &input,
@@ -74,7 +74,7 @@ public:
   virtual void speculate(const Legion::Mapping::MapperContext ctx,
                          const Legion::Copy &copy,
                                SpeculativeOutput &output);
-#ifdef CTRL_REPL
+#ifndef NO_LEGION_CONTROL_REPLICATION
   virtual void select_sharding_functor(const Legion::Mapping::MapperContext ctx,
                                        const Legion::Copy &copy,
                                        const SelectShardingFunctorInput &input,
@@ -89,7 +89,7 @@ public:
                              const Legion::Partition& partition,
                              const MapPartitionInput&   input,
                                    MapPartitionOutput&  output);
-#ifdef CTRL_REPL
+#ifndef NO_LEGION_CONTROL_REPLICATION
   virtual void select_sharding_functor(const Legion::Mapping::MapperContext ctx,
                                        const Legion::Partition &partition,
                                        const SelectShardingFunctorInput &input,

@@ -213,7 +213,7 @@ void PennantMapper::speculate(const MapperContext ctx,
 #endif
 }
 
-#ifdef CTRL_REPL
+#ifndef NO_LEGION_CONTROL_REPLICATION
 void PennantMapper::select_sharding_functor(const MapperContext ctx,
                                             const Task &task,
                                             const SelectShardingFunctorInput &input,
@@ -274,7 +274,7 @@ void PennantMapper::speculate(const MapperContext ctx,
 #endif
 }
 
-#ifdef CTRL_REPL
+#ifndef NO_LEGION_CONTROL_REPLICATION
 void PennantMapper::select_sharding_functor(const MapperContext ctx,
                                             const Copy &copy,
                                             const SelectShardingFunctorInput &input,
@@ -326,7 +326,7 @@ void PennantMapper::map_partition(const MapperContext ctx,
   return result;
 }
 
-#ifdef CTRL_REPL
+#ifndef NO_LEGION_CONTROL_REPLICATION
 void PennantMapper::select_sharding_functor(const MapperContext ctx,
                                             const Partition &partition,
                                             const SelectShardingFunctorInput &input,
