@@ -75,6 +75,12 @@ Mapper::MapperSyncModel PennantMapper::get_mapper_sync_model(void) const
   return SERIALIZED_REENTRANT_MAPPER_MODEL;
 }
 
+bool PennantMapper::request_valid_instances(void) const
+{
+  // For now we don't need this information
+  return false;
+}
+
 void PennantMapper::select_tunable_value(const MapperContext ctx,
                                          const Task& task,
                                          const SelectTunableInput& input,
@@ -82,6 +88,16 @@ void PennantMapper::select_tunable_value(const MapperContext ctx,
 {
   // No custom penant tunable values yet
   DefaultMapper::select_tunable_value(ctx, task, input, output);
+}
+
+void PennantMapper::select_task_options(const MapperContext ctx,
+                                        const Task& task,
+                                              TaskOptions& output)
+{
+  // The default mapper mostly does the right thing
+  DefaultMapper::select_task_options(ctx, task, output);
+  // But we don't need the valid instances
+  output.valid_instances = false;
 }
 
 Processor PennantMapper::default_policy_select_initial_processor(

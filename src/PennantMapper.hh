@@ -38,13 +38,16 @@ public:
 public:
   virtual const char* get_mapper_name(void) const;
   virtual Legion::Mapping::Mapper::MapperSyncModel get_mapper_sync_model(void) const;
+  virtual bool request_valid_instances(void) const;
 public:
   virtual void select_tunable_value(const Legion::Mapping::MapperContext ctx,
                                     const Legion::Task& task,
                                     const SelectTunableInput& input,
                                           SelectTunableOutput& output);
 public:
-  // Default mapper almost does the right thing for select_task_options
+  virtual void select_task_options(const Legion::Mapping::MapperContext ctx,
+                                   const Legion::Task &task,
+                                         TaskOptions &output);
   virtual Legion::Processor default_policy_select_initial_processor(
                                 Legion::Mapping::MapperContext ctx, 
                                 const Legion::Task &task);
