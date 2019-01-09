@@ -738,7 +738,7 @@ void Mesh::initParallel() {
     // Gather copies aren't quite ready yet so we'll do this with
     // a very simple gather copy task for now, but we will switch
     // this over to proper gather copies once the runtime supports them
-#if 0
+#ifdef ENABLE_GATHER_COPIES
     {
       IndexCopyLauncher update_launcher(is_piece);
       update_launcher.add_copy_requirements(
@@ -747,7 +747,7 @@ void Mesh::initParallel() {
           RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
       update_launcher.add_src_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP1);
-      update_launcher.add_gather_field(
+      update_launcher.add_src_indirect_field(
           RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs), FID_MAPSP1TEMP);
       runtime->issue_copy_operation(ctx, update_launcher);
     }
@@ -759,7 +759,7 @@ void Mesh::initParallel() {
           RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
       update_launcher.add_src_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP2);
-      update_launcher.add_gather_field(
+      update_launcher.add_src_indirect_field(
           RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs), FID_MAPSP2TEMP);
       runtime->issue_copy_operation(ctx, update_launcher);
     }

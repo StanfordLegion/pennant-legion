@@ -249,7 +249,11 @@ void PennantMapper::map_copy(const MapperContext ctx,
 {
   output.src_instances.resize(copy.src_requirements.size());
   output.dst_instances.resize(copy.dst_requirements.size());
-  if (!local_gpus.empty()) {
+  output.src_indirect_instances.resize(copy.src_indirect_requirements.size());
+  // There should be no scatter copies
+  assert(copy.dst_indirect_requirements.empty());
+  // Keep the gather copies on the host side
+  if (!local_gpus.empty() && copy.src_indirect_requirements.empty()) {
     assert(copy.is_index_space);
     const Point<1> point = copy.index_point;
     const coord_t index = compute_shard_index(point);
@@ -264,6 +268,7 @@ void PennantMapper::map_copy(const MapperContext ctx,
       map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
                         copy.dst_requirements[idx].region, fbmem,
                         output.dst_instances[idx]);
+    
   } else {
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
       map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, local_sysmem,
@@ -272,6 +277,18 @@ void PennantMapper::map_copy(const MapperContext ctx,
       map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
                         copy.dst_requirements[idx].region, local_sysmem,
                         output.dst_instances[idx]);
+    if (!copy.src_indirect_requirements.empty())
+    {
+      const size_t offset = copy.src_requirements.size() + copy.dst_requirements.size();
+      for (unsigned idx = 0; idx < copy.src_indirect_requirements.size(); idx++)
+      {
+        std::vector<PhysicalInstance> insts;
+        map_pennant_array(ctx, copy, idx + offset, 
+                          copy.src_indirect_requirements[idx].region, local_sysmem, insts);
+        assert(insts.size() == 1);
+        output.src_indirect_instances[idx] = insts[0];
+      }
+    }
   }
   runtime->acquire_instances(ctx, output.src_instances);
   runtime->acquire_instances(ctx, output.dst_instances);
