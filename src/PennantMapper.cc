@@ -367,6 +367,14 @@ void PennantMapper::select_sharding_functor(const MapperContext ctx,
 {
   output.chosen_functor = PENNANT_SHARD_ID; 
 }
+
+void PennantMapper::select_sharding_functor(const MapperContext ctx,
+                                            const Fill &fill,
+                                            const SelectShardingFunctorInput &input,
+                                                  SelectShardingFunctorOutput &output)
+{
+  output.chosen_functor = PENNANT_SHARD_ID; 
+}
 #endif
 
 void PennantMapper::map_pennant_array(const MapperContext ctx,

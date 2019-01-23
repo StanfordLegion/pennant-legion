@@ -97,6 +97,11 @@ public:
                                        const Legion::Partition &partition,
                                        const SelectShardingFunctorInput &input,
                                              SelectShardingFunctorOutput &output);
+public:
+  virtual void select_sharding_functor(const Legion::Mapping::MapperContext ctx,
+                                       const Legion::Fill& fill,
+                                       const SelectShardingFunctorInput &input,
+                                             SelectShardingFunctorOutput &output);
 #endif
 protected:
   static const char* get_name(Legion::Processor p);
