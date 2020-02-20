@@ -26,7 +26,7 @@ endif
 
 #Flags for directing the runtime makefile what to include
 #DEBUG=1                   # Include debugging symbols
-DEBUG=1
+DEBUG=0
 OUTPUT_LEVEL=LEVEL_DEBUG  # Compile time print level
 #OUTPUT_LEVEL=LEVEL_INFO   # Compile time print level
 #SHARED_LOWLEVEL=1	  # Use the shared low level
@@ -53,7 +53,8 @@ GEN_GPU_SRC	:= $(wildcard $(SRCDIR)/*.cu) # .cu files
 # You can modify these variables, some will be appended to by the runtime makefile
 INC_FLAGS	:= -I$(SRCDIR) 
 #CC_FLAGS	:=
-CC_FLAGS	:= -std=c++11 -Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-unused-variable
+CC_FLAGS	:= -std=c++11 -Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-but-set-variable -Wno-unused-variable #-DLEGION_SPY
+CC_FLAGS	+= -DENABLE_GATHER_COPIES #-DPRECOMPACTED_RECT_POINTS
 ifeq ($(strip $(USE_OPENMP)),1)
 CC_FLAGS	+= -fopenmp
 endif
