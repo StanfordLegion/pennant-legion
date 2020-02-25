@@ -103,6 +103,11 @@ public:
                                        const SelectShardingFunctorInput &input,
                                              SelectShardingFunctorOutput &output);
 #endif
+public:
+  virtual void memoize_operation(const Legion::Mapping::MapperContext ctx,
+                                 const Legion::Mappable& mappable,
+                                 const MemoizeInput& input,
+                                       MemoizeOutput& output);
 protected:
   static const char* get_name(Legion::Processor p);
   void map_pennant_array(const Legion::Mapping::MapperContext ctx, 

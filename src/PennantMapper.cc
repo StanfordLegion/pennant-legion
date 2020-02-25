@@ -352,6 +352,19 @@ void PennantMapper::map_partition(const MapperContext ctx,
   runtime->acquire_instances(ctx, output.chosen_instances);
 }
 
+void PennantMapper::memoize_operation(const MapperContext  ctx,
+                                      const Mappable&      mappable,
+                                      const MemoizeInput&  input,
+                                            MemoizeOutput& output)
+{
+#ifdef ENABLE_MAX_CYCLE_PREDICATION
+  // Legion doesn't support tracing with predication yet
+  output.memoize = false;
+#else
+  output.memoize = true;
+#endif
+}
+
 /*static*/ const char* PennantMapper::get_name(Processor p)
 {
   char *result = (char*)malloc(256);
