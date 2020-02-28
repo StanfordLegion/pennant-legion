@@ -179,7 +179,14 @@ void PennantMapper::map_task(const MapperContext ctx,
     {
       // See if it is a reduction region requirement or not
       if (task.regions[idx].privilege == REDUCE)
-        create_reduction_instances(ctx, task, idx, local_zerocopy,
+        create_reduction_instances(ctx, task, idx, 
+#ifdef NAN_CHECK
+        // If we're doing nan-checks make sure things are in zero-copy
+        // so we can read-the values directly from the host
+                                   local_zerocopy,
+#else
+                                   local_framebuffer,
+#endif
                                    output.chosen_instances[idx]);
       else if (task.regions[idx].tag & PREFER_ZCOPY)
         map_pennant_array(ctx, task, idx, task.regions[idx].region,
