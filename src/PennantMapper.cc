@@ -168,7 +168,7 @@ void PennantMapper::map_task(const MapperContext ctx,
     output.target_procs.push_back(task.target_proc);
   } else if ((task.tag & PREFER_OMP) && !local_omps.empty()) {
     output.chosen_variant = find_omp_variant(ctx, task.task_id);
-    output.target_procs = local_omps;
+    output.target_procs.push_back(task.target_proc);
   } else {
     output.chosen_variant = find_cpu_variant(ctx, task.task_id);
     output.target_procs = local_cpus;
