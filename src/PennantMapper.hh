@@ -134,7 +134,7 @@ protected:
   std::map<Legion::TaskID,Legion::VariantID> omp_variants;
   std::map<Legion::TaskID,Legion::VariantID> gpu_variants;
 protected:
-  Legion::Memory local_sysmem, local_zerocopy, local_framebuffer;
+  Legion::Memory local_sysmem, local_numa, local_zerocopy, local_framebuffer;
   std::map<std::pair<Legion::LogicalRegion,Legion::Memory>,
            Legion::Mapping::PhysicalInstance> local_instances;
 protected:

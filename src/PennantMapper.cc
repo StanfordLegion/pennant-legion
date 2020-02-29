@@ -58,6 +58,16 @@ PennantMapper::PennantMapper(
   } else {
     local_framebuffer = Memory::NO_MEMORY;
   }
+  if (local_kind == Processor::OMP_PROC) {
+    Machine::MemoryQuery numa_query(machine);
+    numa_query.local_address_space();
+    numa_query.only_kind(Memory::SOCKET_MEM);
+    numa_query.best_affinity_to(local_proc);
+    local_numa = numa_query.first();
+    assert(local_numa.exists());
+  } else {
+    local_numa = Memory::NO_MEMORY;
+  }
 }
 
 PennantMapper::~PennantMapper(void)
@@ -208,11 +218,13 @@ void PennantMapper::map_task(const MapperContext ctx,
     {
       // See if it is a reduction region requirement or not
       if (task.regions[idx].privilege == REDUCE)
-        create_reduction_instances(ctx, task, idx, local_sysmem,
+        create_reduction_instances(ctx, task, idx, 
+            local_numa.exists() ? local_numa : local_sysmem,
                                    output.chosen_instances[idx]);
       else
         map_pennant_array(ctx, task, idx, task.regions[idx].region, 
-                          local_sysmem, output.chosen_instances[idx]);
+            local_numa.exists() ? local_numa : local_sysmem, 
+                          output.chosen_instances[idx]);
     }
   }
   runtime->acquire_instances(ctx, output.chosen_instances);
@@ -275,7 +287,21 @@ void PennantMapper::map_copy(const MapperContext ctx,
       map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
                         copy.dst_requirements[idx].region, fbmem,
                         output.dst_instances[idx]);
-    
+  } else if (!local_omps.empty() && copy.src_indirect_requirements.empty()) {
+    assert(copy.is_index_space);
+    const Point<1> point = copy.index_point;
+    const coord_t index = compute_shard_index(point);
+    const Processor omp = local_omps[index % local_omps.size()];
+    const Memory numa = default_policy_select_target_memory(ctx, omp,
+                                        copy.src_requirements.front());
+    assert(numa.kind() == Memory::SOCKET_MEM);
+    for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
+      map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, numa,
+                        output.src_instances[idx]);
+    for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
+      map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
+                        copy.dst_requirements[idx].region, numa,
+                        output.dst_instances[idx]);
   } else {
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
       map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, local_sysmem,
