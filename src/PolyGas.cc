@@ -44,6 +44,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       registrar.set_leaf();
       Runtime::preregister_task_variant<PolyGas::calcForceTask>(registrar, "calcforcepgas");
     }
+    {
+      TaskVariantRegistrar registrar(TID_CALCFORCEPGAS, "CPU calcforcepgas");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<PolyGas::calcForceOMPTask>(registrar, "calcforcepgas");
+    }
 }
 }; // namespace
 
@@ -174,6 +180,31 @@ void PolyGas::calcForceTask(
         const double2 surf = acc_ssurf[*its];
         const double2 sfx = -p * surf;
         acc_sf[*its] = sfx;
+    }
+}
+
+
+void PolyGas::calcForceOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double2> acc_ssurf(regions[0], FID_SSURFP);
+    const AccessorRO<double> acc_zp(regions[1], FID_ZP);
+    const AccessorWD<double2> acc_sf(regions[2], FID_SFP);
+
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
+    #pragma omp parallel for
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
+    {
+        const Pointer z = acc_mapsz[s];
+        const double p = acc_zp[z];
+        const double2 surf = acc_ssurf[s];
+        const double2 sfx = -p * surf;
+        acc_sf[s] = sfx;
     }
 }
 

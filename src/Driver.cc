@@ -109,6 +109,9 @@ void Driver::run(void) {
     Future f_cycle = Future::from_value(runtime, cycle_init);
     Future f_dt, f_cdt; // initialized by first iteration
     Future f_prev_report;
+    // Create a trace ID for all of Pennant to use
+    const TraceID trace_id = 
+      runtime->generate_library_trace_ids("pennant", 1/*one ID*/);
 
     // Better timing for Legion
     TimingLauncher timing_launcher(MEASURE_MICRO_SECONDS);
@@ -122,6 +125,7 @@ void Driver::run(void) {
     // main event loop
     for (int cycle = 0; cycle < cstop; cycle++) {
 
+        runtime->begin_trace(ctx, trace_id);
         // get timestep
         f_dt = calcGlobalDt(f_dt, f_cdt, f_time, cycle, p_not_done);
 
@@ -137,6 +141,7 @@ void Driver::run(void) {
 
         p_not_done = runtime->create_predicate(ctx, f_not_done);
 #endif
+        runtime->end_trace(ctx, trace_id);
 
         if ((cycle == 0) || (((cycle+1) % dtreport) == 0)) {
             timing_launcher.preconditions.clear();

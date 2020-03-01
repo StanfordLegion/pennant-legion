@@ -72,6 +72,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       Runtime::preregister_task_variant<Mesh::calcSurfVecsTask>(registrar, "calcsurfvecs");
     }
     {
+      TaskVariantRegistrar registrar(TID_CALCSURFVECS, "OMP calcsurfvecs");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcSurfVecsOMPTask>(registrar, "calcsurfvecs");
+    }
+    {
       TaskVariantRegistrar registrar(TID_CALCEDGELEN, "CPU calcedgelen");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
@@ -88,6 +94,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
       Runtime::preregister_task_variant<Mesh::calcCharLenTask>(registrar, "calccharlen");
+    }
+    {
+      TaskVariantRegistrar registrar(TID_CALCCHARLEN, "CPU calccharlen");
+      registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::calcCharLenOMPTask>(registrar, "calccharlen");
     }
     {
       TaskVariantRegistrar registrar(TID_COUNTPOINTS, "CPU count points");
@@ -1560,6 +1572,31 @@ void Mesh::calcSurfVecsTask(
 }
 
 
+void Mesh::calcSurfVecsOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double2> acc_ex(regions[0], FID_EXP);
+    const AccessorRO<double2> acc_zx(regions[1], FID_ZXP);
+    const AccessorWD<double2> acc_ssurf(regions[2], FID_SSURFP);
+
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it is not dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
+    #pragma omp parallel for
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
+    {
+        const Pointer z = acc_mapsz[s];
+        const double2 ex = acc_ex[s];
+        const double2 zx = acc_zx[z];
+        const double2 ss = rotateCCW(ex - zx);
+        acc_ssurf[s] = ss;
+    }
+}
+
+
 void Mesh::calcEdgeLenTask(
         const Task *task,
         const std::vector<PhysicalRegion> &regions,
@@ -1652,6 +1689,40 @@ void Mesh::calcCharLenTask(
         const double sdl = fac * area / base;
         const double zdl2 = min(zdl, sdl);
         acc_zdl[z] = zdl2;
+    }
+}
+
+
+void Mesh::calcCharLenOMPTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+    const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
+    const AccessorRO<double> acc_elen(regions[0], FID_ELEN);
+    const AccessorRO<double> acc_sarea(regions[0], FID_SAREAP);
+    const AccessorRO<int> acc_znump(regions[1], FID_ZNUMP);
+    const AccessorWD<double> acc_zdl(regions[2], FID_ZDL);
+
+    const IndexSpace& isz = task->regions[1].region.get_index_space();
+    const Rect<1> rectz = runtime->get_index_space_domain(isz);
+    #pragma omp parallel for
+    for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
+        acc_zdl[z] = 1.e99;
+    
+    const IndexSpace& iss = task->regions[0].region.get_index_space();
+    // This will assert if it isn't dense
+    const Rect<1> rects = runtime->get_index_space_domain(iss);
+    #pragma omp parallel for
+    for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
+    {
+        const Pointer z = acc_mapsz[s];
+        const double area = acc_sarea[s];
+        const double base = acc_elen[s];
+        const int np = acc_znump[z];
+        const double fac = (np == 3 ? 3. : 4.);
+        const double sdl = fac * area / base;
+        MinOp<double>::apply<false/*exclusive*/>(acc_zdl[z], sdl);
     }
 }
 
