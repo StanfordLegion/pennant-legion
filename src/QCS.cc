@@ -486,14 +486,14 @@ void QCS::setCornerDivOMPTask(
     const IndexSpace& isz = task->regions[1].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
         acc_zuc[z] = double2(0., 0.);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer p = acc_mapsp1[s];
@@ -505,7 +505,7 @@ void QCS::setCornerDivOMPTask(
     }
 
     // [2] Divergence at the corner
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
     for (coord_t c = rects.lo[0]; c <= rects.hi[0]; c++)
     {
         const Pointer s2 = c;
@@ -622,7 +622,7 @@ void QCS::setQCnForceOMPTask(
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
     for (coord_t c = rects.lo[0]; c <= rects.hi[0]; c++)
     {
         const Pointer z = acc_mapsz[c];
@@ -642,7 +642,7 @@ void QCS::setQCnForceOMPTask(
     }
 
     // [4.2] Compute the cqe for each corner
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
     for (coord_t c = rects.lo[0]; c <= rects.hi[0]; c++)
     {
         const Pointer s2 = c;
@@ -691,7 +691,7 @@ void QCS::setForceOMPTask(
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp paralel for
+    #pragma omp paralel for schedule(static, OMP_CHUNK_SIZE)
     for (coord_t c = rects.lo[0]; c <= rects.hi[0]; c++)
     {
         const double ccos = acc_ccos[c];
@@ -703,7 +703,7 @@ void QCS::setForceOMPTask(
     }
 
     // [5.2] Set-Up the forces on corners
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         // Associated corners 1 and 2
@@ -758,14 +758,14 @@ void QCS::setVelDiffOMPTask(
     const IndexSpace& isz = task->regions[4].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
         acc_ztmp[z] = 0.;
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer p1 = acc_mapsp1[s];
@@ -787,7 +787,7 @@ void QCS::setVelDiffOMPTask(
         MaxOp<double>::apply<false/*exclusive*/>(acc_ztmp[z], dux);
     }
 
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
     {
         const double zss  = acc_zss[z];

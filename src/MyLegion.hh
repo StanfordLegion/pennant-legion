@@ -17,6 +17,10 @@
 #include "Vec2.hh"
 #include <cassert>
 
+#ifndef OMP_CHUNK_SIZE
+#define OMP_CHUNK_SIZE    128
+#endif
+
 typedef Legion::Point<1,Legion::coord_t> Pointer;
 
 class PointIterator : public Legion::PointInDomainIterator<1,Legion::coord_t> {
