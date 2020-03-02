@@ -254,7 +254,7 @@ void HydroBC::applyFixedBCOMPTask(
     const IndexSpace& isb = task->regions[0].region.get_index_space();
     // This will fail if it is not dense
     const Rect<1> rectb = runtime->get_index_space_domain(isb);
-    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
+    #pragma omp parallel for
     for (coord_t b = rectb.lo[0]; b <= rectb.hi[0]; b++)
     {
         const Pointer p = acc_mapbp[b];

@@ -136,7 +136,7 @@ void TTS::calcForceOMPTask(
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
+    #pragma omp parallel for
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer z = acc_mapsz[s];

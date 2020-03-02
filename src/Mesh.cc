@@ -1310,14 +1310,14 @@ void Mesh::calcCtrsOMPTask(
     const IndexSpace& isz = task->regions[1].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
-    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
+    #pragma omp parallel for
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
       acc_zx[z] = double2(0., 0.);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
+    #pragma omp parallel for
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer p1 = acc_mapsp1[s];
@@ -1467,7 +1467,7 @@ int Mesh::calcVolsOMPTask(
     const IndexSpace& isz = task->regions[3].region.get_index_space();
     // This will assert if it isn't dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
-    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
+    #pragma omp parallel for
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
     {
         acc_zarea[z] = 0.;
@@ -1479,7 +1479,7 @@ int Mesh::calcVolsOMPTask(
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it isn't dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
+    #pragma omp parallel for
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer p1 = acc_mapsp1[s];
@@ -1585,7 +1585,7 @@ void Mesh::calcSurfVecsOMPTask(
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
+    #pragma omp parallel for
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer z = acc_mapsz[s];
@@ -1646,7 +1646,7 @@ void Mesh::calcEdgeLenOMPTask(
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
+    #pragma omp parallel for
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer p1 = acc_mapsp1[s];
@@ -1706,14 +1706,14 @@ void Mesh::calcCharLenOMPTask(
 
     const IndexSpace& isz = task->regions[1].region.get_index_space();
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
-    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
+    #pragma omp parallel for
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
         acc_zdl[z] = 1.e99;
     
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it isn't dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
+    #pragma omp parallel for
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer z = acc_mapsz[s];
