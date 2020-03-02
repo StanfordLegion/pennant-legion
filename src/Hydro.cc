@@ -1126,7 +1126,7 @@ void Hydro::advPosHalfOMPTask(
     const IndexSpace& isp = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectp = runtime->get_index_space_domain(isp);
-    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE) 
+    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE) 
     for (coord_t p = rectp.lo[0]; p <= rectp.hi[0]; p++)
     {
         const double2 x0 = acc_px0[p];
@@ -1175,7 +1175,7 @@ void Hydro::calcRhoOMPTask(
     const IndexSpace& isz = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
-    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
+    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
     {
         const double m = acc_zm[z];
@@ -1242,7 +1242,7 @@ void Hydro::calcCrnrMassOMPTask(
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
+    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer s3 = acc_mapss3[s];
@@ -1317,7 +1317,7 @@ void Hydro::sumCrnrForceOMPTask(
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)  
+    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)  
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer s3 = acc_mapss3[s];
@@ -1373,7 +1373,7 @@ void Hydro::calcAccelOMPTask(
     const IndexSpace& isp = task->regions[0].region.get_index_space();
     // This will assert if its not dense
     const Rect<1> rectp = runtime->get_index_space_domain(isp);
-    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
+    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
     for (coord_t p = rectp.lo[0]; p <= rectp.hi[0]; p++)
     {
         const double2 f = acc_pf[p];
@@ -1428,7 +1428,7 @@ void Hydro::advPosFullOMPTask(
     const IndexSpace& isp = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectp = runtime->get_index_space_domain(isp);
-    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
+    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
     for (coord_t p = rectp.lo[0]; p <= rectp.hi[0]; p++)
     {
         const double2 x0 = acc_px0[p];
@@ -1549,7 +1549,7 @@ void Hydro::calcWorkOMPTask(
     const IndexSpace& isz = task->regions[3].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
-    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
+    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
       acc_zw[z] = 0.;
 
@@ -1558,7 +1558,7 @@ void Hydro::calcWorkOMPTask(
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss); 
-    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
+    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer p1 = acc_mapsp1[s];
@@ -1634,7 +1634,7 @@ void Hydro::calcWorkRateOMPTask(
     const IndexSpace& isz = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
-    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
+    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
     {
         const double zvol = acc_zvol[z];
@@ -1683,7 +1683,7 @@ void Hydro::calcEnergyOMPTask(
     const IndexSpace& isz = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
-    #pragma omp parallel for schedule(static, OMP_CHUNK_SIZE)
+    #pragma omp parallel for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
     {
         const double zetot = acc_zetot[z];
@@ -1794,7 +1794,7 @@ double Hydro::calcDtNewOMPTask(
     #pragma omp parallel
     {
       double local = 1.e99;
-      #pragma omp for schedule(static, OMP_CHUNK_SIZE)
+      #pragma omp for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
       for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
       {
           const double zdu = acc_zdu[z];
@@ -1827,7 +1827,7 @@ double Hydro::calcDvolOMPTask(
     #pragma omp parallel
     {
       double local = 1.e-99;
-      #pragma omp for schedule(static, OMP_CHUNK_SIZE)
+      #pragma omp for schedule(OMP_SCHEDULE, OMP_CHUNK_SIZE)
       for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
       {
           const double zvol = acc_zvol[z];

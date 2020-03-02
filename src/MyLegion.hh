@@ -18,7 +18,11 @@
 #include <cassert>
 
 #ifndef OMP_CHUNK_SIZE
-#define OMP_CHUNK_SIZE    128
+#define OMP_CHUNK_SIZE    32
+#endif
+
+#ifndef OMP_SCHEDULE
+#define OMP_SCHEDULE      dynamic
 #endif
 
 typedef Legion::Point<1,Legion::coord_t> Pointer;
