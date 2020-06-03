@@ -108,6 +108,10 @@ void PennantMapper::select_task_options(const MapperContext ctx,
   DefaultMapper::select_task_options(ctx, task, output);
   // But we don't need the valid instances
   output.valid_instances = false;
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+  output.replicate = false;
+  output.map_locally = false;
+#endif
 }
 
 Processor PennantMapper::default_policy_select_initial_processor(
@@ -123,6 +127,22 @@ void PennantMapper::slice_task(const Legion::Mapping::MapperContext ctx,
                                const SliceTaskInput &input,
                                      SliceTaskOutput &output)
 {
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+  // If this is the first slice_task call with no control replication
+  // then we need to emulate the effect of the sharding here
+  if (task.index_domain == input.domain) {
+    // Do this computation so we can get per shard rectangles on the remote node
+    if (!sharded)
+      compute_fake_sharding();
+    output.slices.resize(sharding_spaces.size());
+    unsigned index = 0;
+    for (std::vector<std::pair<Processor,Rect<2> > >::const_iterator it = 
+          sharding_spaces.begin(); it != sharding_spaces.end(); it++, index++)
+      output.slices[index] = 
+        TaskSlice(Domain(it->second), it->first, true/*recurse*/, false/*stealable*/);
+    return;
+  }
+#endif
   // We've already been control replicated, so just divide our points
   // over the local processors, depending on which kind we prefer
   if ((task.tag & PREFER_GPU) && !local_gpus.empty()) {
@@ -275,10 +295,16 @@ void PennantMapper::map_copy(const MapperContext ctx,
   if (!local_gpus.empty() && copy.src_indirect_requirements.empty()) {
     assert(copy.is_index_space);
     const Point<1> point = copy.index_point;
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+    if (!sharded)
+      compute_fake_sharding();
+    const Memory fbmem = sharding_memories[point];
+#else
     const coord_t index = compute_shard_index(point);
     const Processor gpu = local_gpus[index % local_gpus.size()];
     const Memory fbmem = default_policy_select_target_memory(ctx, gpu,
                                         copy.src_requirements.front());
+#endif
     assert(fbmem.kind() == Memory::GPU_FB_MEM);
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
       map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, fbmem,
@@ -290,10 +316,16 @@ void PennantMapper::map_copy(const MapperContext ctx,
   } else if (!local_omps.empty() && copy.src_indirect_requirements.empty()) {
     assert(copy.is_index_space);
     const Point<1> point = copy.index_point;
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+    if (!sharded)
+      compute_fake_sharding();
+    const Memory numa = sharding_memories[point];
+#else
     const coord_t index = compute_shard_index(point);
     const Processor omp = local_omps[index % local_omps.size()];
     const Memory numa = default_policy_select_target_memory(ctx, omp,
                                         copy.src_requirements.front());
+#endif
     assert(numa.kind() == Memory::SOCKET_MEM);
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
       map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, numa,
@@ -303,12 +335,21 @@ void PennantMapper::map_copy(const MapperContext ctx,
                         copy.dst_requirements[idx].region, numa,
                         output.dst_instances[idx]);
   } else {
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+    assert(copy.is_index_space);
+    const Point<1> point = copy.index_point;
+    if (!sharded)
+      compute_fake_sharding();
+    const Memory sysmem = sharding_sys_memories[point];
+#else
+    const Memory sysmem = local_sysmem;
+#endif
     for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
-      map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, local_sysmem,
+      map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, sysmem,
                         output.src_instances[idx]);
     for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
       map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
-                        copy.dst_requirements[idx].region, local_sysmem,
+                        copy.dst_requirements[idx].region, sysmem,
                         output.dst_instances[idx]);
     if (!copy.src_indirect_requirements.empty())
     {
@@ -317,7 +358,7 @@ void PennantMapper::map_copy(const MapperContext ctx,
       {
         std::vector<PhysicalInstance> insts;
         map_pennant_array(ctx, copy, idx + offset, 
-                          copy.src_indirect_requirements[idx].region, local_sysmem, insts);
+                          copy.src_indirect_requirements[idx].region, sysmem, insts);
         assert(insts.size() == 1);
         output.src_indirect_instances[idx] = insts[0];
       }
@@ -380,7 +421,16 @@ void PennantMapper::map_partition(const MapperContext ctx,
                                   const MapPartitionInput&   input,
                                         MapPartitionOutput&  output)
 {
-  map_pennant_array(ctx, partition, 0, partition.requirement.region, local_sysmem,
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+  assert(partition.is_index_space);
+  const Point<1> point = partition.index_point;
+  if (!sharded)
+    compute_fake_sharding();
+  const Memory sysmem = sharding_sys_memories[point];
+#else
+  const Memory sysmem = local_sysmem;
+#endif
+  map_pennant_array(ctx, partition, 0, partition.requirement.region, sysmem,
                     output.chosen_instances);
   runtime->acquire_instances(ctx, output.chosen_instances);
 }
@@ -575,15 +625,110 @@ void PennantMapper::update_mesh_information(coord_t npcx, coord_t npcy)
   numpcy = npcy;
 }
 
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+void PennantMapper::compute_fake_sharding(void)
+{
+  assert(!sharded);
+  assert(numpcx > 0);
+  assert(numpcy > 0);
+  coord_t nsx, nsy;
+  calc_pieces_helper(total_nodes/*number of shards*/, numpcx, numpcy, nsx, nsy);
+  // Figure out which shard we are in x and y
+  const Point<2> shard_point(node_id % nsx, node_id / nsx);
+  const coord_t pershardx = (numpcx + nsx - 1) / nsx;
+  const coord_t pershardy = (numpcy + nsy - 1) / nsy;
+  const Rect<2> full(Point<2>(0, 0), Point<2>(numpcx-1, numpcy-1));
+  sharding_spaces.resize(total_nodes, std::make_pair(Processor::NO_PROC,full));
+  for (std::vector<Processor>::const_iterator rit = 
+        remote_cpus.begin(); rit != remote_cpus.end(); rit++) {
+    const AddressSpaceID space = rit->address_space();
+    if (sharding_spaces[space].first.exists())
+      continue;
+    sharding_spaces[space].first = *rit;
+    const Point<2> shard_point(space % nsx, space / nsx);
+    const Rect<2> rect(Point<2>(shard_point[0] * pershardx, shard_point[1] * pershardy),
+                       Point<2>((shard_point[0] + 1) * pershardx - 1,
+                                (shard_point[1] + 1) * pershardy - 1));
+    sharding_spaces[space].second = rect.intersection(full);
+    const Rect<2> &space_rect = sharding_spaces[space].second;
+    // compute the sharding memories for all the points on this node
+    Machine::MemoryQuery sysmem_query(machine);
+    sysmem_query.best_affinity_to(*rit);
+    sysmem_query.only_kind(Memory::SYSTEM_MEM);
+    assert(sysmem_query.count() > 0);
+    const Memory space_sysmem = sysmem_query.first();
+    for (coord_t x = space_rect.lo[0]; x <= space_rect.hi[0]; x++) {
+      for (coord_t y = space_rect.lo[1]; y <= space_rect.hi[1]; y++) {
+        const Point<1> key(y * numpcx + x);
+        sharding_sys_memories[key] = space_sysmem;
+      }
+    }
+    if (!local_gpus.empty()) {
+      Machine::ProcessorQuery space_gpus(machine);
+      space_gpus.same_address_space_as(*rit);
+      space_gpus.only_kind(Processor::TOC_PROC);
+      assert(space_gpus.count() > 0);
+      std::vector<Memory> space_memories;
+      for (Machine::ProcessorQuery::iterator it =
+            space_gpus.begin(); it != space_gpus.end(); it++)
+      {
+        Machine::MemoryQuery fbmem_query(machine);
+        fbmem_query.best_affinity_to(*it);
+        fbmem_query.only_kind(Memory::GPU_FB_MEM);
+        assert(fbmem_query.count() > 0);
+        space_memories.push_back(fbmem_query.first());
+      }
+      for (coord_t x = space_rect.lo[0]; x <= space_rect.hi[0]; x++) {
+        for (coord_t y = space_rect.lo[1]; y <= space_rect.hi[1]; y++) {
+          const Point<1> key(y * numpcx + x);
+          const coord_t x2 = x - space_rect.lo[0];
+          const coord_t y2 = y - space_rect.lo[1];
+          const coord_t index = y2 * ((space_rect.hi[0] - space_rect.lo[0]) + 1) + x2;
+          sharding_memories[key] = space_memories[index % space_memories.size()];
+        }
+      }
+    } else if (!local_omps.empty()) {
+      Machine::ProcessorQuery space_omps(machine);
+      space_omps.same_address_space_as(*rit);
+      space_omps.only_kind(Processor::OMP_PROC);
+      assert(space_omps.count() > 0);
+      std::vector<Memory> space_memories;
+      for (Machine::ProcessorQuery::iterator it =
+            space_omps.begin(); it != space_omps.end(); it++)
+      {
+        Machine::MemoryQuery numa_query(machine);
+        numa_query.best_affinity_to(*it);
+        numa_query.only_kind(Memory::SOCKET_MEM);
+        assert(numa_query.count() > 0);
+        space_memories.push_back(numa_query.first());
+      }
+      for (coord_t x = space_rect.lo[0]; x <= space_rect.hi[0]; x++) {
+        for (coord_t y = space_rect.lo[1]; y <= space_rect.hi[1]; y++) {
+          const Point<1> key(y * numpcx + x);
+          const coord_t x2 = x - space_rect.lo[0];
+          const coord_t y2 = y - space_rect.lo[1];
+          const coord_t index = y2 * ((space_rect.hi[0] - space_rect.lo[0]) + 1) + x2;
+          sharding_memories[key] = space_memories[index % space_memories.size()];
+        }
+      }
+    } else {
+      sharding_memories = sharding_sys_memories;
+    }
+  }
+  sharded = true;
+}
+#else
 coord_t PennantMapper::compute_shard_index(Point<1> p)
 {
   if (!sharded) {
     assert(numpcx > 0);
     assert(numpcy > 0);
+    // these are member variables if we are disabling control replication
     coord_t nsx, nsy;
     calc_pieces_helper(total_nodes/*number of shards*/, numpcx, numpcy, nsx, nsy);
     // Figure out which shard we are in x and y
     const Point<2> shard_point(node_id % nsx, node_id / nsx);
+    // these are member variables if we are disabling control replication
     const coord_t pershardx = (numpcx + nsx - 1) / nsx;
     const coord_t pershardy = (numpcy + nsy - 1) / nsy;
     const Rect<2> rect(Point<2>(shard_point[0] * pershardx, shard_point[1] * pershardy),
@@ -599,4 +744,5 @@ coord_t PennantMapper::compute_shard_index(Point<1> p)
   const coord_t y = point[1] - shard_rect.lo[1];
   return y * ((shard_rect.hi[0] - shard_rect.lo[0]) + 1) + x;
 }
+#endif
 

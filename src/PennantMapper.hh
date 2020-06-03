@@ -124,7 +124,11 @@ protected:
                                      Legion::TaskID task_id);
   Legion::VariantID find_gpu_variant(const Legion::Mapping::MapperContext ctx,
                                      Legion::TaskID task_id);
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+  void compute_fake_sharding(void);
+#else
   Legion::coord_t compute_shard_index(Legion::Point<1> point);
+#endif
 public:
   void update_mesh_information(Legion::coord_t numpcx, Legion::coord_t numpcy);
 public:
@@ -137,10 +141,18 @@ protected:
   Legion::Memory local_sysmem, local_numa, local_zerocopy, local_framebuffer;
   std::map<std::pair<Legion::LogicalRegion,Legion::Memory>,
            Legion::Mapping::PhysicalInstance> local_instances;
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+  std::vector<std::pair<Legion::Processor,Legion::Rect<2> > > sharding_spaces;
+  std::map<Legion::Point<1>,Legion::Memory> sharding_memories, sharding_sys_memories;
+#endif
 protected:
   // For helping with sharded copy operations
   Legion::coord_t numpcx, numpcy;
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+  Legion::coord_t nsx, nsy, pershardx, pershardy;
+#else
   Legion::Rect<2> shard_rect;
+#endif
   bool sharded;
 };
 
