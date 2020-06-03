@@ -139,7 +139,7 @@ void PennantMapper::slice_task(const MapperContext ctx,
     for (std::vector<std::pair<Processor,IndexSpace> >::const_iterator it = 
           sharding_spaces.begin(); it != sharding_spaces.end(); it++, index++)
       output.slices[index] = 
-        TaskSlice(Domain(it->second), it->first, true/*recurse*/, false/*stealable*/);
+        TaskSlice(it->second, it->first, true/*recurse*/, false/*stealable*/);
     return;
   }
 #endif
@@ -653,8 +653,8 @@ void PennantMapper::compute_fake_sharding(MapperContext ctx)
     const Rect<2> space_rect = rect.intersection(full);
     std::vector<Rect<1> > space_rects;
     for (coord_t y = space_rect.lo[1]; y <= space_rect.hi[1]; y++)
-      space_points.push_back(Rect<1>(Point<1>(y * numpcx + space_rect.lo[0]),
-                                     Point<1>(y * numpcx + space_rect.hi[0])));
+      space_rects.push_back(Rect<1>(Point<1>(y * numpcx + space_rect.lo[0]),
+                                    Point<1>(y * numpcx + space_rect.hi[0])));
     sharding_spaces[space].second = runtime->create_index_space(ctx, space_rects);
     // compute the sharding memories for all the points on this node
     Machine::MemoryQuery sysmem_query(machine);
