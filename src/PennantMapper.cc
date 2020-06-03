@@ -122,8 +122,8 @@ Processor PennantMapper::default_policy_select_initial_processor(
   return task.current_proc;
 }
 
-void PennantMapper::slice_task(const Legion::Mapping::MapperContext ctx,
-                               const Legion::Task &task,
+void PennantMapper::slice_task(const MapperContext ctx,
+                               const Task &task,
                                const SliceTaskInput &input,
                                      SliceTaskOutput &output)
 {
@@ -133,10 +133,10 @@ void PennantMapper::slice_task(const Legion::Mapping::MapperContext ctx,
   if (task.index_domain == input.domain) {
     // Do this computation so we can get per shard rectangles on the remote node
     if (!sharded)
-      compute_fake_sharding();
+      compute_fake_sharding(ctx);
     output.slices.resize(sharding_spaces.size());
     unsigned index = 0;
-    for (std::vector<std::pair<Processor,Rect<2> > >::const_iterator it = 
+    for (std::vector<std::pair<Processor,IndexSpace> >::const_iterator it = 
           sharding_spaces.begin(); it != sharding_spaces.end(); it++, index++)
       output.slices[index] = 
         TaskSlice(Domain(it->second), it->first, true/*recurse*/, false/*stealable*/);
@@ -297,7 +297,7 @@ void PennantMapper::map_copy(const MapperContext ctx,
     const Point<1> point = copy.index_point;
 #ifdef PENNANT_DISABLE_CONTROL_REPLICATION
     if (!sharded)
-      compute_fake_sharding();
+      compute_fake_sharding(ctx);
     const Memory fbmem = sharding_memories[point];
 #else
     const coord_t index = compute_shard_index(point);
@@ -318,7 +318,7 @@ void PennantMapper::map_copy(const MapperContext ctx,
     const Point<1> point = copy.index_point;
 #ifdef PENNANT_DISABLE_CONTROL_REPLICATION
     if (!sharded)
-      compute_fake_sharding();
+      compute_fake_sharding(ctx);
     const Memory numa = sharding_memories[point];
 #else
     const coord_t index = compute_shard_index(point);
@@ -339,7 +339,7 @@ void PennantMapper::map_copy(const MapperContext ctx,
     assert(copy.is_index_space);
     const Point<1> point = copy.index_point;
     if (!sharded)
-      compute_fake_sharding();
+      compute_fake_sharding(ctx);
     const Memory sysmem = sharding_sys_memories[point];
 #else
     const Memory sysmem = local_sysmem;
@@ -425,7 +425,7 @@ void PennantMapper::map_partition(const MapperContext ctx,
   assert(partition.is_index_space);
   const Point<1> point = partition.index_point;
   if (!sharded)
-    compute_fake_sharding();
+    compute_fake_sharding(ctx);
   const Memory sysmem = sharding_sys_memories[point];
 #else
   const Memory sysmem = local_sysmem;
@@ -626,7 +626,7 @@ void PennantMapper::update_mesh_information(coord_t npcx, coord_t npcy)
 }
 
 #ifdef PENNANT_DISABLE_CONTROL_REPLICATION
-void PennantMapper::compute_fake_sharding(void)
+void PennantMapper::compute_fake_sharding(MapperContext ctx)
 {
   assert(!sharded);
   assert(numpcx > 0);
@@ -638,7 +638,8 @@ void PennantMapper::compute_fake_sharding(void)
   const coord_t pershardx = (numpcx + nsx - 1) / nsx;
   const coord_t pershardy = (numpcy + nsy - 1) / nsy;
   const Rect<2> full(Point<2>(0, 0), Point<2>(numpcx-1, numpcy-1));
-  sharding_spaces.resize(total_nodes, std::make_pair(Processor::NO_PROC,full));
+  sharding_spaces.resize(total_nodes, 
+      std::make_pair(Processor::NO_PROC,IndexSpace::NO_SPACE));
   for (std::vector<Processor>::const_iterator rit = 
         remote_cpus.begin(); rit != remote_cpus.end(); rit++) {
     const AddressSpaceID space = rit->address_space();
@@ -649,8 +650,12 @@ void PennantMapper::compute_fake_sharding(void)
     const Rect<2> rect(Point<2>(shard_point[0] * pershardx, shard_point[1] * pershardy),
                        Point<2>((shard_point[0] + 1) * pershardx - 1,
                                 (shard_point[1] + 1) * pershardy - 1));
-    sharding_spaces[space].second = rect.intersection(full);
-    const Rect<2> &space_rect = sharding_spaces[space].second;
+    const Rect<2> space_rect = rect.intersection(full);
+    std::vector<Rect<1> > space_rects;
+    for (coord_t y = space_rect.lo[1]; y <= space_rect.hi[1]; y++)
+      space_points.push_back(Rect<1>(Point<1>(y * numpcx + space_rect.lo[0]),
+                                     Point<1>(y * numpcx + space_rect.hi[0])));
+    sharding_spaces[space].second = runtime->create_index_space(ctx, space_rects);
     // compute the sharding memories for all the points on this node
     Machine::MemoryQuery sysmem_query(machine);
     sysmem_query.best_affinity_to(*rit);

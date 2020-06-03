@@ -125,7 +125,7 @@ protected:
   Legion::VariantID find_gpu_variant(const Legion::Mapping::MapperContext ctx,
                                      Legion::TaskID task_id);
 #ifdef PENNANT_DISABLE_CONTROL_REPLICATION
-  void compute_fake_sharding(void);
+  void compute_fake_sharding(Legion::Mapping::MapperContext ctx);
 #else
   Legion::coord_t compute_shard_index(Legion::Point<1> point);
 #endif
@@ -142,7 +142,7 @@ protected:
   std::map<std::pair<Legion::LogicalRegion,Legion::Memory>,
            Legion::Mapping::PhysicalInstance> local_instances;
 #ifdef PENNANT_DISABLE_CONTROL_REPLICATION
-  std::vector<std::pair<Legion::Processor,Legion::Rect<2> > > sharding_spaces;
+  std::vector<std::pair<Legion::Processor,Legion::IndexSpace> > sharding_spaces;
   std::map<Legion::Point<1>,Legion::Memory> sharding_memories, sharding_sys_memories;
 #endif
 protected:
