@@ -130,7 +130,7 @@ void PennantMapper::slice_task(const MapperContext ctx,
 #ifdef PENNANT_DISABLE_CONTROL_REPLICATION
   // If this is the first slice_task call with no control replication
   // then we need to emulate the effect of the sharding here
-  if (task.index_domain == input.domain) {
+  if ((task.index_domain == input.domain) && (total_nodes > 1)) {
     // Do this computation so we can get per shard rectangles on the remote node
     if (!sharded)
       compute_fake_sharding(ctx);
