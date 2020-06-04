@@ -722,7 +722,7 @@ void PennantMapper::compute_fake_sharding(MapperContext ctx)
     }
   }
   sharded = true;
-  runtime->disable_reentrant(ctx);
+  runtime->enable_reentrant(ctx);
 }
 #else
 coord_t PennantMapper::compute_shard_index(Point<1> p)
