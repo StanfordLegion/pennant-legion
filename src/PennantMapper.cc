@@ -397,6 +397,13 @@ void PennantMapper::select_partition_projection(const MapperContext  ctx,
                                                       SelectPartitionProjectionOutput& output)
 {
   if (!input.open_complete_partitions.empty()) {
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+    const Domain color_space = 
+      runtime->get_index_partition_color_space(ctx, 
+          input.open_complete_partitions.front().get_index_partition());
+    if (color_space.get_volume() != sharding_memories.size())
+      return;
+#endif
     output.chosen_partition = input.open_complete_partitions.front();
     return;
   }
@@ -410,6 +417,11 @@ void PennantMapper::select_partition_projection(const MapperContext  ctx,
         partition.requirement.region.get_index_space(), color);
     if (!runtime->is_index_partition_complete(ctx, ip))
       continue;
+#ifdef PENNANT_DISABLE_CONTROL_REPLICATION
+    const Domain color_space = runtime->get_index_partition_color_space(ctx, ip);
+    if (color_space.get_volume() != sharding_memories.size())
+      continue;
+#endif
     output.chosen_partition = runtime->get_logical_partition(ctx, 
         partition.requirement.region, ip);
     return;
@@ -422,11 +434,16 @@ void PennantMapper::map_partition(const MapperContext ctx,
                                         MapPartitionOutput&  output)
 {
 #ifdef PENNANT_DISABLE_CONTROL_REPLICATION
-  assert(partition.is_index_space);
-  const Point<1> point = partition.index_point;
-  if (!sharded)
-    compute_fake_sharding(ctx);
-  const Memory sysmem = sharding_sys_memories[point];
+  Memory sysmem;
+  if (partition.is_index_space) {
+    assert(partition.is_index_space);
+    const Point<1> point = partition.index_point;
+    if (!sharded)
+      compute_fake_sharding(ctx);
+    sysmem = sharding_sys_memories[point];
+  } else {
+    sysmem = local_sysmem;
+  }
 #else
   const Memory sysmem = local_sysmem;
 #endif
