@@ -628,6 +628,7 @@ void PennantMapper::update_mesh_information(coord_t npcx, coord_t npcy)
 #ifdef PENNANT_DISABLE_CONTROL_REPLICATION
 void PennantMapper::compute_fake_sharding(MapperContext ctx)
 {
+  runtime->disable_reentrant(ctx);
   assert(!sharded);
   assert(numpcx > 0);
   assert(numpcy > 0);
@@ -721,6 +722,7 @@ void PennantMapper::compute_fake_sharding(MapperContext ctx)
     }
   }
   sharded = true;
+  runtime->disable_reentrant(ctx);
 }
 #else
 coord_t PennantMapper::compute_shard_index(Point<1> p)
