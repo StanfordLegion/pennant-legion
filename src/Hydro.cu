@@ -48,6 +48,7 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_CALCWORK, "GPU calcwork");
       registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(registrar, 1, 2, FID_PU, FID_PU0, FID_PXP);
       Runtime::preregister_task_variant<Hydro::calcWorkGPUTask>(registrar, "calcwork");
     }
     {
@@ -375,16 +376,11 @@ __launch_bounds__(THREADS_PER_BLOCK,MIN_CTAS_PER_SM)
 gpu_calc_work(const AccessorRO<Pointer> acc_mapsp1,
               const AccessorRO<Pointer> acc_mapsp2,
               const AccessorRO<Pointer> acc_mapsz,
-              const AccessorRO<int> acc_mapsp1reg,
-              const AccessorRO<int> acc_mapsp2reg,
               const AccessorRO<double2> acc_sf,
               const AccessorRO<double2> acc_sf2,
-              const AccessorRO<double2> acc_pu00,
-              const AccessorRO<double2> acc_pu01,
-              const AccessorRO<double2> acc_pu0,
-              const AccessorRO<double2> acc_pu1,
-              const AccessorRO<double2> acc_px0,
-              const AccessorRO<double2> acc_px1,
+              const AccessorMC<double2> acc_pu0,
+              const AccessorMC<double2> acc_pu,
+              const AccessorMC<double2> acc_px,
               const AccessorRW<double> acc_zw,
               const AccessorRW<double> acc_zetot,
               const double dth, const Point<1> origin, const size_t max)
@@ -394,21 +390,19 @@ gpu_calc_work(const AccessorRO<Pointer> acc_mapsp1,
     return;
   const coord_t s = origin[0] + offset;
   const Pointer p1 = acc_mapsp1[s];
-  const int p1reg = acc_mapsp1reg[s];
   const Pointer p2 = acc_mapsp2[s];
-  const int p2reg = acc_mapsp2reg[s];
   const Pointer z = acc_mapsz[s];
   const double2 sf = acc_sf[s];
   const double2 sf2 = acc_sf2[s];
   const double2 sftot = sf + sf2;
-  const double2 pu01 = (p1reg == 0) ? acc_pu00[p1] : acc_pu01[p1];
-  const double2 pu1 = (p1reg == 0) ? acc_pu0[p1] : acc_pu1[p1];
+  const double2 pu01 = acc_pu0[p1];
+  const double2 pu1 = acc_pu[p1];
   const double sd1 = dot(sftot, (pu01 + pu1));
-  const double2 pu02 = (p2reg == 0) ? acc_pu00[p2] : acc_pu01[p2];
-  const double2 pu2 = (p2reg == 0) ? acc_pu0[p2] : acc_pu1[p2];
+  const double2 pu02 = acc_pu0[p2];
+  const double2 pu2 = acc_pu[p2];
   const double sd2 = dot(-sftot, (pu02 + pu2));
-  const double2 px1 = (p1reg == 0) ? acc_px0[p1] : acc_px1[p1];
-  const double2 px2 = (p2reg == 0) ? acc_px0[p2] : acc_px1[p2];;
+  const double2 px1 = acc_px[p1];
+  const double2 px2 = acc_px[p2];;
   const double dwork = -dth * (sd1 * px1.x + sd2 * px2.x);
 
   SumOp<double>::apply<false/*exclusive*/>(acc_zetot[z], dwork);
@@ -426,22 +420,11 @@ void Hydro::calcWorkGPUTask(
     const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
     const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
-    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
-    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
     const AccessorRO<double2> acc_sf(regions[0], FID_SFP);
     const AccessorRO<double2> acc_sf2(regions[0], FID_SFQ);
-    const AccessorRO<double2> acc_pu0[2] = {
-        AccessorRO<double2>(regions[1], FID_PU0),
-        AccessorRO<double2>(regions[2], FID_PU0)
-    };
-    const AccessorRO<double2> acc_pu[2] = {
-        AccessorRO<double2>(regions[1], FID_PU),
-        AccessorRO<double2>(regions[2], FID_PU)
-    };
-    const AccessorRO<double2> acc_px[2] = {
-        AccessorRO<double2>(regions[1], FID_PXP),
-        AccessorRO<double2>(regions[2], FID_PXP)
-    };
+    const AccessorMC<double2> acc_pu0(regions.begin()+1, regions.begin()+3, FID_PU0);
+    const AccessorMC<double2> acc_pu(regions.begin()+1, regions.begin()+3, FID_PU);
+    const AccessorMC<double2> acc_px(regions.begin()+1, regions.begin()+3, FID_PXP);
     const AccessorRW<double> acc_zw(regions[3], FID_ZW);
     const AccessorRW<double> acc_zetot(regions[4], FID_ZETOT);
 
@@ -467,8 +450,7 @@ void Hydro::calcWorkGPUTask(
       return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_calc_work<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsp1, acc_mapsp2, acc_mapsz,
-        acc_mapsp1reg, acc_mapsp2reg, acc_sf, acc_sf2, acc_pu0[0], acc_pu0[1],
-        acc_pu[0], acc_pu[1], acc_px[0], acc_px[1], acc_zw, acc_zetot, dth,
+        acc_sf, acc_sf2, acc_pu0, acc_pu, acc_px, acc_zw, acc_zetot, dth,
         rects.lo, volume);
 }
 

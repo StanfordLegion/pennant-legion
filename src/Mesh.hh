@@ -134,6 +134,18 @@ enum ShardingID {
 };
 #endif
 
+static inline void add_colocation_constraint(Legion::TaskVariantRegistrar &registrar,
+     unsigned idx1, unsigned idx2, unsigned fid, unsigned fid2 = 0, unsigned fid3 = 0)
+{
+  std::set<Legion::FieldID> fields;
+  fields.insert(fid);
+  if (fid2 > 0)
+    fields.insert(fid2);
+  if (fid3 > 0)
+    fields.insert(fid3);
+  registrar.add_constraint(Legion::ColocationConstraint(idx1, idx2, fields));
+}
+
 // atomic versions of lhs += rhs
 template <typename T> __CUDA_HD__
 inline void atomic_add(T& lhs, const T& rhs);

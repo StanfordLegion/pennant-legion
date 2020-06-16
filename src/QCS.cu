@@ -16,12 +16,14 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_SETCORNERDIV, "GPU setcornerdiv");
       registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(2, 3, FID_PXP, FID_PU0);
       Runtime::preregister_task_variant<QCS::setCornerDivGPUTask>(registrar, "setcornerdiv");
     }
     {
       TaskVariantRegistrar registrar(TID_SETQCNFORCE, "GPU setqcnforce");
       registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(2, 3, FID_PU0);
       Runtime::preregister_task_variant<QCS::setQCnForceGPUTask>(registrar, "setqcnforce");
     }
     {
@@ -34,6 +36,7 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_SETVELDIFF, "GPU setveldiff");
       registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(2, 3, FID_PXP, FID_PU0);
       Runtime::preregister_task_variant<QCS::setVelDiffGPUTask>(registrar, "setveldiff");
     }
 }
@@ -42,10 +45,8 @@ static void __attribute__ ((constructor)) registerTasks() {
 __global__ void
 __launch_bounds__(THREADS_PER_BLOCK,MIN_CTAS_PER_SM)
 gpu_zone_centered_velocity(const AccessorRO<Pointer> acc_mapsp1,
-                           const AccessorRO<int> acc_mapsp1reg,
                            const AccessorRO<Pointer> acc_mapsz,
-                           const AccessorRO<double2> acc_pu0,
-                           const AccessorRO<double2> acc_pu1,
+                           const AccessorMC<double2> acc_pu,
                            const AccessorRO<int> acc_znump,
                            const AccessorWD<double2> acc_zuc,
                            const Point<1> origin, const size_t max)
@@ -55,9 +56,8 @@ gpu_zone_centered_velocity(const AccessorRO<Pointer> acc_mapsp1,
     return;
   const coord_t s = origin[0] + offset;
   const Pointer p = acc_mapsp1[s];
-  const int preg = acc_mapsp1reg[s];
   const Pointer z = acc_mapsz[s];
-  const double2 pu = (preg == 0) ? acc_pu0[p] : acc_pu1[p];
+  const double2 pu = acc_pu[p];
   const int n = acc_znump[z];
   SumOp<double2>::apply<false/*exclusive*/>(acc_zuc[z], pu / n);
 }
@@ -68,16 +68,12 @@ gpu_corner_divergence(const AccessorRO<Pointer> acc_mapsz,
                       const AccessorRO<Pointer> acc_mapsp1,
                       const AccessorRO<Pointer> acc_mapsp2,
                       const AccessorRO<Pointer> acc_mapss3,
-                      const AccessorRO<int> acc_mapsp1reg,
-                      const AccessorRO<int> acc_mapsp2reg,
                       const AccessorRO<double2> acc_ex,
                       const AccessorRO<double> acc_elen,
                       const AccessorRO<int> acc_znump,
                       const AccessorRO<double2> acc_zx,
-                      const AccessorRO<double2> acc_pu0,
-                      const AccessorRO<double2> acc_pu1,
-                      const AccessorRO<double2> acc_px0,
-                      const AccessorRO<double2> acc_px1,
+                      const AccessorMC<double2> acc_pu,
+                      const AccessorMC<double2> acc_px,
                       const AccessorWD<double2> acc_zuc,
                       const AccessorWD<double> acc_carea,
                       const AccessorWD<double> acc_ccos,
@@ -95,17 +91,14 @@ gpu_corner_divergence(const AccessorRO<Pointer> acc_mapsz,
   // Associated zone, point
   const Pointer z = acc_mapsz[s];
   const Pointer p = acc_mapsp2[s];
-  const int preg = acc_mapsp2reg[s];
   // Neighboring points
   const Pointer p1 = acc_mapsp1[s];
-  const int p1reg = acc_mapsp1reg[s];
   const Pointer p2 = acc_mapsp2[s2];
-  const int p2reg = acc_mapsp2reg[s2];
 
   // Velocities and positions
   // 0 = point p
-  const double2 up0 = (preg == 0) ? acc_pu0[p] : acc_pu1[p];
-  const double2 xp0 = (preg == 0) ? acc_px0[p] : acc_px1[p];
+  const double2 up0 = acc_pu[p];
+  const double2 xp0 = acc_px[p];
   // 1 = edge e2
   const double2 up1 = 0.5 * (up0 + ((p2reg == 0) ? acc_pu0[p2] : acc_pu1[p2]));
   const double2 xp1 = acc_ex[s2];
@@ -264,10 +257,7 @@ __launch_bounds__(THREADS_PER_BLOCK,MIN_CTAS_PER_SM)
 gpu_compute_cqe(const AccessorRO<Pointer> acc_mapsp1,
                 const AccessorRO<Pointer> acc_mapsp2,
                 const AccessorRO<Pointer> acc_mapss3,
-                const AccessorRO<int> acc_mapsp1reg,
-                const AccessorRO<int> acc_mapsp2reg,
-                const AccessorRO<double2> acc_pu0,
-                const AccessorRO<double2> acc_pu1,
+                const AccessorRO<double2> acc_pu,
                 const AccessorRO<double> acc_elen,
                 const AccessorWD<double> acc_crmu,
                 const AccessorWD<double2> acc_cqe1,
@@ -281,23 +271,20 @@ gpu_compute_cqe(const AccessorRO<Pointer> acc_mapsp1,
   const Pointer s2 = c;
   const Pointer s = acc_mapss3[s2];
   const Pointer p = acc_mapsp2[s];
-  const int preg = acc_mapsp2reg[s];
   // Associated point 1
   const Pointer p1 = acc_mapsp1[s];
-  const int p1reg = acc_mapsp1reg[s];
   // Associated point 2
   const Pointer p2 = acc_mapsp2[s2];
-  const int p2reg = acc_mapsp2reg[s2];
 
   // Compute: cqe(1,2,3)=edge 1, y component (2nd), 3rd corner
   //          cqe(2,1,3)=edge 2, x component (1st)
   const double crmu = acc_crmu[c];
-  const double2 pu = (preg == 0) ? acc_pu0[p] : acc_pu1[p];
-  const double2 pu1 = (p1reg == 0) ? acc_pu0[p1] : acc_pu1[p1];
+  const double2 pu = acc_pu[p];
+  const double2 pu1 = acc_pu[p1];
   const double elen = acc_elen[s];
   const double2 cqe1 = crmu * (pu - pu1) / elen;
   acc_cqe1[c] = cqe1;
-  const double2 pu2 = (p2reg == 0) ? acc_pu0[p2] : acc_pu1[p2];
+  const double2 pu2 = acc_pu[p2];
   const double elen2 = acc_elen[s2];
   const double2 cqe2 = crmu * (pu2 - pu) / elen2;
   acc_cqe2[c] = cqe2;
@@ -319,18 +306,13 @@ void QCS::setQCnForceGPUTask(
     const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
     const AccessorRO<Pointer> acc_mapss3(regions[0], FID_MAPSS3);
-    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
-    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
     const AccessorRO<double> acc_elen(regions[0], FID_ELEN);
     const AccessorRO<double> acc_cdiv(regions[0], FID_CDIV);
     const AccessorRO<double> acc_cdu(regions[0], FID_CDU);
     const AccessorRO<double> acc_cevol(regions[0], FID_CEVOL);
     const AccessorRO<double> acc_zrp(regions[1], FID_ZRP);
     const AccessorRO<double> acc_zss(regions[1], FID_ZSS);
-    const AccessorRO<double2> acc_pu[2] = {
-        AccessorRO<double2>(regions[2], FID_PU0),
-        AccessorRO<double2>(regions[3], FID_PU0)
-    };
+    const AccessorMC<double2> acc_pu(regions.begin()+2, regions.begin()+4, FID_PU0);
     const AccessorWD<double> acc_crmu(regions[4], FID_CRMU);
     const AccessorWD<double2> acc_cqe1(regions[4], FID_CQE1);
     const AccessorWD<double2> acc_cqe2(regions[4], FID_CQE2);
@@ -350,8 +332,7 @@ void QCS::setQCnForceGPUTask(
 
     // [4.2] Compute the cqe for each corner
     gpu_compute_cqe<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsp1, acc_mapsp2,
-        acc_mapss3, acc_mapsp1reg, acc_mapsp2reg, acc_pu[0], acc_pu[1],
-        acc_elen, acc_crmu, acc_cqe1, acc_cqe2, rects.lo, volume);
+        acc_mapss3, acc_pu, acc_elen, acc_crmu, acc_cqe1, acc_cqe2, rects.lo, volume);
 }
 
 __global__ void
@@ -444,13 +425,9 @@ __launch_bounds__(THREADS_PER_BLOCK,MIN_CTAS_PER_SM)
 gpu_set_vel_diff1(const AccessorRO<Pointer> acc_mapsz,
                   const AccessorRO<Pointer> acc_mapsp1,
                   const AccessorRO<Pointer> acc_mapsp2,
-                  const AccessorRO<int> acc_mapsp1reg,
-                  const AccessorRO<int> acc_mapsp2reg,
                   const AccessorRO<double> acc_elen,
-                  const AccessorRO<double2> acc_pu0,
-                  const AccessorRO<double2> acc_pu1,
-                  const AccessorRO<double2> acc_px0,
-                  const AccessorRO<double2> acc_px1,
+                  const AccessorMC<double2> acc_pu,
+                  const AccessorMC<double2> acc_px,
                   const AccessorWD<double> acc_ztmp,
                   const Point<1> origin, const size_t max)
 {
@@ -459,15 +436,13 @@ gpu_set_vel_diff1(const AccessorRO<Pointer> acc_mapsz,
     return;
   const coord_t s = origin[0] + offset;
   const Pointer p1 = acc_mapsp1[s];
-  const int p1reg = acc_mapsp1reg[s];
   const Pointer p2 = acc_mapsp2[s];
-  const int p2reg = acc_mapsp2reg[s];
   const Pointer z = acc_mapsz[s];
 
-  const double2 px1 = (p1reg == 0) ? acc_px0[p1] : acc_px1[p1];
-  const double2 px2 = (p2reg == 0) ? acc_px0[p2] : acc_px1[p2];
-  const double2 pu1 = (p1reg == 0) ? acc_pu0[p1] : acc_pu1[p1];
-  const double2 pu2 = (p2reg == 0) ? acc_pu0[p2] : acc_pu1[p2];
+  const double2 px1 = acc_px[p1];
+  const double2 px2 = acc_px[p2];
+  const double2 pu1 = acc_pu[p1];
+  const double2 pu2 = acc_pu[p2];
   const double2 dx  = px2 - px1;
   const double2 du  = pu2 - pu1;
   const double lenx = acc_elen[s];
@@ -509,18 +484,10 @@ void QCS::setVelDiffGPUTask(
     const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
     const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
-    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
-    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
     const AccessorRO<double> acc_elen(regions[0], FID_ELEN);
     const AccessorRO<double> acc_zss(regions[1], FID_ZSS);
-    const AccessorRO<double2> acc_pu[2] = {
-        AccessorRO<double2>(regions[2], FID_PU0),
-        AccessorRO<double2>(regions[3], FID_PU0)
-    };
-    const AccessorRO<double2> acc_px[2] = {
-        AccessorRO<double2>(regions[2], FID_PXP),
-        AccessorRO<double2>(regions[3], FID_PXP)
-    };
+    const AccessorMC<double2> acc_pu(regions.begin()+2, regions.begin()+4, FID_PU0);
+    const AccessorMC<double2> acc_px(regions.begin()+2, regions.begin()+4, FID_PXP);
     const AccessorWD<double> acc_ztmp(regions[4], FID_ZTMP);
     const AccessorWD<double> acc_zdu(regions[4], FID_ZDU);
 
@@ -540,8 +507,7 @@ void QCS::setVelDiffGPUTask(
       return;
     const size_t blocks = (volume + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_set_vel_diff1<<<blocks,THREADS_PER_BLOCK>>>(acc_mapsz, acc_mapsp1,
-        acc_mapsp2, acc_mapsp1reg, acc_mapsp2reg, acc_elen, acc_pu[0], acc_pu[1],
-        acc_px[0], acc_px[1], acc_ztmp, rects.lo, volume);
+        acc_mapsp2, acc_elen, acc_pu, acc_px, acc_ztmp, rects.lo, volume);
 
     const size_t blockz = (volumez + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     gpu_set_vel_diff2<<<blockz,THREADS_PER_BLOCK>>>(acc_zss, acc_ztmp,

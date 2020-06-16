@@ -95,6 +95,40 @@ public:
 };
 
 template<typename T>
+class AccessorMC : public Legion::MultiRegionAccessor<T,1,Legion::coord_t,
+                                Realm::MultiAffineAccessor<T,1,Legion::coord_t> >
+{
+public:
+  AccessorMC(const Legion::PhysicalRegion &region, Legion::FieldID fid)
+    : Legion::MultiRegionAccessor<T,1,Legion::coord_t,
+        Realm::MultiAffineAccessor<T,1,Legion::coord_t> >(region, fid) { }
+};
+
+// specialization for double
+template<>
+class AccessorMC<double> : public Legion::MultiRegionAccessor<double,1,Legion::coord_t,
+                                Realm::MultiAffineAccessor<double,1,Legion::coord_t> >
+{
+public:
+  AccessorMC(const Legion::PhysicalRegion &region, Legion::FieldID fid)
+    : Legion::MultiRegionAccessor<double,1,Legion::coord_t,
+        Realm::MultiAffineAccessor<double,1,Legion::coord_t> >(region, fid) 
+  { check_double_nan(*this, region); } 
+};
+
+// specialization for double2
+template<>
+class AccessorMC<double2> : public Legion::MultiRegionAccessor<double2,1,Legion::coord_t,
+                                Realm::MultiAffineAccessor<double2,1,Legion::coord_t> >
+{
+public:
+  AccessorMC(const Legion::PhysicalRegion &region, Legion::FieldID fid)
+    : Legion::MultiRegionAccessor<double2,1,Legion::coord_t,
+        Realm::MultiAffineAccessor<double2,1,Legion::coord_t> >(region, fid)
+  { check_double2_nan(*this, region); }
+};
+
+template<typename T>
 class AccessorWD : public Legion::FieldAccessor<WRITE_DISCARD,T,1,Legion::coord_t,
                                 Realm::AffineAccessor<T,1,Legion::coord_t> >
 {
@@ -214,10 +248,18 @@ using AccessorWD = typename Legion::FieldAccessor<WRITE_DISCARD,T,1,Legion::coor
 template <typename T>
 using AccessorRW = typename Legion::FieldAccessor<READ_WRITE,T,1,Legion::coord_t,
                                 Realm::AffineAccessor<T,1,Legion::coord_t> >;
+// multi-region compact accessor
+template <typename T>
+using AccessorMC = typename Legion::MultiRegionAccessor<T,1,Legion::coord_t,
+                                Realm::MultiAffineAccessor<T,1,Legion::coord_t> >;
 #endif
 
 template <typename REDOP, bool EXCLUSIVE=true>
 using AccessorRD = typename Legion::ReductionAccessor<REDOP,EXCLUSIVE,1,
       Legion::coord_t, Realm::AffineAccessor<typename REDOP::RHS,1,Legion::coord_t> >;
+
+template <typename REDOP, bool EXCLUSIVE=true>
+using AccessorRDC = typename Legion::ReductionAccessor<REDOP,EXCLUSIVE,1,
+      Legion::coord_t, Realm::MultiAffineAccessor<typename REDOP::RHS,1,Legion::coord_t> >;
 
 #endif /* MYLEGION_HH_ */

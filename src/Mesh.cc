@@ -32,31 +32,34 @@ using namespace std;
 using namespace Memory;
 using namespace Legion;
 
-
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {
     {
       TaskVariantRegistrar registrar(TID_CALCCTRS, "CPU calcctrs");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(registrar, 2, 3, FID_PXP);
       Runtime::preregister_task_variant<Mesh::calcCtrsTask>(registrar, "calcctrs");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCCTRS, "OMP calcctrs");
       registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(registrar, 2, 3, FID_PXP);
       Runtime::preregister_task_variant<Mesh::calcCtrsOMPTask>(registrar, "calcctrs");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCVOLS, "CPU calcvols");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(registrar, 1, 2, FID_PXP);
       Runtime::preregister_task_variant<int, Mesh::calcVolsTask>(registrar, "calcvols");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCVOLS, "OMP calcvols");
       registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(registrar, 1, 2, FID_PXP);
       Runtime::preregister_task_variant<int, Mesh::calcVolsOMPTask>(registrar, "calcvols");
     }
     {
@@ -81,12 +84,14 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_CALCEDGELEN, "CPU calcedgelen");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(registrar, 1, 2, FID_PXP);
       Runtime::preregister_task_variant<Mesh::calcEdgeLenTask>(registrar, "calcedgelen");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCEDGELEN, "OMP calcedgelen");
       registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(registrar, 1, 2, FID_PXP);
       Runtime::preregister_task_variant<Mesh::calcEdgeLenOMPTask>(registrar, "calcedgelen");
     }
     {
@@ -1251,14 +1256,9 @@ void Mesh::calcCtrsTask(
     const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
     const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
-    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
-    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
     const AccessorRO<int> acc_znump(regions[1], FID_ZNUMP);
     FieldID fid_px = task->regions[2].instance_fields[0];
-    const AccessorRO<double2> acc_px[2] = {
-        AccessorRO<double2>(regions[2], fid_px),
-        AccessorRO<double2>(regions[3], fid_px)
-    };
+    const AccessorMC<double2> acc_px(regions.begin()+2, regions.begin()+4, fid_px);
     FieldID fid_ex = task->regions[4].instance_fields[0];
     const AccessorWD<double2> acc_ex(regions[4], fid_ex);
     FieldID fid_zx = task->regions[5].instance_fields[0];
@@ -1272,12 +1272,10 @@ void Mesh::calcCtrsTask(
     for (PointIterator itr(runtime, iss); itr(); itr++)
     {
         const Pointer p1 = acc_mapsp1[*itr];
-        const int p1reg = acc_mapsp1reg[*itr];
         const Pointer p2 = acc_mapsp2[*itr];
-        const int p2reg = acc_mapsp2reg[*itr];
         const Pointer z = acc_mapsz[*itr];
-        const double2 px1 = acc_px[p1reg][p1];
-        const double2 px2 = acc_px[p2reg][p2];
+        const double2 px1 = acc_px[p1];
+        const double2 px2 = acc_px[p2];
         const double2 ex  = 0.5 * (px1 + px2);
         acc_ex[*itr] = ex;
         const int n = acc_znump[z];
@@ -1294,14 +1292,9 @@ void Mesh::calcCtrsOMPTask(
     const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
     const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
-    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
-    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
     const AccessorRO<int> acc_znump(regions[1], FID_ZNUMP);
     FieldID fid_px = task->regions[2].instance_fields[0];
-    const AccessorRO<double2> acc_px[2] = {
-        AccessorRO<double2>(regions[2], fid_px),
-        AccessorRO<double2>(regions[3], fid_px)
-    };
+    const AccessorMC<double2> acc_px(regions.begin()+2, regions.begin()+4, fid_px);
     FieldID fid_ex = task->regions[4].instance_fields[0];
     const AccessorWD<double2> acc_ex(regions[4], fid_ex);
     FieldID fid_zx = task->regions[5].instance_fields[0];
@@ -1321,12 +1314,10 @@ void Mesh::calcCtrsOMPTask(
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer p1 = acc_mapsp1[s];
-        const int p1reg = acc_mapsp1reg[s];
         const Pointer p2 = acc_mapsp2[s];
-        const int p2reg = acc_mapsp2reg[s];
         const Pointer z = acc_mapsz[s];
-        const double2 px1 = acc_px[p1reg][p1];
-        const double2 px2 = acc_px[p2reg][p2];
+        const double2 px1 = acc_px[p1];
+        const double2 px2 = acc_px[p2];
         const double2 ex  = 0.5 * (px1 + px2);
         acc_ex[s] = ex;
         const int n = acc_znump[z];
@@ -1382,13 +1373,8 @@ int Mesh::calcVolsTask(
     const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
     const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
-    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
-    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
     FieldID fid_px = task->regions[1].instance_fields[0];
-    const AccessorRO<double2> acc_px[2] = {
-        AccessorRO<double2>(regions[1], fid_px),
-        AccessorRO<double2>(regions[2], fid_px)
-    };
+    const AccessorMC<double2> acc_px(regions.begin()+1, regions.begin()+3, fid_px);
     FieldID fid_zx = task->regions[3].instance_fields[0];
     const AccessorRO<double2> acc_zx(regions[3], fid_zx);
     FieldID fid_sarea = task->regions[4].instance_fields[0];
@@ -1413,12 +1399,10 @@ int Mesh::calcVolsTask(
     for (PointIterator itr(runtime, iss); itr(); itr++)
     {
         const Pointer p1 = acc_mapsp1[*itr];
-        const int p1reg = acc_mapsp1reg[*itr];
         const Pointer p2 = acc_mapsp2[*itr];
-        const int p2reg = acc_mapsp2reg[*itr];
         const Pointer z = acc_mapsz[*itr];
-        const double2 px1 = acc_px[p1reg][p1];
-        const double2 px2 = acc_px[p2reg][p2];
+        const double2 px1 = acc_px[p1];
+        const double2 px2 = acc_px[p2];
         const double2 zx  = acc_zx[z];
 
         // compute side volumes, sum to zone
@@ -1446,13 +1430,8 @@ int Mesh::calcVolsOMPTask(
     const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
     const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
-    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
-    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
     FieldID fid_px = task->regions[1].instance_fields[0];
-    const AccessorRO<double2> acc_px[2] = {
-        AccessorRO<double2>(regions[1], fid_px),
-        AccessorRO<double2>(regions[2], fid_px)
-    };
+    const AccessorMC<double2> acc_px(regions.begin()+1, regions.begin()+3, fid_px);
     FieldID fid_zx = task->regions[3].instance_fields[0];
     const AccessorRO<double2> acc_zx(regions[3], fid_zx);
     FieldID fid_sarea = task->regions[4].instance_fields[0];
@@ -1483,12 +1462,10 @@ int Mesh::calcVolsOMPTask(
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer p1 = acc_mapsp1[s];
-        const int p1reg = acc_mapsp1reg[s];
         const Pointer p2 = acc_mapsp2[s];
-        const int p2reg = acc_mapsp2reg[s];
         const Pointer z = acc_mapsz[s];
-        const double2 px1 = acc_px[p1reg][p1];
-        const double2 px2 = acc_px[p2reg][p2];
+        const double2 px1 = acc_px[p1];
+        const double2 px2 = acc_px[p2];
         const double2 zx  = acc_zx[z];
 
         // compute side volumes, sum to zone
@@ -1604,23 +1581,16 @@ void Mesh::calcEdgeLenTask(
         Runtime *runtime) {
     const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
-    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
-    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
-    const AccessorRO<double2> acc_px[2] = {
-        AccessorRO<double2>(regions[1], FID_PXP),
-        AccessorRO<double2>(regions[2], FID_PXP)
-    };
+    const AccessorMC<double2> acc_px(regions.begin()+1, regions.begin()+3, FID_PXP);
     const AccessorWD<double> acc_elen(regions[3], FID_ELEN);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     for (PointIterator itr(runtime, iss); itr(); itr++)
     {
         const Pointer p1 = acc_mapsp1[*itr];
-        const int p1reg = acc_mapsp1reg[*itr];
         const Pointer p2 = acc_mapsp2[*itr];
-        const int p2reg = acc_mapsp2reg[*itr];
-        const double2 px1 = acc_px[p1reg][p1];
-        const double2 px2 = acc_px[p2reg][p2];
+        const double2 px1 = acc_px[p1];
+        const double2 px2 = acc_px[p2];
 
         const double elen = length(px2 - px1);
         acc_elen[*itr] = elen;
@@ -1637,10 +1607,7 @@ void Mesh::calcEdgeLenOMPTask(
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
     const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
     const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
-    const AccessorRO<double2> acc_px[2] = {
-        AccessorRO<double2>(regions[1], FID_PXP),
-        AccessorRO<double2>(regions[2], FID_PXP)
-    };
+    const AccessorMC<double2> acc_px(regions.begin()+1, regions.begin()+3, FID_PXP);
     const AccessorWD<double> acc_elen(regions[3], FID_ELEN);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
@@ -1650,11 +1617,9 @@ void Mesh::calcEdgeLenOMPTask(
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer p1 = acc_mapsp1[s];
-        const int p1reg = acc_mapsp1reg[s];
         const Pointer p2 = acc_mapsp2[s];
-        const int p2reg = acc_mapsp2reg[s];
-        const double2 px1 = acc_px[p1reg][p1];
-        const double2 px2 = acc_px[p2reg][p2];
+        const double2 px1 = acc_px[p1];
+        const double2 px2 = acc_px[p2];
 
         const double elen = length(px2 - px1);
         acc_elen[s] = elen;

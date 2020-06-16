@@ -113,12 +113,14 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_CALCWORK, "CPU calcwork");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(registrar, 1, 2, FID_PU, FID_PU0, FID_PXP);
       Runtime::preregister_task_variant<Hydro::calcWorkTask>(registrar, "calcwork");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCWORK, "OMP calcwork");
       registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
       registrar.set_leaf();
+      add_colocation_constraint(registrar, 1, 2, FID_PU, FID_PU0, FID_PXP);
       Runtime::preregister_task_variant<Hydro::calcWorkOMPTask>(registrar, "calcwork");
     }
     {
@@ -540,8 +542,6 @@ Future Hydro::doCycle(
     launchcc.add_field(0, FID_MAPSP1);
     launchcc.add_field(0, FID_MAPSP2);
     launchcc.add_field(0, FID_MAPSZ);
-    launchcc.add_field(0, FID_MAPSP1REG);
-    launchcc.add_field(0, FID_MAPSP2REG);
     launchcc.add_region_requirement(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
     launchcc.add_field(1, FID_ZNUMP);
@@ -567,8 +567,6 @@ Future Hydro::doCycle(
     launchcv.add_field(0, FID_MAPSP1);
     launchcv.add_field(0, FID_MAPSP2);
     launchcv.add_field(0, FID_MAPSZ);
-    launchcv.add_field(0, FID_MAPSP1REG);
-    launchcv.add_field(0, FID_MAPSP2REG);
     launchcv.add_region_requirement(
             RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
     launchcv.add_field(1, FID_PXP);
@@ -609,8 +607,6 @@ Future Hydro::doCycle(
             RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
     launchcel.add_field(0, FID_MAPSP1);
     launchcel.add_field(0, FID_MAPSP2);
-    launchcel.add_field(0, FID_MAPSP1REG);
-    launchcel.add_field(0, FID_MAPSP2REG);
     launchcel.add_region_requirement(
             RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
     launchcel.add_field(1, FID_PXP);
@@ -736,8 +732,6 @@ Future Hydro::doCycle(
     launchscd.add_field(0, FID_MAPSP1);
     launchscd.add_field(0, FID_MAPSP2);
     launchscd.add_field(0, FID_MAPSS3);
-    launchscd.add_field(0, FID_MAPSP1REG);
-    launchscd.add_field(0, FID_MAPSP2REG);
     launchscd.add_field(0, FID_EXP);
     launchscd.add_field(0, FID_ELEN);
     launchscd.add_region_requirement(
@@ -775,8 +769,6 @@ Future Hydro::doCycle(
     launchsqcf.add_field(0, FID_MAPSP1);
     launchsqcf.add_field(0, FID_MAPSP2);
     launchsqcf.add_field(0, FID_MAPSS3);
-    launchsqcf.add_field(0, FID_MAPSP1REG);
-    launchsqcf.add_field(0, FID_MAPSP2REG);
     launchsqcf.add_field(0, FID_ELEN);
     launchsqcf.add_field(0, FID_CDIV);
     launchsqcf.add_field(0, FID_CDU);
@@ -827,8 +819,6 @@ Future Hydro::doCycle(
     launchsvd.add_field(0, FID_MAPSZ);
     launchsvd.add_field(0, FID_MAPSP1);
     launchsvd.add_field(0, FID_MAPSP2);
-    launchsvd.add_field(0, FID_MAPSP1REG);
-    launchsvd.add_field(0, FID_MAPSP2REG);
     launchsvd.add_field(0, FID_ELEN);
     launchsvd.add_region_requirement(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
@@ -988,8 +978,6 @@ Future Hydro::doCycle(
     launchcw.add_field(0, FID_MAPSP1);
     launchcw.add_field(0, FID_MAPSP2);
     launchcw.add_field(0, FID_MAPSZ);
-    launchcw.add_field(0, FID_MAPSP1REG);
-    launchcw.add_field(0, FID_MAPSP2REG);
     launchcw.add_field(0, FID_SFP);
     launchcw.add_field(0, FID_SFQ);
     launchcw.add_region_requirement(
@@ -1452,22 +1440,11 @@ void Hydro::calcWorkTask(
     const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
     const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
-    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
-    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
     const AccessorRO<double2> acc_sf(regions[0], FID_SFP);
     const AccessorRO<double2> acc_sf2(regions[0], FID_SFQ);
-    const AccessorRO<double2> acc_pu0[2] = {
-        AccessorRO<double2>(regions[1], FID_PU0),
-        AccessorRO<double2>(regions[2], FID_PU0)
-    };
-    const AccessorRO<double2> acc_pu[2] = {
-        AccessorRO<double2>(regions[1], FID_PU),
-        AccessorRO<double2>(regions[2], FID_PU)
-    };
-    const AccessorRO<double2> acc_px[2] = {
-        AccessorRO<double2>(regions[1], FID_PXP),
-        AccessorRO<double2>(regions[2], FID_PXP)
-    };
+    const AccessorMC<double2> acc_pu0(regions.begin()+1, regions.begin()+3, FID_PU0);
+    const AccessorMC<double2> acc_pu(regions.begin()+1, regions.begin()+3, FID_PU);
+    const AccessorMC<double2> acc_px(regions.begin()+1, regions.begin()+3, FID_PXP);
     const AccessorRW<double> acc_zw(regions[3], FID_ZW);
     const AccessorRW<double> acc_zetot(regions[4], FID_ZETOT);
 
@@ -1489,21 +1466,19 @@ void Hydro::calcWorkTask(
     {
         const Pointer s = *its;
         const Pointer p1 = acc_mapsp1[s];
-        const int p1reg = acc_mapsp1reg[s];
         const Pointer p2 = acc_mapsp2[s];
-        const int p2reg = acc_mapsp2reg[s];
         const Pointer z = acc_mapsz[s];
         const double2 sf = acc_sf[s];
         const double2 sf2 = acc_sf2[s];
         const double2 sftot = sf + sf2;
-        const double2 pu01 = acc_pu0[p1reg][p1];
-        const double2 pu1 = acc_pu[p1reg][p1];
+        const double2 pu01 = acc_pu0[p1];
+        const double2 pu1 = acc_pu[p1];
         const double sd1 = dot(sftot, (pu01 + pu1));
-        const double2 pu02 = acc_pu0[p2reg][p2];
-        const double2 pu2 = acc_pu[p2reg][p2];
+        const double2 pu02 = acc_pu0[p2];
+        const double2 pu2 = acc_pu[p2];
         const double sd2 = dot(-sftot, (pu02 + pu2));
-        const double2 px1 = acc_px[p1reg][p1];
-        const double2 px2 = acc_px[p2reg][p2];
+        const double2 px1 = acc_px[p1];
+        const double2 px2 = acc_px[p2];
         const double dwork = -dth * (sd1 * px1.x + sd2 * px2.x);
 
         acc_zetot[z] += dwork;
@@ -1522,22 +1497,11 @@ void Hydro::calcWorkOMPTask(
     const AccessorRO<Pointer> acc_mapsp1(regions[0], FID_MAPSP1);
     const AccessorRO<Pointer> acc_mapsp2(regions[0], FID_MAPSP2);
     const AccessorRO<Pointer> acc_mapsz(regions[0], FID_MAPSZ);
-    const AccessorRO<int> acc_mapsp1reg(regions[0], FID_MAPSP1REG);
-    const AccessorRO<int> acc_mapsp2reg(regions[0], FID_MAPSP2REG);
     const AccessorRO<double2> acc_sf(regions[0], FID_SFP);
     const AccessorRO<double2> acc_sf2(regions[0], FID_SFQ);
-    const AccessorRO<double2> acc_pu0[2] = {
-        AccessorRO<double2>(regions[1], FID_PU0),
-        AccessorRO<double2>(regions[2], FID_PU0)
-    };
-    const AccessorRO<double2> acc_pu[2] = {
-        AccessorRO<double2>(regions[1], FID_PU),
-        AccessorRO<double2>(regions[2], FID_PU)
-    };
-    const AccessorRO<double2> acc_px[2] = {
-        AccessorRO<double2>(regions[1], FID_PXP),
-        AccessorRO<double2>(regions[2], FID_PXP)
-    };
+    const AccessorMC<double2> acc_pu0(regions.begin()+1, regions.begin()+3, FID_PU0);
+    const AccessorMC<double2> acc_pu(regions.begin()+1, regions.begin()+3, FID_PU);
+    const AccessorMC<double2> acc_px(regions.begin()+1, regions.begin()+3, FID_PXP);
     const AccessorRW<double> acc_zw(regions[3], FID_ZW);
     const AccessorRW<double> acc_zetot(regions[4], FID_ZETOT);
 
@@ -1562,21 +1526,19 @@ void Hydro::calcWorkOMPTask(
     for (coord_t s = rects.lo[0]; s <= rects.hi[0]; s++)
     {
         const Pointer p1 = acc_mapsp1[s];
-        const int p1reg = acc_mapsp1reg[s];
         const Pointer p2 = acc_mapsp2[s];
-        const int p2reg = acc_mapsp2reg[s];
         const Pointer z = acc_mapsz[s];
         const double2 sf = acc_sf[s];
         const double2 sf2 = acc_sf2[s];
         const double2 sftot = sf + sf2;
-        const double2 pu01 = acc_pu0[p1reg][p1];
-        const double2 pu1 = acc_pu[p1reg][p1];
+        const double2 pu01 = acc_pu0[p1];
+        const double2 pu1 = acc_pu[p1];
         const double sd1 = dot(sftot, (pu01 + pu1));
-        const double2 pu02 = acc_pu0[p2reg][p2];
-        const double2 pu2 = acc_pu[p2reg][p2];
+        const double2 pu02 = acc_pu0[p2];
+        const double2 pu2 = acc_pu[p2];
         const double sd2 = dot(-sftot, (pu02 + pu2));
-        const double2 px1 = acc_px[p1reg][p1];
-        const double2 px2 = acc_px[p2reg][p2];
+        const double2 px1 = acc_px[p1];
+        const double2 px2 = acc_px[p2];
         const double dwork = -dth * (sd1 * px1.x + sd2 * px2.x);
 
         SumOp<double>::apply<false/*exclusive*/>(acc_zetot[z], dwork);
