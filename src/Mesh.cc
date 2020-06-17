@@ -767,7 +767,8 @@ void Mesh::initParallel() {
     // Now we need to compact our points and generate our point partition tree
     // First compute our owned points
     IndexPartition ip_owned_points = runtime->create_partition_by_field(ctx, 
-                                    lr_temp_points, lr_temp_points, FID_PIECE, is_piece);
+                                    lr_temp_points, lr_temp_points, FID_PIECE, is_piece,
+                                    AUTO_GENERATE_ID, 0, PennantMapper::INITIALIZATION);
     runtime->attach_name(ip_owned_points, "owned points");
     
     // Now find the set of points that we can reach from our points through all our sides
@@ -836,13 +837,16 @@ void Mesh::initParallel() {
     IndexPartition private_ip = runtime->create_equal_partition(ctx, is_private, is_private);
     IndexPartition ippall = runtime->create_partition_by_image_range(ctx, isp,
         runtime->get_logical_partition(lr_all_range, private_ip), lr_all_range, 
-        FID_RANGE, is_private);
+        FID_RANGE, is_private, LEGION_DISJOINT_COMPLETE_KIND, AUTO_GENERATE_ID,
+        0, PennantMapper::INITIALIZATION);
     IndexSpace is_prv = runtime->get_index_subspace(ippall, DomainPoint(0));
     IndexSpace is_shr = runtime->get_index_subspace(ippall, DomainPoint(1));
     IndexPartition ip_prv = runtime->create_partition_by_image_range(ctx, is_prv,
-        lp_private_range, lr_private_range, FID_RANGE, is_piece);
+        lp_private_range, lr_private_range, FID_RANGE, is_piece,
+        LEGION_DISJOINT_COMPLETE_KIND, PID_PRIVATE, 0, PennantMapper::INITIALIZATION);
     IndexPartition ip_mstr = runtime->create_partition_by_image_range(ctx, is_shr,
-        lp_shared_range, lr_shared_range, FID_RANGE, is_piece);
+        lp_shared_range, lr_shared_range, FID_RANGE, is_piece,
+        LEGION_DISJOINT_COMPLETE_KIND, PID_SHARED, 0, PennantMapper::INITIALIZATION);
 
     // Now make the actual point logical region, get the partitions, and copy over data
 #ifdef PRECOMPACTED_RECT_POINTS
@@ -879,7 +883,8 @@ void Mesh::initParallel() {
       IndexCopyLauncher update_launcher(is_piece);
       update_launcher.add_copy_requirements(
           RegionRequirement(lp_points_equal, 0/*identity projection*/, 
-                            READ_ONLY, EXCLUSIVE, lr_temp_points),
+                            READ_ONLY, EXCLUSIVE, lr_temp_points,
+                            PennantMapper::INITIALIZATION),
           RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
       update_launcher.add_src_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP1);
@@ -891,7 +896,8 @@ void Mesh::initParallel() {
       IndexCopyLauncher update_launcher(is_piece);
       update_launcher.add_copy_requirements(
           RegionRequirement(lp_points_equal, 0/*identity projection*/, 
-                            READ_ONLY, EXCLUSIVE, lr_temp_points),
+                            READ_ONLY, EXCLUSIVE, lr_temp_points,
+                            PennantMapper::INITIALIZATION),
           RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
       update_launcher.add_src_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP2);
@@ -903,7 +909,8 @@ void Mesh::initParallel() {
     {
       TaskLauncher update_launcher(TID_TEMPGATHER, TaskArgument());
       update_launcher.add_region_requirement(
-          RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points));
+          RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points,
+            PennantMapper::INITIALIZATION));
       update_launcher.add_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_region_requirement(
           RegionRequirement(lrs, WRITE_DISCARD, EXCLUSIVE, lrs));
@@ -916,7 +923,8 @@ void Mesh::initParallel() {
     {
       TaskLauncher update_launcher(TID_TEMPGATHER, TaskArgument());
       update_launcher.add_region_requirement(
-          RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points));
+          RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points,
+            PennantMapper::INITIALIZATION));
       update_launcher.add_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_region_requirement(
           RegionRequirement(lrs, WRITE_DISCARD, EXCLUSIVE, lrs));
@@ -934,7 +942,7 @@ void Mesh::initParallel() {
     // Note that this gets scoped by the is_shr index space to avoid any
     // private points
     IndexPartition ip_shr = runtime->create_partition_by_image(ctx, is_shr, 
-                                            lps, lrs, FID_MAPSP1, is_piece);
+        lps, lrs, FID_MAPSP1, is_piece, LEGION_ALIASED_COMPLETE_KIND, PID_SHARED);
     lppshr = runtime->get_logical_partition_by_tree(ip_shr, fsp, lrp.get_tree_id());
     runtime->attach_name(lppshr, "lppshr");
 
@@ -1164,6 +1172,7 @@ void Mesh::calcOwnershipParallel(
       RegionRequirement(lp_sides, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
   launcher.add_field(1/*index*/, FID_MAPSP1REG);
   launcher.add_field(1/*index*/, FID_MAPSP2REG);
+  // Not an initialization task because we will re-use these regions
   runtime->execute_index_space(ctx, launcher);
 }
 
@@ -1233,10 +1242,12 @@ void Mesh::calcCtrsParallel(
       RegionRequirement(lp_zones, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_zones));
   launcher.add_field(1/*index*/, FID_ZNUMP);
   launcher.add_region_requirement(
-      RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+      RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points, 
+        PennantMapper::POINT_SUBREGION));
   launcher.add_field(2/*index*/, FID_PX);
   launcher.add_region_requirement(
-      RegionRequirement(lp_points_shared, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+      RegionRequirement(lp_points_shared, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points,
+        PennantMapper::POINT_SUBREGION));
   launcher.add_field(3/*index*/, FID_PX);
   launcher.add_region_requirement(
       RegionRequirement(lp_sides, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
@@ -1244,6 +1255,8 @@ void Mesh::calcCtrsParallel(
   launcher.add_region_requirement(
       RegionRequirement(lp_zones, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_zones));
   launcher.add_field(5/*index*/, FID_ZX);
+  // We don't count this as an initialization task because all its regions are ones
+  // that will be re-used during the iteration
   runtime->execute_index_space(ctx, launcher);
 }
 
@@ -1346,10 +1359,12 @@ Future Mesh::calcVolsParallel(
   launcher.add_field(0/*index*/, FID_MAPSP1REG);
   launcher.add_field(0/*index*/, FID_MAPSP2REG);
   launcher.add_region_requirement(
-      RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+      RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points,
+        PennantMapper::POINT_SUBREGION));
   launcher.add_field(1/*index*/, FID_PX);
   launcher.add_region_requirement(
-      RegionRequirement(lp_points_shared, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+      RegionRequirement(lp_points_shared, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points,
+        PennantMapper::POINT_SUBREGION));
   launcher.add_field(2/*index*/, FID_PX);
   launcher.add_region_requirement(
       RegionRequirement(lp_zones, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_zones));
@@ -1848,13 +1863,16 @@ void Mesh::compactPointsParallel(
   IndexTaskLauncher launcher(TID_COMPACTPOINTS, is_piece,
                               TaskArgument(), ArgumentMap());
   launcher.add_region_requirement(RegionRequirement(lp_points,
-        0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_points));
+        0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_points,
+        PennantMapper::INITIALIZATION));
   launcher.add_field(0/*index*/, FID_PX);
   launcher.add_region_requirement(RegionRequirement(lp_temp_points,
-        0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_temp_points));
+        0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_temp_points,
+        PennantMapper::INITIALIZATION));
   launcher.add_field(1/*index*/, FID_PX);
   launcher.add_region_requirement(RegionRequirement(lp_temp_points,
-        0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_temp_points));
+        0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_temp_points,
+        PennantMapper::INITIALIZATION));
   launcher.add_field(2/*index*/, FID_MAPLOAD2DENSE);
 
   runtime->execute_index_space(ctx, launcher);

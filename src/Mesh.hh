@@ -30,6 +30,12 @@ class WriteXY;
 class ExportGold;
 class PennantMapper;
 
+enum PartitionID {
+    PID_PRIVATE,
+    PID_MASTER,
+    PID_SHARED,
+};
+
 enum MeshFieldID {
     FID_NUMSBAD = 'M' * 100,
     FID_MAPSP1,

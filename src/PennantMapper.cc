@@ -204,9 +204,12 @@ void PennantMapper::map_task(const MapperContext ctx,
     output.target_procs = local_cpus;
   }
   output.chosen_instances.resize(task.regions.size());  
+  // The first time we map the TID_CALCCTRS task should be the 
+  // first time that we map lppshr
   if ((task.tag & PREFER_GPU) && !local_gpus.empty()) {
     for (unsigned idx = 0; idx < task.regions.size(); idx++)
     {
+      const RegionRequirement &req = task.regions[idx];
       // See if it is a reduction region requirement or not
       if (task.regions[idx].privilege == REDUCE)
         create_reduction_instances(ctx, task, idx, 
@@ -219,11 +222,13 @@ void PennantMapper::map_task(const MapperContext ctx,
 #endif
                                    output.chosen_instances[idx]);
       else if (task.regions[idx].tag & PREFER_ZCOPY)
-        map_pennant_array(ctx, task, idx, task.regions[idx].region,
+        map_pennant_array(ctx, task, idx, req.region,
                           local_zerocopy,
-                          output.chosen_instances[idx]);
+                          output.chosen_instances[idx],
+                          req.tag & POINT_SUBREGION,
+                          req.tag & INITIALIZATION, task.index_point);
       else
-        map_pennant_array(ctx, task, idx, task.regions[idx].region, 
+        map_pennant_array(ctx, task, idx, req.region, 
 #ifdef NAN_CHECK
         // If we're doing nan-checks make sure things are in zero-copy
         // so we can read-the values directly from the host
@@ -231,20 +236,25 @@ void PennantMapper::map_task(const MapperContext ctx,
 #else
                           local_framebuffer,
 #endif
-                          output.chosen_instances[idx]);
+                          output.chosen_instances[idx],
+                          req.tag & POINT_SUBREGION,
+                          req.tag & INITIALIZATION, task.index_point);
     }
   } else {
     for (unsigned idx = 0; idx < task.regions.size(); idx++)
     {
+      const RegionRequirement &req = task.regions[idx];
       // See if it is a reduction region requirement or not
       if (task.regions[idx].privilege == REDUCE)
         create_reduction_instances(ctx, task, idx, 
             local_numa.exists() ? local_numa : local_sysmem,
                                    output.chosen_instances[idx]);
       else
-        map_pennant_array(ctx, task, idx, task.regions[idx].region, 
+        map_pennant_array(ctx, task, idx, req.region, 
             local_numa.exists() ? local_numa : local_sysmem, 
-                          output.chosen_instances[idx]);
+                          output.chosen_instances[idx],
+                          req.tag & POINT_SUBREGION,
+                          req.tag & INITIALIZATION, task.index_point);
     }
   }
   runtime->acquire_instances(ctx, output.chosen_instances);
@@ -306,13 +316,20 @@ void PennantMapper::map_copy(const MapperContext ctx,
                                         copy.src_requirements.front());
 #endif
     assert(fbmem.kind() == Memory::GPU_FB_MEM);
-    for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
-      map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, fbmem,
-                        output.src_instances[idx]);
-    for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
+    for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++) {
+      const RegionRequirement &req = copy.src_requirements[idx];
+      map_pennant_array(ctx, copy, idx, req.region, fbmem,
+                        output.src_instances[idx],
+                        req.tag & POINT_SUBREGION,
+                        req.tag & INITIALIZATION, copy.index_point);
+    }
+    for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++) {
+      const RegionRequirement &req = copy.dst_requirements[idx];
       map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
-                        copy.dst_requirements[idx].region, fbmem,
-                        output.dst_instances[idx]);
+                        req.region, fbmem, output.dst_instances[idx],
+                        req.tag & POINT_SUBREGION,
+                        req.tag & INITIALIZATION, copy.index_point);
+    }
   } else if (!local_omps.empty() && copy.src_indirect_requirements.empty()) {
     assert(copy.is_index_space);
     const Point<1> point = copy.index_point;
@@ -327,13 +344,20 @@ void PennantMapper::map_copy(const MapperContext ctx,
                                         copy.src_requirements.front());
 #endif
     assert(numa.kind() == Memory::SOCKET_MEM);
-    for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
-      map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, numa,
-                        output.src_instances[idx]);
-    for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
+    for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++) {
+      const RegionRequirement &req = copy.src_requirements[idx];
+      map_pennant_array(ctx, copy, idx, req.region, numa,
+                        output.src_instances[idx],
+                        req.tag & POINT_SUBREGION,
+                        req.tag & INITIALIZATION, copy.index_point);
+    }
+    for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++) {
+      const RegionRequirement &req = copy.dst_requirements[idx];
       map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
-                        copy.dst_requirements[idx].region, numa,
-                        output.dst_instances[idx]);
+                        req.region, numa, output.dst_instances[idx],
+                        req.tag & POINT_SUBREGION,
+                        req.tag & INITIALIZATION, copy.index_point);
+    }
   } else {
 #ifdef PENNANT_DISABLE_CONTROL_REPLICATION
     assert(copy.is_index_space);
@@ -344,21 +368,29 @@ void PennantMapper::map_copy(const MapperContext ctx,
 #else
     const Memory sysmem = local_sysmem;
 #endif
-    for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++)
-      map_pennant_array(ctx, copy, idx, copy.src_requirements[idx].region, sysmem,
-                        output.src_instances[idx]);
-    for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++)
+    for (unsigned idx = 0; idx < copy.src_requirements.size(); idx++) {
+      const RegionRequirement &req = copy.src_requirements[idx];
+      map_pennant_array(ctx, copy, idx, req.region, sysmem,
+                        output.src_instances[idx],
+                        req.tag & POINT_SUBREGION,
+                        req.tag & INITIALIZATION, copy.index_point);
+    }
+    for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++) {
+      const RegionRequirement &req = copy.dst_requirements[idx];
       map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
-                        copy.dst_requirements[idx].region, sysmem,
-                        output.dst_instances[idx]);
+                        req.region, sysmem, output.dst_instances[idx],
+                        req.tag & POINT_SUBREGION,
+                        req.tag & INITIALIZATION, copy.index_point);
+    }
     if (!copy.src_indirect_requirements.empty())
     {
       const size_t offset = copy.src_requirements.size() + copy.dst_requirements.size();
       for (unsigned idx = 0; idx < copy.src_indirect_requirements.size(); idx++)
       {
+        const RegionRequirement &req = copy.src_indirect_requirements[idx];
         std::vector<PhysicalInstance> insts;
-        map_pennant_array(ctx, copy, idx + offset, 
-                          copy.src_indirect_requirements[idx].region, sysmem, insts);
+        map_pennant_array(ctx, copy, idx + offset, req.region, sysmem, insts,
+            req.tag & POINT_SUBREGION, req.tag & INITIALIZATION, copy.index_point);
         assert(insts.size() == 1);
         output.src_indirect_instances[idx] = insts[0];
       }
@@ -447,8 +479,11 @@ void PennantMapper::map_partition(const MapperContext ctx,
 #else
   const Memory sysmem = local_sysmem;
 #endif
-  map_pennant_array(ctx, partition, 0, partition.requirement.region, sysmem,
-                    output.chosen_instances);
+  const RegionRequirement &req = partition.requirement;
+  map_pennant_array(ctx, partition, 0, req.region, sysmem,
+                    output.chosen_instances,
+                    req.tag & POINT_SUBREGION,
+                    req.tag & INITIALIZATION, partition.index_point);
   runtime->acquire_instances(ctx, output.chosen_instances);
 }
 
@@ -494,7 +529,9 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
                                       const Mappable &mappable, unsigned index, 
                                       LogicalRegion region, Memory target,
                                       std::vector<PhysicalInstance> &instances,
-                                      bool initialization_instance)
+                                      bool point_subregion,
+                                      bool initialization_region,
+                                      const DomainPoint &index_point)
 {
   const std::pair<LogicalRegion,Memory> key(region, target);
   std::map<std::pair<LogicalRegion,Memory>,PhysicalInstance>::const_iterator
@@ -503,6 +540,9 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
     instances.push_back(finder->second);
     return;
   }
+  // disable re-entrant here so we get atomicity
+  runtime->disable_reentrant(ctx);
+
   // First time through make an instance
 
   // Make a big instance of the top-level region for all
@@ -519,8 +559,27 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
   }
   std::vector<LogicalRegion> regions(1, region);
   LayoutConstraintSet layout_constraints;
-  // No specialization
-  layout_constraints.add_constraint(SpecializedConstraint());
+  // Have all the fields for the instance available
+  std::vector<FieldID> all_fields;
+  runtime->get_field_space_fields(ctx, region.get_field_space(), all_fields);
+  layout_constraints.add_constraint(
+      FieldConstraint(all_fields, false/*contiguous*/, false/*inorder*/));
+#if 0
+  // Check to see if this is a point logical region, if it is then we're
+  // going to include the ghost regions as well in this instances
+  if (all_fields.find(FID_PXP) != all_fields.end())
+  {
+    // This is a point region so make a compact representation of this instance
+    // for both this region and it's ghost region
+    
+    // Don't permit any bloating of the instance, we want to minimize space for now
+    layout_constraints.add_constraint(
+        SpecializedConstraint(LEGION_COMPACT_SPECIALIZE, 0, false, false,
+          SIZE_MAX/*max number of pieces*/, 0/*total overhead*/));
+  }
+  else // Make a normal affine layout
+#endif
+    layout_constraints.add_constraint(SpecializedConstraint(LEGION_AFFINE_SPECIALIZE));
   // SOA dimension ordering (all pennant arrays are 1-D)
   std::vector<DimensionKind> dimension_ordering(2);
   dimension_ordering[0] = DIM_X;
@@ -529,15 +588,11 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
                                                        false/*contiguous*/));
   // Constrained for the target memory kind
   layout_constraints.add_constraint(MemoryConstraint(target.kind()));
-  // Have all the fields for the instance available
-  std::vector<FieldID> all_fields;
-  runtime->get_field_space_fields(ctx, region.get_field_space(), all_fields);
-  layout_constraints.add_constraint(
-      FieldConstraint(all_fields, false/*contiguous*/, false/*inorder*/));
+  
   PhysicalInstance result; bool created;
   if (!runtime->find_or_create_physical_instance(ctx, target, layout_constraints,
         regions, result, created, true/*acquire*/, 
-        initialization_instance ? 0/*normal GC priority*/ : GC_NEVER_PRIORITY)) {
+        initialization_region ? 0/*normal GC priority*/ : GC_NEVER_PRIORITY)) {
     fprintf(stderr,"Pennant mapper is out of memory!\n");
     switch (mappable.get_mappable_type())
     {
@@ -571,8 +626,20 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
     assert(false);
   }
   instances.push_back(result);
-  // Save the result for future use
-  local_instances[key] = result;
+  // Don't record this for the future if it is an initialization instance
+  if (!initialization_region)
+  {
+    // Save the result for future use
+    local_instances[key] = result;
+    // Add this entry for any other regions as well
+    for (unsigned idx = 1; idx < regions.size(); idx++)
+    {
+      const std::pair<LogicalRegion,Memory> key2(regions[idx], target);   
+      local_instances[key2] = result;
+    }
+  }
+  // reenable reentrant mapper calls
+  runtime->enable_reentrant(ctx);
 }
 
 void PennantMapper::create_reduction_instances(const MapperContext ctx,

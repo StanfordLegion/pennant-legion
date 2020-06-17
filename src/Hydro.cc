@@ -392,10 +392,12 @@ void Hydro::initParallel() {
       IndexTaskLauncher launcher(TID_INITRADIALVEL, is_piece,
             TaskArgument(&args, sizeof(args)), ArgumentMap());
       launcher.add_region_requirement(
-          RegionRequirement(lppprv, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+          RegionRequirement(lppprv, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp, 
+            PennantMapper::POINT_SUBREGION));
       launcher.add_field(0/*index*/, FID_PX);
       launcher.add_region_requirement(
-          RegionRequirement(lppprv, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrp));
+          RegionRequirement(lppprv, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrp,
+            PennantMapper::POINT_SUBREGION));
       launcher.add_field(1/*index*/, FID_PU);
       runtime->execute_index_space(ctx, launcher);
     }
@@ -403,10 +405,12 @@ void Hydro::initParallel() {
       IndexTaskLauncher launcher(TID_INITRADIALVEL, is_piece,
             TaskArgument(&args, sizeof(args)), ArgumentMap());
       launcher.add_region_requirement(
-          RegionRequirement(lppmstr, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+          RegionRequirement(lppmstr, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp,
+            PennantMapper::POINT_SUBREGION));
       launcher.add_field(0/*index*/, FID_PX);
       launcher.add_region_requirement(
-          RegionRequirement(lppmstr, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrp));
+          RegionRequirement(lppmstr, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrp,
+            PennantMapper::POINT_SUBREGION));
       launcher.add_field(1/*index*/, FID_PU);
       runtime->execute_index_space(ctx, launcher);
     }
@@ -489,10 +493,12 @@ Future Hydro::doCycle(
     for (int part = 0; part < 2; ++part) {
         LogicalPartition& lppcurr = (part == 0 ? lppprv : lppmstr);
         launchcfd.src_requirements[0] = 
-                RegionRequirement(lppcurr, 0, READ_ONLY, EXCLUSIVE, lrp);
+                RegionRequirement(lppcurr, 0, READ_ONLY, EXCLUSIVE, lrp, 
+                    PennantMapper::POINT_SUBREGION);
         launchcfd.add_src_field(0, FID_PX);
         launchcfd.dst_requirements[0] = 
-                RegionRequirement(lppcurr, 0, WRITE_DISCARD, EXCLUSIVE, lrp);
+                RegionRequirement(lppcurr, 0, WRITE_DISCARD, EXCLUSIVE, lrp, 
+                    PennantMapper::POINT_SUBREGION);
         launchcfd.add_dst_field(0, FID_PX0);
         runtime->issue_copy_operation(ctx, launchcfd);
 
@@ -520,12 +526,12 @@ Future Hydro::doCycle(
         launchaph.region_requirements.clear();
         launchaph.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        READ_ONLY, EXCLUSIVE, lrp));
+                        READ_ONLY, EXCLUSIVE, lrp, PennantMapper::POINT_SUBREGION));
         launchaph.add_field(0, FID_PX0);
         launchaph.add_field(0, FID_PU0);
         launchaph.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        WRITE_DISCARD, EXCLUSIVE, lrp));
+                        WRITE_DISCARD, EXCLUSIVE, lrp, PennantMapper::POINT_SUBREGION));
         launchaph.add_field(1, FID_PXP);
         // Only really need OpenMP for the private part
         if (part == 0)
@@ -546,10 +552,12 @@ Future Hydro::doCycle(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
     launchcc.add_field(1, FID_ZNUMP);
     launchcc.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchcc.add_field(2, FID_PXP);
     launchcc.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchcc.add_field(3, FID_PXP);
     launchcc.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
@@ -568,10 +576,12 @@ Future Hydro::doCycle(
     launchcv.add_field(0, FID_MAPSP2);
     launchcv.add_field(0, FID_MAPSZ);
     launchcv.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchcv.add_field(1, FID_PXP);
     launchcv.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchcv.add_field(2, FID_PXP);
     launchcv.add_region_requirement(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
@@ -608,10 +618,12 @@ Future Hydro::doCycle(
     launchcel.add_field(0, FID_MAPSP1);
     launchcel.add_field(0, FID_MAPSP2);
     launchcel.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchcel.add_field(1, FID_PXP);
     launchcel.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchcel.add_field(2, FID_PXP);
     launchcel.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
@@ -660,11 +672,12 @@ Future Hydro::doCycle(
     launchccm.add_field(1, FID_ZRP);
     launchccm.add_field(1, FID_ZAREAP);
     launchccm.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_WRITE, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, READ_WRITE, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchccm.add_field(2, FID_PMASWT);
     launchccm.add_region_requirement(
             RegionRequirement(lppshr, 0, OPID_SUMDBL,
-                    SIMULTANEOUS, lrp));
+                    SIMULTANEOUS, lrp, PennantMapper::POINT_SUBREGION));
     launchccm.add_field(3, FID_PMASWT);
     launchccm.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchccm);
@@ -739,11 +752,13 @@ Future Hydro::doCycle(
     launchscd.add_field(1, FID_ZNUMP);
     launchscd.add_field(1, FID_ZXP);
     launchscd.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchscd.add_field(2, FID_PXP);
     launchscd.add_field(2, FID_PU0);
     launchscd.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchscd.add_field(3, FID_PXP);
     launchscd.add_field(3, FID_PU0);
     launchscd.add_region_requirement(
@@ -778,10 +793,12 @@ Future Hydro::doCycle(
     launchsqcf.add_field(1, FID_ZRP);
     launchsqcf.add_field(1, FID_ZSS);
     launchsqcf.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchsqcf.add_field(2, FID_PU0);
     launchsqcf.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchsqcf.add_field(3, FID_PU0);
     launchsqcf.add_region_requirement(
             RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
@@ -824,11 +841,13 @@ Future Hydro::doCycle(
             RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
     launchsvd.add_field(1, FID_ZSS);
     launchsvd.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchsvd.add_field(2, FID_PXP);
     launchsvd.add_field(2, FID_PU0);
     launchsvd.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchsvd.add_field(3, FID_PXP);
     launchsvd.add_field(3, FID_PU0);
     launchsvd.add_region_requirement(
@@ -849,11 +868,12 @@ Future Hydro::doCycle(
     launchscf.add_field(0, FID_SFQ);
     launchscf.add_field(0, FID_SFT);
     launchscf.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_WRITE, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, READ_WRITE, EXCLUSIVE, lrp, 
+              PennantMapper::POINT_SUBREGION));
     launchscf.add_field(1, FID_PF);
     launchscf.add_region_requirement(
             RegionRequirement(lppshr, 0, OPID_SUMDBL2,
-                    SIMULTANEOUS, lrp));
+                    SIMULTANEOUS, lrp, PennantMapper::POINT_SUBREGION));
     launchscf.add_field(2, FID_PF);
     launchscf.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchscf);
@@ -872,12 +892,13 @@ Future Hydro::doCycle(
         launchafbc.add_field(0, FID_MAPBPREG);
         launchafbc.add_region_requirement(
                 RegionRequirement(lppprv, 0,
-                        READ_WRITE, EXCLUSIVE, lrp));
+                        READ_WRITE, EXCLUSIVE, lrp, PennantMapper::POINT_SUBREGION));
         launchafbc.add_field(1, FID_PF);
         launchafbc.add_field(1, FID_PU0);
         launchafbc.add_region_requirement(
                 RegionRequirement(lppmstr, 0,
-                        READ_WRITE, EXCLUSIVE, lrp, PennantMapper::PREFER_ZCOPY));
+                        READ_WRITE, EXCLUSIVE, lrp, 
+                        PennantMapper::PREFER_ZCOPY | PennantMapper::POINT_SUBREGION));
         launchafbc.add_field(2, FID_PF);
         launchafbc.add_field(2, FID_PU0);
         launchafbc.tag |= PennantMapper::CRITICAL | 
@@ -901,13 +922,13 @@ Future Hydro::doCycle(
         launchca.region_requirements.clear();
         launchca.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        READ_ONLY, EXCLUSIVE, lrp,
+                        READ_ONLY, EXCLUSIVE, lrp, PennantMapper::POINT_SUBREGION | 
                         (part == 0) ? 0 : PennantMapper::PREFER_ZCOPY));
         launchca.add_field(0, FID_PF);
         launchca.add_field(0, FID_PMASWT);
         launchca.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        WRITE_DISCARD, EXCLUSIVE, lrp));
+                        WRITE_DISCARD, EXCLUSIVE, lrp, PennantMapper::POINT_SUBREGION));
         launchca.add_field(1, FID_PAP);
         // Only really need OpenMP for the private part
         // But the shared part is the one on the critical path
@@ -925,13 +946,13 @@ Future Hydro::doCycle(
         launchapf.region_requirements.clear();
         launchapf.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        READ_ONLY, EXCLUSIVE, lrp));
+                        READ_ONLY, EXCLUSIVE, lrp, PennantMapper::POINT_SUBREGION));
         launchapf.add_field(0, FID_PX0);
         launchapf.add_field(0, FID_PU0);
         launchapf.add_field(0, FID_PAP);
         launchapf.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        WRITE_DISCARD, EXCLUSIVE, lrp));
+                        WRITE_DISCARD, EXCLUSIVE, lrp, PennantMapper::POINT_SUBREGION));
         launchapf.add_field(1, FID_PX);
         launchapf.add_field(1, FID_PU);
         // Only really need OpenMP for the private part
@@ -981,12 +1002,14 @@ Future Hydro::doCycle(
     launchcw.add_field(0, FID_SFP);
     launchcw.add_field(0, FID_SFQ);
     launchcw.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp,
+              PennantMapper::POINT_SUBREGION));
     launchcw.add_field(1, FID_PU);
     launchcw.add_field(1, FID_PU0);
     launchcw.add_field(1, FID_PXP);
     launchcw.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp,
+              PennantMapper::POINT_SUBREGION));
     launchcw.add_field(2, FID_PU);
     launchcw.add_field(2, FID_PU0);
     launchcw.add_field(2, FID_PXP);

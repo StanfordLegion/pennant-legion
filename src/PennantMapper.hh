@@ -28,6 +28,8 @@ public:
     PREFER_GPU        = 0x0004,
     PREFER_ZCOPY      = 0x0008,
     CRITICAL          = 0x0010,
+    INITIALIZATION    = 0x0020,
+    POINT_SUBREGION   = 0x0040,
   };
 public:
   PennantMapper(
@@ -114,7 +116,8 @@ protected:
                          const Legion::Mappable &mapple, unsigned index,
                          Legion::LogicalRegion region, Legion::Memory target,
                          std::vector<Legion::Mapping::PhysicalInstance> &instances,
-                         bool initialization_instance = false);
+                         bool point_subregion, bool initialization_region, 
+                         const Legion::DomainPoint &index_point);
   void create_reduction_instances(const Legion::Mapping::MapperContext ctx,
                          const Legion::Task &task, unsigned index, Legion::Memory target,
                          std::vector<Legion::Mapping::PhysicalInstance> &instances);

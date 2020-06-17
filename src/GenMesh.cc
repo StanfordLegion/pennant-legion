@@ -21,6 +21,7 @@
 #include "Mesh.hh"
 #include "Vec2.hh"
 #include "InputFile.hh"
+#include "PennantMapper.hh"
 
 using namespace std;
 using namespace Legion;
@@ -537,7 +538,8 @@ void GenMesh::generatePointsParallel(
     calcNumPieces(numpcs);
     const GenPointArgs args(this);
     RegionRequirement req(points_lp, 0/*identity projection*/,
-                          WRITE_DISCARD, EXCLUSIVE, points_lr);
+                          WRITE_DISCARD, EXCLUSIVE, points_lr,
+                          PennantMapper::INITIALIZATION);
     req.add_field(FID_PX);
     req.add_field(FID_PIECE);
     if (meshtype == "rect") {
