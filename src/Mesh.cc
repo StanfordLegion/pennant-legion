@@ -846,7 +846,7 @@ void Mesh::initParallel() {
         LEGION_DISJOINT_COMPLETE_KIND, PID_PRIVATE, 0, PennantMapper::INITIALIZATION);
     IndexPartition ip_mstr = runtime->create_partition_by_image_range(ctx, is_shr,
         lp_shared_range, lr_shared_range, FID_RANGE, is_piece,
-        LEGION_DISJOINT_COMPLETE_KIND, PID_SHARED, 0, PennantMapper::INITIALIZATION);
+        LEGION_DISJOINT_COMPLETE_KIND, PID_MASTER, 0, PennantMapper::INITIALIZATION);
 
     // Now make the actual point logical region, get the partitions, and copy over data
 #ifdef PRECOMPACTED_RECT_POINTS

@@ -226,7 +226,7 @@ void PennantMapper::map_task(const MapperContext ctx,
                           local_zerocopy,
                           output.chosen_instances[idx],
                           req.tag & POINT_SUBREGION,
-                          req.tag & INITIALIZATION, task.index_point);
+                          req.tag & INITIALIZATION);
       else
         map_pennant_array(ctx, task, idx, req.region, 
 #ifdef NAN_CHECK
@@ -238,7 +238,7 @@ void PennantMapper::map_task(const MapperContext ctx,
 #endif
                           output.chosen_instances[idx],
                           req.tag & POINT_SUBREGION,
-                          req.tag & INITIALIZATION, task.index_point);
+                          req.tag & INITIALIZATION);
     }
   } else {
     for (unsigned idx = 0; idx < task.regions.size(); idx++)
@@ -254,7 +254,7 @@ void PennantMapper::map_task(const MapperContext ctx,
             local_numa.exists() ? local_numa : local_sysmem, 
                           output.chosen_instances[idx],
                           req.tag & POINT_SUBREGION,
-                          req.tag & INITIALIZATION, task.index_point);
+                          req.tag & INITIALIZATION);
     }
   }
   runtime->acquire_instances(ctx, output.chosen_instances);
@@ -321,14 +321,14 @@ void PennantMapper::map_copy(const MapperContext ctx,
       map_pennant_array(ctx, copy, idx, req.region, fbmem,
                         output.src_instances[idx],
                         req.tag & POINT_SUBREGION,
-                        req.tag & INITIALIZATION, copy.index_point);
+                        req.tag & INITIALIZATION);
     }
     for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++) {
       const RegionRequirement &req = copy.dst_requirements[idx];
       map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
                         req.region, fbmem, output.dst_instances[idx],
                         req.tag & POINT_SUBREGION,
-                        req.tag & INITIALIZATION, copy.index_point);
+                        req.tag & INITIALIZATION);
     }
   } else if (!local_omps.empty() && copy.src_indirect_requirements.empty()) {
     assert(copy.is_index_space);
@@ -349,14 +349,14 @@ void PennantMapper::map_copy(const MapperContext ctx,
       map_pennant_array(ctx, copy, idx, req.region, numa,
                         output.src_instances[idx],
                         req.tag & POINT_SUBREGION,
-                        req.tag & INITIALIZATION, copy.index_point);
+                        req.tag & INITIALIZATION);
     }
     for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++) {
       const RegionRequirement &req = copy.dst_requirements[idx];
       map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
                         req.region, numa, output.dst_instances[idx],
                         req.tag & POINT_SUBREGION,
-                        req.tag & INITIALIZATION, copy.index_point);
+                        req.tag & INITIALIZATION);
     }
   } else {
 #ifdef PENNANT_DISABLE_CONTROL_REPLICATION
@@ -373,14 +373,14 @@ void PennantMapper::map_copy(const MapperContext ctx,
       map_pennant_array(ctx, copy, idx, req.region, sysmem,
                         output.src_instances[idx],
                         req.tag & POINT_SUBREGION,
-                        req.tag & INITIALIZATION, copy.index_point);
+                        req.tag & INITIALIZATION);
     }
     for (unsigned idx = 0; idx < copy.dst_requirements.size(); idx++) {
       const RegionRequirement &req = copy.dst_requirements[idx];
       map_pennant_array(ctx, copy, idx + copy.src_requirements.size(), 
                         req.region, sysmem, output.dst_instances[idx],
                         req.tag & POINT_SUBREGION,
-                        req.tag & INITIALIZATION, copy.index_point);
+                        req.tag & INITIALIZATION);
     }
     if (!copy.src_indirect_requirements.empty())
     {
@@ -390,7 +390,7 @@ void PennantMapper::map_copy(const MapperContext ctx,
         const RegionRequirement &req = copy.src_indirect_requirements[idx];
         std::vector<PhysicalInstance> insts;
         map_pennant_array(ctx, copy, idx + offset, req.region, sysmem, insts,
-            req.tag & POINT_SUBREGION, req.tag & INITIALIZATION, copy.index_point);
+            req.tag & POINT_SUBREGION, req.tag & INITIALIZATION);
         assert(insts.size() == 1);
         output.src_indirect_instances[idx] = insts[0];
       }
@@ -483,7 +483,7 @@ void PennantMapper::map_partition(const MapperContext ctx,
   map_pennant_array(ctx, partition, 0, req.region, sysmem,
                     output.chosen_instances,
                     req.tag & POINT_SUBREGION,
-                    req.tag & INITIALIZATION, partition.index_point);
+                    req.tag & INITIALIZATION);
   runtime->acquire_instances(ctx, output.chosen_instances);
 }
 
@@ -530,8 +530,7 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
                                       LogicalRegion region, Memory target,
                                       std::vector<PhysicalInstance> &instances,
                                       bool point_subregion,
-                                      bool initialization_region,
-                                      const DomainPoint &index_point)
+                                      bool initialization_region)
 {
   const std::pair<LogicalRegion,Memory> key(region, target);
   std::map<std::pair<LogicalRegion,Memory>,PhysicalInstance>::const_iterator
@@ -551,6 +550,9 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
       ((target.kind() != Memory::GPU_FB_MEM) || (local_gpus.size() == 1)))
         
   {
+    // these don't matter if we're just going to make big regions
+    point_subregion = false;
+    initialization_region = false;
     while (runtime->has_parent_index_partition(ctx, region.get_index_space())) 
     {
       LogicalPartition part = runtime->get_parent_logical_partition(ctx, region);
@@ -564,21 +566,54 @@ void PennantMapper::map_pennant_array(const MapperContext ctx,
   runtime->get_field_space_fields(ctx, region.get_field_space(), all_fields);
   layout_constraints.add_constraint(
       FieldConstraint(all_fields, false/*contiguous*/, false/*inorder*/));
-#if 0
-  // Check to see if this is a point logical region, if it is then we're
-  // going to include the ghost regions as well in this instances
-  if (all_fields.find(FID_PXP) != all_fields.end())
+  if (point_subregion)
   {
     // This is a point region so make a compact representation of this instance
-    // for both this region and it's ghost region
-    
+    // for all of three of the private, shared, and ghost sub-regions
+    // First we need to figure out which of the regions we are
+    const DomainPoint color = runtime->get_logical_region_color_point(ctx, region);
+    LogicalPartition part = runtime->get_parent_logical_partition(ctx, region);
+    const Color part_color = runtime->get_logical_partition_color(ctx, part);
+    LogicalRegion all_region = runtime->get_parent_logical_region(ctx, part);
+    const Color all_color = runtime->get_logical_region_color(ctx, all_region);
+    LogicalPartition all_part = runtime->get_parent_logical_partition(ctx, all_region);
+    if (part_color == PID_PRIVATE) {
+      assert(all_color == 0);
+      LogicalRegion all_shared = runtime->get_logical_subregion_by_color(ctx, all_part, 1);
+      LogicalPartition master = 
+        runtime->get_logical_partition_by_color(ctx, all_shared, PID_MASTER);
+      LogicalPartition shared = 
+        runtime->get_logical_partition_by_color(ctx, all_shared, PID_SHARED);
+      regions.push_back(
+          runtime->get_logical_subregion_by_color(ctx, master, color));
+      regions.push_back(
+          runtime->get_logical_subregion_by_color(ctx, shared, color));
+    } else {
+      assert(all_color == 1);
+      LogicalRegion all_private = runtime->get_logical_subregion_by_color(ctx, all_part, 0);
+      LogicalPartition priv = 
+        runtime->get_logical_partition_by_color(ctx, all_private, PID_PRIVATE);
+      regions.push_back(
+          runtime->get_logical_subregion_by_color(ctx, priv, color));
+      if (part_color == PID_MASTER) {
+        LogicalPartition shared =
+          runtime->get_logical_partition_by_color(ctx, all_region, PID_SHARED);
+        regions.push_back(
+            runtime->get_logical_subregion_by_color(ctx, shared, color));
+      } else {
+        assert(part_color == PID_SHARED);
+        LogicalPartition master =
+          runtime->get_logical_partition_by_color(ctx, all_region, PID_MASTER);
+        regions.push_back(
+            runtime->get_logical_subregion_by_color(ctx, master, color));
+      }
+    }
     // Don't permit any bloating of the instance, we want to minimize space for now
     layout_constraints.add_constraint(
         SpecializedConstraint(LEGION_COMPACT_SPECIALIZE, 0, false, false,
           SIZE_MAX/*max number of pieces*/, 0/*total overhead*/));
   }
   else // Make a normal affine layout
-#endif
     layout_constraints.add_constraint(SpecializedConstraint(LEGION_AFFINE_SPECIALIZE));
   // SOA dimension ordering (all pennant arrays are 1-D)
   std::vector<DimensionKind> dimension_ordering(2);

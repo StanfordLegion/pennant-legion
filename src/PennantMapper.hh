@@ -116,8 +116,7 @@ protected:
                          const Legion::Mappable &mapple, unsigned index,
                          Legion::LogicalRegion region, Legion::Memory target,
                          std::vector<Legion::Mapping::PhysicalInstance> &instances,
-                         bool point_subregion, bool initialization_region, 
-                         const Legion::DomainPoint &index_point);
+                         bool point_subregion, bool initialization_region); 
   void create_reduction_instances(const Legion::Mapping::MapperContext ctx,
                          const Legion::Task &task, unsigned index, Legion::Memory target,
                          std::vector<Legion::Mapping::PhysicalInstance> &instances);
