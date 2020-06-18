@@ -140,10 +140,12 @@ HydroBC::HydroBC(
     IndexTaskLauncher launcher(TID_COUNTBCPOINTS, is_piece,
           TaskArgument(&args, sizeof(args)), ArgumentMap());
     launcher.add_region_requirement(
-        RegionRequirement(lppprv, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+        RegionRequirement(lppprv, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp,
+          PennantMapper::INITIALIZATION));
     launcher.add_field(0/*index*/, FID_PX);
     launcher.add_region_requirement(
-        RegionRequirement(lppmstr, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+        RegionRequirement(lppmstr, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp,
+          PennantMapper::INITIALIZATION));
     launcher.add_field(1/*index*/, FID_PX);
     launcher.add_region_requirement(
         RegionRequirement(lpc, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrc));
@@ -181,10 +183,12 @@ HydroBC::HydroBC(
     IndexTaskLauncher launcher(TID_CREATEBCMAPS, is_piece,
         TaskArgument(&args, sizeof(args)), ArgumentMap());
     launcher.add_region_requirement(
-        RegionRequirement(lppprv, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+        RegionRequirement(lppprv, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp,
+          PennantMapper::INITIALIZATION));
     launcher.add_field(0/*index*/, FID_PX);
     launcher.add_region_requirement(
-        RegionRequirement(lppmstr, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+        RegionRequirement(lppmstr, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp,
+          PennantMapper::INITIALIZATION));
     launcher.add_field(1/*index*/, FID_PX);
     launcher.add_region_requirement(
         RegionRequirement(lpb, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrb));
