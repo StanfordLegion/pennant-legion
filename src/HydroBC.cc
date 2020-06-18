@@ -18,6 +18,7 @@
 #include "Memory.hh"
 #include "Mesh.hh"
 #include "Hydro.hh"
+#include "PennantMapper.hh"
 
 using namespace std;
 using namespace Memory;
