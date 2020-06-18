@@ -113,14 +113,14 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_CALCWORK, "CPU calcwork");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 1, 2, FID_PU, FID_PU0, FID_PXP);
+      add_colocation_constraint(registrar, 1, 2);
       Runtime::preregister_task_variant<Hydro::calcWorkTask>(registrar, "calcwork");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCWORK, "OMP calcwork");
       registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 1, 2, FID_PU, FID_PU0, FID_PXP);
+      add_colocation_constraint(registrar, 1, 2);
       Runtime::preregister_task_variant<Hydro::calcWorkOMPTask>(registrar, "calcwork");
     }
     {

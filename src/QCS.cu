@@ -16,14 +16,14 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_SETCORNERDIV, "GPU setcornerdiv");
       registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(2, 3, FID_PXP, FID_PU0);
+      add_colocation_constraint(2, 3);
       Runtime::preregister_task_variant<QCS::setCornerDivGPUTask>(registrar, "setcornerdiv");
     }
     {
       TaskVariantRegistrar registrar(TID_SETQCNFORCE, "GPU setqcnforce");
       registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(2, 3, FID_PU0);
+      add_colocation_constraint(2, 3);
       Runtime::preregister_task_variant<QCS::setQCnForceGPUTask>(registrar, "setqcnforce");
     }
     {
@@ -36,7 +36,7 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_SETVELDIFF, "GPU setveldiff");
       registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(2, 3, FID_PXP, FID_PU0);
+      add_colocation_constraint(2, 3);
       Runtime::preregister_task_variant<QCS::setVelDiffGPUTask>(registrar, "setveldiff");
     }
 }

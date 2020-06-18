@@ -48,7 +48,7 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_CALCWORK, "GPU calcwork");
       registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 1, 2, FID_PU, FID_PU0, FID_PXP);
+      add_colocation_constraint(registrar, 1, 2);
       Runtime::preregister_task_variant<Hydro::calcWorkGPUTask>(registrar, "calcwork");
     }
     {

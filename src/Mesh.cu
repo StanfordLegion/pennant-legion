@@ -12,14 +12,14 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_CALCCTRS, "GPU calcctrs");
       registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 2, 3, FID_PXP);
+      add_colocation_constraint(registrar, 2, 3);
       Runtime::preregister_task_variant<Mesh::calcCtrsGPUTask>(registrar, "calcctrs");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCVOLS, "GPU calcvols");
       registrar.add_constraint(ProcessorConstraint(Processor::TOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 1, 2, FID_PXP);
+      add_colocation_constraint(registrar, 1, 2);
       Runtime::preregister_task_variant<DeferredReduction<SumOp<int> >, 
         Mesh::calcVolsGPUTask>(registrar, "calcvols");
     }

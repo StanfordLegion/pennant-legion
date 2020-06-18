@@ -38,28 +38,28 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_CALCCTRS, "CPU calcctrs");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 2, 3, FID_PXP);
+      add_colocation_constraint(registrar, 2, 3);
       Runtime::preregister_task_variant<Mesh::calcCtrsTask>(registrar, "calcctrs");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCCTRS, "OMP calcctrs");
       registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 2, 3, FID_PXP);
+      add_colocation_constraint(registrar, 2, 3);
       Runtime::preregister_task_variant<Mesh::calcCtrsOMPTask>(registrar, "calcctrs");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCVOLS, "CPU calcvols");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 1, 2, FID_PXP);
+      add_colocation_constraint(registrar, 1, 2);
       Runtime::preregister_task_variant<int, Mesh::calcVolsTask>(registrar, "calcvols");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCVOLS, "OMP calcvols");
       registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 1, 2, FID_PXP);
+      add_colocation_constraint(registrar, 1, 2);
       Runtime::preregister_task_variant<int, Mesh::calcVolsOMPTask>(registrar, "calcvols");
     }
     {
@@ -84,14 +84,14 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_CALCEDGELEN, "CPU calcedgelen");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 1, 2, FID_PXP);
+      add_colocation_constraint(registrar, 1, 2);
       Runtime::preregister_task_variant<Mesh::calcEdgeLenTask>(registrar, "calcedgelen");
     }
     {
       TaskVariantRegistrar registrar(TID_CALCEDGELEN, "OMP calcedgelen");
       registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 1, 2, FID_PXP);
+      add_colocation_constraint(registrar, 1, 2);
       Runtime::preregister_task_variant<Mesh::calcEdgeLenOMPTask>(registrar, "calcedgelen");
     }
     {

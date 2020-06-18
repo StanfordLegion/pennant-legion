@@ -32,14 +32,14 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_SETCORNERDIV, "CPU setcornerdiv");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 2, 3, FID_PXP, FID_PU0);
+      add_colocation_constraint(registrar, 2, 3);
       Runtime::preregister_task_variant<QCS::setCornerDivTask>(registrar, "setcornerdiv");
     }
     {
       TaskVariantRegistrar registrar(TID_SETQCNFORCE, "CPU setqcnforce");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 2, 3, FID_PU0);
+      add_colocation_constraint(registrar, 2, 3);
       Runtime::preregister_task_variant<QCS::setQCnForceTask>(registrar, "setqcnforce");
     }
     {
@@ -52,21 +52,21 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_SETVELDIFF, "CPU setveldiff");
       registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 2, 3, FID_PXP, FID_PU0);
+      add_colocation_constraint(registrar, 2, 3);
       Runtime::preregister_task_variant<QCS::setVelDiffTask>(registrar, "setveldiff");
     }
     {
       TaskVariantRegistrar registrar(TID_SETCORNERDIV, "OMP setcornerdiv");
       registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 2, 3, FID_PXP, FID_PU0);
+      add_colocation_constraint(registrar, 2, 3);
       Runtime::preregister_task_variant<QCS::setCornerDivOMPTask>(registrar, "setcornerdiv");
     }
     {
       TaskVariantRegistrar registrar(TID_SETQCNFORCE, "OMP setqcnforce");
       registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 2, 3, FID_PU0);
+      add_colocation_constraint(registrar, 2, 3);
       Runtime::preregister_task_variant<QCS::setQCnForceOMPTask>(registrar, "setqcnforce");
     }
     {
@@ -79,7 +79,7 @@ static void __attribute__ ((constructor)) registerTasks() {
       TaskVariantRegistrar registrar(TID_SETVELDIFF, "OMP setveldiff");
       registrar.add_constraint(ProcessorConstraint(Processor::OMP_PROC));
       registrar.set_leaf();
-      add_colocation_constraint(registrar, 2, 3, FID_PXP, FID_PU0);
+      add_colocation_constraint(registrar, 2, 3);
       Runtime::preregister_task_variant<QCS::setVelDiffOMPTask>(registrar, "setveldiff");
     }
 }
