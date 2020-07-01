@@ -224,9 +224,9 @@ Mesh::Mesh(
     wxy = new WriteXY(this);
     egold = new ExportGold(this);
 
-#ifndef NO_LEGION_CONTROL_REPLICATION
     // Call this to populate the numpcx and numpcy fields
     gmesh->calcNumPieces(numpcs);
+#ifndef NO_LEGION_CONTROL_REPLICATION
     PennantShardingFunctor *functor = 
       new PennantShardingFunctor(gmesh->numpcx, gmesh->numpcy);
     runtime->register_sharding_functor(PENNANT_SHARD_ID, functor, 
