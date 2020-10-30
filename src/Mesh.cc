@@ -224,9 +224,9 @@ Mesh::Mesh(
     wxy = new WriteXY(this);
     egold = new ExportGold(this);
 
+#ifndef NO_LEGION_CONTROL_REPLICATION
     // Call this to populate the numpcx and numpcy fields
     gmesh->calcNumPieces(numpcs);
-#ifndef NO_LEGION_CONTROL_REPLICATION
     PennantShardingFunctor *functor = 
       new PennantShardingFunctor(gmesh->numpcx, gmesh->numpcy);
     runtime->register_sharding_functor(PENNANT_SHARD_ID, functor, 
@@ -880,6 +880,7 @@ void Mesh::initParallel() {
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP1);
       update_launcher.add_src_indirect_field(FID_MAPSP1TEMP,
           RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs)); 
+      update_launcher.possible_src_indirect_out_of_range = false;
       runtime->issue_copy_operation(ctx, update_launcher);
     }
     {
@@ -892,6 +893,7 @@ void Mesh::initParallel() {
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP2);
       update_launcher.add_src_indirect_field(FID_MAPSP2TEMP,
           RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs));
+      update_launcher.possible_src_indirect_out_of_range = false;
       runtime->issue_copy_operation(ctx, update_launcher);
     }
 #else
