@@ -87,7 +87,7 @@ void mainTask(const Task *task,
 
     if (filename == NULL) {
       LEGION_PRINT_ONCE(runtime, ctx, stderr, "No Pennant input file specified. Exitting...\n");
-      return; 
+      abort();
     }
 
     /* spin so debugger can attach... */
