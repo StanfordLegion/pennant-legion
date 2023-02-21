@@ -12,7 +12,7 @@
 
 #include "HydroBC.hh"
 
-#include "legion.h"
+#include "resilience.h"
 
 #include "MyLegion.hh"
 #include "Memory.hh"
@@ -21,7 +21,7 @@
 
 using namespace std;
 using namespace Memory;
-using namespace Legion;
+using namespace ResilientLegion;
 
 
 namespace {  // unnamed

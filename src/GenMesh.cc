@@ -23,7 +23,7 @@
 #include "InputFile.hh"
 
 using namespace std;
-using namespace Legion;
+using namespace ResilientLegion;
 
 namespace {  // unnamed
 static void __attribute__ ((constructor)) registerTasks() {

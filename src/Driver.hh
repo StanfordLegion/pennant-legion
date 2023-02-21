@@ -15,7 +15,8 @@
 
 #include <string>
 
-#include "legion.h"
+#include "resilience.h"
+#define Legion ResilientLegion
 
 enum DriverTaskID {
     TID_CALCGLOBALDT = 'D' * 100,

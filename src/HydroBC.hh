@@ -15,9 +15,11 @@
 
 #include <vector>
 
-#include "legion.h"
+#include "resilience.h"
 
 #include "Vec2.hh"
+
+#define Legion ResilientLegion
 
 // forward declarations
 class Mesh;

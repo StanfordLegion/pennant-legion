@@ -13,7 +13,8 @@
 #ifndef TTS_HH_
 #define TTS_HH_
 
-#include "legion.h"
+#include "resilience.h"
+#define Legion ResilientLegion
 
 // forward declarations
 class InputFile;

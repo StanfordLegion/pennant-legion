@@ -14,7 +14,7 @@
 
 #include <cmath>
 
-#include "legion.h"
+#include "resilience.h"
 
 #include "MyLegion.hh"
 #include "InputFile.hh"
@@ -23,7 +23,7 @@
 #include "Hydro.hh"
 
 using namespace std;
-using namespace Legion;
+using namespace ResilientLegion;
 
 
 namespace {  // unnamed

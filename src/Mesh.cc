@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <float.h>
 
-#include "legion.h"
+#include "resilience.h"
 
 #include "MyLegion.hh"
 #include "Vec2.hh"
@@ -30,7 +30,7 @@
 
 using namespace std;
 using namespace Memory;
-using namespace Legion;
+using namespace ResilientLegion;
 
 
 namespace {  // unnamed

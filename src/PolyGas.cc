@@ -12,7 +12,7 @@
 
 #include "PolyGas.hh"
 
-#include "legion.h"
+#include "resilience.h"
 
 #include "Vec2.hh"
 #include "MyLegion.hh"
@@ -21,7 +21,7 @@
 #include "Mesh.hh"
 
 using namespace std;
-using namespace Legion;
+using namespace ResilientLegion;
 
 
 namespace {  // unnamed

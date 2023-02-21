@@ -16,8 +16,9 @@
 #include <set>
 #include <vector>
 
-#include "legion.h"
+#include "resilience.h"
 #include "default_mapper.h"
+#define Legion ResilientLegion
 
 
 class PennantMapper : public Legion::Mapping::DefaultMapper {

@@ -14,7 +14,7 @@
 #include <string>
 #include <iostream>
 
-#include "legion.h"
+#include "resilience.h"
 
 #include "PennantMapper.hh"
 #include "InputFile.hh"
@@ -22,7 +22,7 @@
 #include "Mesh.hh"
 
 using namespace std;
-using namespace Legion;
+using namespace ResilientLegion;
 
 enum TaskID {
     TID_MAIN

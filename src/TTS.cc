@@ -12,7 +12,7 @@
 
 #include "TTS.hh"
 
-#include "legion.h"
+#include "resilience.h"
 
 #include "MyLegion.hh"
 #include "Vec2.hh"
@@ -21,7 +21,7 @@
 #include "Hydro.hh"
 
 using namespace std;
-using namespace Legion;
+using namespace ResilientLegion;
 
 
 namespace {  // unnamed

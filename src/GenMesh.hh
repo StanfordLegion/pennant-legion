@@ -17,9 +17,11 @@
 #include <vector>
 #include <map>
 
-#include "legion.h"
+#include "resilience.h"
 
 #include "Vec2.hh"
+
+#define Legion ResilientLegion
 
 // forward declarations
 class InputFile;
