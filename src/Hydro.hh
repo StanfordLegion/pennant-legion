@@ -16,12 +16,14 @@
 #include <string>
 #include <vector>
 
-#include "legion.h"
+#include "resilience.h"
 
 #include "Mesh.hh"
 #include "Vec2.hh"
 
-using namespace Legion;
+#define Legion ResilientLegion
+
+using namespace ResilientLegion;
 
 // forward declarations
 class InputFile;

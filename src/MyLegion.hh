@@ -13,9 +13,11 @@
 #ifndef MYLEGION_HH_
 #define MYLEGION_HH_
 
-#include "legion.h"
+#include "resilience.h"
 #include "Vec2.hh"
 #include <cassert>
+
+#define Legion ResilientLegion
 
 typedef Legion::Point<1,Legion::coord_t> Pointer;
 

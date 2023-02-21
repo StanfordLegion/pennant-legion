@@ -18,11 +18,14 @@
 #include <vector>
 #include <algorithm>
 
-#include "legion.h"
+#include "resilience.h"
+#include "default_mapper.h"
 
 #include "Vec2.hh"
 #include "GenMesh.hh"
 #include "CudaHelp.hh"
+
+#define Legion ResilientLegion
 
 // forward declarations
 class InputFile;
@@ -743,7 +746,7 @@ void Mesh::getField(
         const Legion::FieldID fid,
         T* var,
         const int n) {
-    using namespace Legion;
+    using namespace ResilientLegion;
     RegionRequirement req(lr, READ_ONLY, EXCLUSIVE, lr);
     req.add_field(fid);
     InlineLauncher inl(req);
@@ -768,7 +771,7 @@ void Mesh::setField(
         const Legion::FieldID fid,
         const T* var,
         const int n) {
-    using namespace Legion;
+    using namespace ResilientLegion;
     RegionRequirement req(lr, WRITE_DISCARD, EXCLUSIVE, lr);
     req.add_field(fid);
     InlineLauncher inl(req);

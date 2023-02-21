@@ -13,7 +13,8 @@
 #ifndef POLYGAS_HH_
 #define POLYGAS_HH_
 
-#include "legion.h"
+#include "resilience.h"
+#define Legion ResilientLegion
 
 // forward declarations
 class InputFile;

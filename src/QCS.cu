@@ -7,7 +7,7 @@
 #include "MyLegion.hh"
 #include "CudaHelp.hh"
 
-using namespace Legion;
+using namespace ResilientLegion;
 
 namespace {  // unnamed
 __host__

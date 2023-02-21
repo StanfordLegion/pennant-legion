@@ -8,7 +8,8 @@
 
 #ifdef USE_CUDA
 #include <cuda_runtime.h>
-#include "legion.h"
+#include "resilience.h"
+#define Legion ResilientLegion
 #ifndef __CUDA_HD__
 #define __CUDA_HD__ __host__ __device__
 #endif

@@ -13,9 +13,11 @@
 #ifndef QCS_HH_
 #define QCS_HH_
 
-#include "legion.h"
+#include "resilience.h"
 
 #include "Mesh.hh"
+
+#define Legion ResilientLegion
 
 // forward declarations
 class InputFile;

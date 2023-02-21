@@ -17,12 +17,12 @@
 #include <string>
 #include <iostream>
 
-#include "legion.h"
+#include "resilience.h"
 #include "default_mapper.h"
 
 using namespace std;
-using namespace Legion;
-using namespace Legion::Mapping;
+using namespace ResilientLegion;
+using namespace ResilientLegion::Mapping;
 
 PennantMapper::PennantMapper(
         Machine m,
