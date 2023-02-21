@@ -47,6 +47,7 @@ void mainTask(const Task *task,
               const std::vector<PhysicalRegion> &regions,
               Context ctx, Runtime*runtime)
 {
+    runtime->enable_checkpointing(ctx);
     const InputArgs& iargs = Runtime::get_input_args();
 
     // skip over legion args if present
