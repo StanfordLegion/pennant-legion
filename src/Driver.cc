@@ -128,7 +128,7 @@ void Driver::run(void) {
 
     // main event loop
     for (int cycle = 0; cycle < cstop; cycle++) {
-        runtime->checkpoint(ctx);
+        runtime->auto_checkpoint(ctx);
 
         runtime->begin_trace(ctx, trace_id);
         // get timestep
