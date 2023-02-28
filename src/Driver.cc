@@ -107,7 +107,9 @@ void Driver::run(void) {
     Future f_time = Future::from_value(runtime, time_init);
     const int cycle_init = 0;
     Future f_cycle = Future::from_value(runtime, cycle_init);
-    Future f_dt, f_cdt; // initialized by first iteration
+    // Need to give these dummy values so we can trace consistently
+    Future f_dt = Future::from_value(runtime, 0.0);
+    Future f_cdt = Future::from_value(runtime, 0.0);
     Future f_prev_report;
     // Create a trace ID for all of Pennant to use
     const TraceID trace_id = 
@@ -204,10 +206,10 @@ Future Driver::calcGlobalDt(
   TaskLauncher launcher(TID_CALCGLOBALDT, TaskArgument(&args, sizeof(args)), pred);
   launcher.set_predicate_false_future(f_dt);
   launcher.add_future(f_time);
-  if (cycle > 0) {
-    launcher.add_future(f_dt);
-    launcher.add_future(f_cdt);
-  }
+  // These won't be read on the first cycle but add them anyway so that the
+  // trace is valid
+  launcher.add_future(f_dt);
+  launcher.add_future(f_cdt);
   return runtime->execute_task(ctx, launcher);
 }
 
