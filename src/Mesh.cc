@@ -163,7 +163,7 @@ const int SumOp<int>::identity = 0;
 template <>
 const double SumOp<double>::identity = 0.;
 template <>
-const double2 SumOp<double2>::identity = double2(0., 0.);
+const double2 SumOp<double2>::identity = make_double2(0., 0.);
 template <>
 const double MinOp<double>::identity = DBL_MAX;
 template <>
@@ -817,7 +817,7 @@ void Mesh::calcCtrsTask(
 
     const IndexSpace& isz = task->regions[1].region.get_index_space();
     for (PointIterator itr(runtime, isz); itr(); itr++)
-      acc_zx[*itr] = double2(0., 0.);
+      acc_zx[*itr] = make_double2(0., 0.);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     for (PointIterator itr(runtime, iss); itr(); itr++)
@@ -863,7 +863,7 @@ void Mesh::calcCtrsOMPTask(
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
     #pragma omp parallel for
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
-      acc_zx[z] = double2(0., 0.);
+      acc_zx[z] = make_double2(0., 0.);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
@@ -1288,7 +1288,7 @@ void Mesh::calcCtrs(
 
     int zfirst = mapsz[sfirst];
     int zlast = (slast < nums ? mapsz[slast] : numz);
-    fill(&zx[zfirst], &zx[zlast], double2(0., 0.));
+    fill(&zx[zfirst], &zx[zlast], make_double2(0., 0.));
 
     for (int s = sfirst; s < slast; ++s) {
         int p1 = mapsp1[s];
