@@ -20,7 +20,7 @@
 // This struct is defined with all functions inline,
 // to give the compiler maximum opportunity to optimize.
 
-#ifndef __CUDACC__
+#ifndef USE_CUDA
 struct double2
 {
     typedef double value_type;
@@ -37,38 +37,10 @@ struct double2
         return(*this);
     }
 
-    inline double2& operator+=(const double2& v2)
-    {
-        x += v2.x;
-        y += v2.y;
-        return(*this);
-    }
-
-    inline double2& operator-=(const double2& v2)
-    {
-        x -= v2.x;
-        y -= v2.y;
-        return(*this);
-    }
-
-    inline double2& operator*=(const double& r)
-    {
-        x *= r;
-        y *= r;
-        return(*this);
-    }
-
-    inline double2& operator/=(const double& r)
-    {
-        x /= r;
-        y /= r;
-        return(*this);
-    }
-
 }; // double2
-#endif // __CUDACC__
+#endif // USE_CUDA
 
-#ifndef __CUDACC__
+#ifndef USE_CUDA
 // Already has a decleration in cuda
 inline double2 make_double2(double x_, double y_) {
     return(double2(x_, y_));
@@ -119,6 +91,14 @@ inline double2 operator+(const double2& v1, const double2& v2)
     return make_double2(v1.x + v2.x, v1.y + v2.y);
 }
 
+__CUDA_HD__
+inline double2& operator+=(double2& v1, const double2& v2)
+{
+    v1.x += v2.x;
+    v1.y += v2.y;
+    return v1;
+}
+
 // subtract
 __CUDA_HD__
 inline double2 operator-(const double2& v1, const double2& v2)
@@ -126,11 +106,27 @@ inline double2 operator-(const double2& v1, const double2& v2)
     return make_double2(v1.x - v2.x, v1.y - v2.y);
 }
 
+__CUDA_HD__
+inline double2& operator-=(double2& v1, const double2& v2)
+{
+    v1.x -= v2.x;
+    v1.y -= v2.y;
+    return v1;
+}
+
 // multiply vector by scalar
 __CUDA_HD__
 inline double2 operator*(const double2& v, const double& r)
 {
     return make_double2(v.x * r, v.y * r);
+}
+
+__CUDA_HD__
+inline double2& operator*=(double2& v, const double& r)
+{
+    v.x *= r;
+    v.y *= r;
+    return v;
 }
 
 // multiply scalar by vector
@@ -148,6 +144,14 @@ inline double2 operator/(const double2& v, const double& r)
     return make_double2(v.x * rinv, v.y * rinv);
 }
 
+__CUDA_HD__
+inline double2& operator/=(double2& v, const double& r)
+{
+    double rinv = (double) 1. / r;
+    v.x *= rinv;
+    v.y *= rinv;
+    return v;
+}
 
 // other vector operations:
 

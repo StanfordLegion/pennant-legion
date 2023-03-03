@@ -6,11 +6,14 @@
 #define MIN_CTAS_PER_SM     4
 #define MAX_REDUCTION_CTAS  1024
 
-#ifdef __CUDACC__
+#ifdef USE_CUDA
 #include <cuda_runtime.h>
 #include "legion.h"
+#ifndef __CUDA_HD__
 #define __CUDA_HD__ __host__ __device__
+#endif
 
+#ifdef __CUDACC__
 template<typename REDUCTION>
 __device__ __forceinline__
 void reduce_double(Legion::DeferredReduction<REDUCTION> result, double value)
@@ -39,6 +42,7 @@ void reduce_double(Legion::DeferredReduction<REDUCTION> result, double value)
     __threadfence_system();
   }
 }
+#endif
 
 #else
 #define __CUDA_HD__
