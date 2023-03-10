@@ -145,8 +145,7 @@ void Driver::run(void) {
 #endif
         runtime->end_trace(ctx, trace_id);
 
-        // FIXME (Elliott): turn off timing for now since it's not deterministic on replay
-        if (false && ((cycle == 0) || (((cycle+1) % dtreport) == 0))) {
+        if ((cycle == 0) || (((cycle+1) % dtreport) == 0)) {
             timing_launcher.preconditions.clear();
             // Measure after f_cdt is ready which is when the cycle is complete
             timing_launcher.add_precondition(f_cdt);
