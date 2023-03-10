@@ -123,9 +123,6 @@ void Driver::run(void) {
     Future f_start = runtime->issue_timing_measurement(ctx, timing_launcher);
     Future f_prev_measurement = f_start;
 
-    // FIXME (Elliott): results diverge after 7 iterations
-    cstop = std::min(cstop, 7);
-
     // main event loop
     for (int cycle = 0; cycle < cstop; cycle++) {
         runtime->auto_checkpoint(ctx);
