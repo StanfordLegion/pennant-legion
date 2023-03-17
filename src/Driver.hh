@@ -34,7 +34,7 @@ class Hydro;
 
 class Driver {
 public:
-    struct GlobalDtArgs {
+    struct __attribute__ ((packed)) GlobalDtArgs {
     public:
       double dtinit;
       double dtmax;
