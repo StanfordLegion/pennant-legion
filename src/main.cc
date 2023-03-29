@@ -83,7 +83,7 @@ void mainTask(const Task *task,
       else {
         if (warn) {
           LEGION_PRINT_ONCE(runtime, ctx, stderr, "Usage: pennant [legion args] "
-                                                   "[-n <numpcs>] <filename>\n");
+                                                   "[-n <numpcs>] -f <filename>\n");
           warn = false;
         }
         i++;
