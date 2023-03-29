@@ -60,6 +60,7 @@ void mainTask(const Task *task,
     
     volatile bool debug = false;
     int numpcs = 1;
+    int prune = 0;
     bool sequential = false;
     const char* filename = NULL;
     bool warn = true;
@@ -74,6 +75,10 @@ void mainTask(const Task *task,
       }
       else if (iargs.argv[i] == string("-n")) {
         numpcs = atoi(iargs.argv[i + 1]);
+        i += 2;
+      }
+      else if (iargs.argv[i] == string("-prune")) {
+        prune = atoi(iargs.argv[i + 1]);
         i += 2;
       }
       else if (iargs.argv[i] == string("-s")) {
@@ -106,7 +111,7 @@ void mainTask(const Task *task,
     if (probname.substr(len - 4, 4) == ".pnt")
         probname = probname.substr(0, len - 4);
 
-    Driver drv(&inp, probname, numpcs, !sequential, ctx, runtime);
+    Driver drv(&inp, probname, numpcs, prune, !sequential, ctx, runtime);
 
     drv.run();
 
