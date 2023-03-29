@@ -188,6 +188,7 @@ void Driver::run(void) {
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "ELAPSED TIME = %7.3f s\n", walltime);
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
+    fflush(stdout);
 
 
     // do final mesh output if we aren't in a parallel mode
