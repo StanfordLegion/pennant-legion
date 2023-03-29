@@ -151,6 +151,7 @@ void Driver::run(void) {
 #endif
         runtime->end_trace(ctx, trace_id);
 
+#if 0
         if ((cycle == 0) || (((cycle+1) % dtreport) == 0)) {
             timing_launcher.preconditions.clear();
             // Measure after f_cdt is ready which is when the cycle is complete
@@ -161,6 +162,7 @@ void Driver::run(void) {
                 cycle, f_prev_report, f_time, f_cycle, f_dt, p_not_done);
             f_prev_measurement = f_measurement;
         } // if cycle...
+#endif
 
         if (cycle == cstop + prune - 1) {
             // get stopping timestamp
