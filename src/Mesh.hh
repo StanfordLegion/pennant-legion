@@ -766,6 +766,10 @@ static inline void calc_pieces_helper(const Legion::coord_t numpcs,
                                       Legion::coord_t &numpcx, 
                                       Legion::coord_t &numpcy)
 {
+  // Hack for experiments to force same partitioning as Regent
+  numpcx = 1;
+  numpcy = numpcs;
+#if 0
   // pick numpcx, numpcy such that pieces are as close to square
   // as possible
   // we would like:  nzx / numpcx == nzy / numpcy,
@@ -791,6 +795,7 @@ static inline void calc_pieces_helper(const Legion::coord_t numpcs,
   numpcx = (longside1 <= longside2 ? n1 : n2);
   numpcy = numpcs / numpcx;
   if (swapflag) std::swap(numpcx, numpcy);
+#endif
 }
 
 #endif /* MESH_HH_ */
