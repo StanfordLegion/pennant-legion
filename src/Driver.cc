@@ -187,6 +187,7 @@ void Driver::run(void) {
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "ELAPSED TIME = %7.3f s\n", walltime);
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
+    fflush(stdout);
 
     // Write out any output from running this
     // Note this is inherently not scalable in its current implementation so you can skip
