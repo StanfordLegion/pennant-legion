@@ -66,9 +66,10 @@ Driver::Driver(
         const InputFile* inp,
         const std::string& pname,
         const int numpcs,
+        const int prune_,
         Context c,
         Runtime* rt)
-        : probname(pname), ctx(c), runtime(rt) {
+        : prune(prune_), probname(pname), ctx(c), runtime(rt) {
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "********************\n");
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "Running PENNANT v0.6\n");
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "********************\n\n");
@@ -117,14 +118,19 @@ void Driver::run(void) {
     // Better timing for Legion
     TimingLauncher timing_launcher(MEASURE_MICRO_SECONDS);
     //std::deque<TimingMeasurement> timing_measurements;
-    // First make sure all our setup is done before beginning timing
-    runtime->issue_execution_fence(ctx);
-    // Get our start time
-    Future f_start = runtime->issue_timing_measurement(ctx, timing_launcher);
-    Future f_prev_measurement = f_start;
+    Future f_start;
+    Future f_prev_measurement;
+    Future f_stop;
 
     // main event loop
-    for (int cycle = 0; cycle < cstop; cycle++) {
+    for (int cycle = 0; cycle < cstop + 2*prune; cycle++) {
+        if (cycle == prune) {
+            runtime->issue_execution_fence(ctx);
+            // Get our start time
+            f_start = runtime->issue_timing_measurement(ctx, timing_launcher);
+            f_prev_measurement = f_start;
+        }
+
         runtime->auto_checkpoint(ctx);
 
         runtime->begin_trace(ctx, trace_id);
@@ -156,17 +162,19 @@ void Driver::run(void) {
             f_prev_measurement = f_measurement;
         } // if cycle...
 
+        if (cycle == cstop + prune - 1) {
+            // get stopping timestamp
+            timing_launcher.preconditions.clear();
+            // Measure after f_cdt is ready which is when the cycle is complete
+            timing_launcher.add_precondition(f_cdt);
+            f_stop = runtime->issue_timing_measurement(ctx, timing_launcher);
+        }
+
     } // for cycle...
 
-    // get stopping timestamp
-    timing_launcher.preconditions.clear();
-    // Measure after f_cdt is ready which is when the cycle is complete
-    timing_launcher.add_precondition(f_cdt);
-    Future f_stop = runtime->issue_timing_measurement(ctx, timing_launcher);
-
-    const double tbegin = f_start.get_result<long long>(true/*silence warnings*/);
-    const double tend = f_stop.get_result<long long>(true/*silence warnings*/);
-    const double walltime = tend - tbegin;
+    const long long tbegin = f_start.get_result<long long>(true/*silence warnings*/);
+    const long long tend = f_stop.get_result<long long>(true/*silence warnings*/);
+    const double walltime = (tend - tbegin)/1e6;
     // Make sure that all the previous measurements are done being reported
     // before we write out any of the final information
     f_prev_report.get_void_result(true/*silence warnings*/);
@@ -177,7 +185,7 @@ void Driver::run(void) {
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "time = %14.6g, tstop = %8.6g\n\n", f_time.get_result<double>(), tstop);
 
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "hydro cycle run time= %14.8g us\n", walltime);
+    LEGION_PRINT_ONCE(runtime, ctx, stdout, "ELAPSED TIME = %7.3f s\n", walltime);
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
 
     // Write out any output from running this

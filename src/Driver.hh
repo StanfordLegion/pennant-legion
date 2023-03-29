@@ -56,6 +56,7 @@ public:
     Mesh *mesh;
     Hydro *hydro;
 
+    const int prune;
     std::string probname;          // problem name
     //double time;                   // simulation time
     //int cycle;                     // simulation cycle number
@@ -76,6 +77,7 @@ public:
             const InputFile* inp,
             const std::string& pname,
             const int numpcs,
+            const int prune,
             Legion::Context ctx,
             Legion::Runtime* runtime);
     ~Driver();
