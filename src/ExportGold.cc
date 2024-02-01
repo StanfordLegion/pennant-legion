@@ -23,7 +23,7 @@
 using namespace std;
 
 
-ExportGold::ExportGold(Mesh* m) : mesh(m) {}
+ExportGold::ExportGold() {}
 
 ExportGold::~ExportGold() {}
 
@@ -34,12 +34,17 @@ void ExportGold::write(
         const double time,
         const double* zr,
         const double* ze,
-        const double* zp) {
+        const double* zp,
+        const int *znump,
+        const int numz,
+        const double2 *px,
+        const int nump,
+        const Pointer *mapsp1) {
 
     writeCaseFile(basename);
 
-    sortZones();
-    writeGeoFile(basename, cycle, time);
+    sortZones(numz, znump);
+    writeGeoFile(basename, cycle, time, px, nump, znump, mapsp1);
 
     writeVarFile(basename, "zr", zr);
     writeVarFile(basename, "ze", ze);
@@ -84,7 +89,11 @@ void ExportGold::writeCaseFile(
 void ExportGold::writeGeoFile(
         const string& basename,
         const int cycle,
-        const double time) {
+        const double time,
+        const double2 *px,
+        const int nump,
+        const int *znump,
+        const Pointer *mapsp1) {
 
     // open file
     ofstream ofs;
@@ -109,9 +118,6 @@ void ExportGold::writeGeoFile(
     ofs << setw(10) << 1 << endl;
     ofs << "universe" << endl;
 
-    const int nump = mesh->nump;
-    const double2* px = mesh->px;
-
     // write node info
     ofs << "coordinates" << endl;
     ofs << setw(10) << nump << endl;
@@ -123,9 +129,6 @@ void ExportGold::writeGeoFile(
     // Ensight expects z-coordinates, so write 0 for those
     for (int p = 0; p < nump; ++p)
         ofs << setw(12) << 0. << endl;
-
-    const int* znump = mesh->znump;
-    const int* mapsp1 = mesh->mapsp1;
 
     const int ntris = tris.size();
     const int nquads = quads.size();
@@ -282,10 +285,8 @@ void ExportGold::writeVarFile(
 }
 
 
-void ExportGold::sortZones() {
-
-    const int numz = mesh->numz;
-    const int* znump = mesh->znump;
+void ExportGold::sortZones(const int numz,
+                           const int *znump) {
 
     mapzs.resize(numz);
 

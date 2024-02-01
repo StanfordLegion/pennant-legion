@@ -75,7 +75,6 @@ public:
             const InputFile* inp,
             const std::string& pname,
             const int numpcs,
-            const bool parallel,
             Legion::Context ctx,
             Legion::Runtime* runtime);
     ~Driver();

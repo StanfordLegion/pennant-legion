@@ -15,6 +15,7 @@
 
 #include <string>
 #include <vector>
+#include "MyLegion.hh"
 
 // forward declarations
 class Mesh;
@@ -22,8 +23,6 @@ class Mesh;
 
 class ExportGold {
 public:
-
-    Mesh* mesh;
 
     std::vector<int> tris;         // zone index list for 3-sided zones
     std::vector<int> quads;        // same, for 4-sided zones
@@ -37,7 +36,7 @@ public:
     int gntris, gnquads, gnothers; // total number across all PEs
                                    //     of tris/quads/others
 
-    ExportGold(Mesh* m);
+    ExportGold();
     ~ExportGold();
 
     void write(
@@ -46,7 +45,12 @@ public:
             const double time,
             const double* zr,
             const double* ze,
-            const double* zp);
+            const double* zp,
+            const int *znump,
+            const int numz,
+            const double2 *px,
+            const int nump,
+            const Pointer *mapsp1);
 
     void writeCaseFile(
             const std::string& basename);
@@ -54,14 +58,19 @@ public:
     void writeGeoFile(
             const std::string& basename,
             const int cycle,
-            const double time);
+            const double time,
+            const double2 *px,
+            const int nump,
+            const int *znump,
+            const Pointer *mapsp1);
 
     void writeVarFile(
             const std::string& basename,
             const std::string& varname,
             const double* var);
 
-    void sortZones();
+    void sortZones(const int numz,
+                   const int *znump);
 };
 
 

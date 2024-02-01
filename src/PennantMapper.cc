@@ -208,7 +208,7 @@ void PennantMapper::map_task(const MapperContext ctx,
     for (unsigned idx = 0; idx < task.regions.size(); idx++)
     {
       // See if it is a reduction region requirement or not
-      if (task.regions[idx].privilege == REDUCE)
+      if (task.regions[idx].privilege == LEGION_REDUCE)
         create_reduction_instances(ctx, task, idx, 
 #ifdef NAN_CHECK
         // If we're doing nan-checks make sure things are in zero-copy
@@ -237,7 +237,7 @@ void PennantMapper::map_task(const MapperContext ctx,
     for (unsigned idx = 0; idx < task.regions.size(); idx++)
     {
       // See if it is a reduction region requirement or not
-      if (task.regions[idx].privilege == REDUCE)
+      if (task.regions[idx].privilege == LEGION_REDUCE)
         create_reduction_instances(ctx, task, idx, 
             local_numa.exists() ? local_numa : local_sysmem,
                                    output.chosen_instances[idx]);
@@ -268,7 +268,6 @@ void PennantMapper::speculate(const MapperContext ctx,
 #endif
 }
 
-#ifndef NO_LEGION_CONTROL_REPLICATION
 void PennantMapper::select_sharding_functor(const MapperContext ctx,
                                             const Task &task,
                                             const SelectShardingFunctorInput &input,
@@ -279,7 +278,6 @@ void PennantMapper::select_sharding_functor(const MapperContext ctx,
   else
     output.chosen_functor = 0; // default sharding functor so everything is on node 0
 }
-#endif
 
 void PennantMapper::map_copy(const MapperContext ctx,
                              const Copy &copy,
@@ -381,7 +379,6 @@ void PennantMapper::speculate(const MapperContext ctx,
 #endif
 }
 
-#ifndef NO_LEGION_CONTROL_REPLICATION
 void PennantMapper::select_sharding_functor(const MapperContext ctx,
                                             const Copy &copy,
                                             const SelectShardingFunctorInput &input,
@@ -389,7 +386,6 @@ void PennantMapper::select_sharding_functor(const MapperContext ctx,
 {
   output.chosen_functor = PENNANT_SHARD_ID; 
 }
-#endif
 
 void PennantMapper::select_partition_projection(const MapperContext  ctx,
                                                 const Partition& partition,
@@ -472,7 +468,6 @@ void PennantMapper::memoize_operation(const MapperContext  ctx,
   return result;
 }
 
-#ifndef NO_LEGION_CONTROL_REPLICATION
 void PennantMapper::select_sharding_functor(const MapperContext ctx,
                                             const Partition &partition,
                                             const SelectShardingFunctorInput &input,
@@ -488,7 +483,6 @@ void PennantMapper::select_sharding_functor(const MapperContext ctx,
 {
   output.chosen_functor = PENNANT_SHARD_ID; 
 }
-#endif
 
 void PennantMapper::map_pennant_array(const MapperContext ctx,
                                       const Mappable &mappable, unsigned index, 

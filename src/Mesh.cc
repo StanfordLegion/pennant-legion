@@ -137,6 +137,12 @@ static void __attribute__ ((constructor)) registerTasks() {
       registrar.set_leaf();
       Runtime::preregister_task_variant<Mesh::tempGatherTask>(registrar, "temp gather");
     }
+    {
+      TaskVariantRegistrar registrar(TID_WRITE, "CPU write out");
+      registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
+      registrar.set_leaf();
+      Runtime::preregister_task_variant<Mesh::writeTask>(registrar, "write out");
+    }
 
     Runtime::register_reduction_op<SumOp<int> >(
             OPID_SUMINT);
@@ -163,7 +169,6 @@ const double MinOp<double>::identity = DBL_MAX;
 template <>
 const double MaxOp<double>::identity = DBL_MIN;
 
-#ifndef NO_LEGION_CONTROL_REPLICATION
 PennantShardingFunctor::PennantShardingFunctor(const coord_t nx, const coord_t ny)
   : ShardingFunctor(), numpcx(nx), numpcy(ny), sharded(false) { }
 
@@ -200,18 +205,15 @@ ShardID PennantShardingFunctor::shard(const DomainPoint &p,
   assert(result < total_shards);
   return result;
 }
-#endif
 
 /*static*/ std::vector<PennantMapper*> Mesh::local_mappers;
 
 Mesh::Mesh(
         const InputFile* inp,
         const int numpcsa,
-        const bool par,
         Context ctxa,
         Runtime* runtimea)
-        : gmesh(NULL),  wxy(NULL), egold(NULL), parallel(par),
-          numpcs(numpcsa), ctx(ctxa), runtime(runtimea) {
+        : gmesh(NULL), numpcs(numpcsa), ctx(ctxa), runtime(runtimea) {
 
     chunksize = inp->getInt("chunksize", 0);
     subregion = inp->getDoubleList("subregion", vector<double>());
@@ -221,17 +223,13 @@ Mesh::Mesh(
     }
 
     gmesh = new GenMesh(inp);
-    wxy = new WriteXY(this);
-    egold = new ExportGold(this);
 
-#ifndef NO_LEGION_CONTROL_REPLICATION
     // Call this to populate the numpcx and numpcy fields
     gmesh->calcNumPieces(numpcs);
     PennantShardingFunctor *functor = 
       new PennantShardingFunctor(gmesh->numpcx, gmesh->numpcy);
     runtime->register_sharding_functor(PENNANT_SHARD_ID, functor, 
                                        true/*silence warnings*/);
-#endif
     // This is a little bit brittle but for now we need to tell our
     // mappers about the size of the mesh which we are about to 
     // load so that it knows how to shard things
@@ -239,337 +237,16 @@ Mesh::Mesh(
           local_mappers.begin(); it != local_mappers.end(); it++)
       (*it)->update_mesh_information(gmesh->numpcx, gmesh->numpcy);
 
-    if (parallel)
-        initParallel();
-    else
-        init();
+    init();
 }
 
 
 Mesh::~Mesh() {
     delete gmesh;
-    delete wxy;
-    delete egold;
 }
 
 
 void Mesh::init() {
-
-    // generate mesh
-    vector<double2> nodepos;
-    vector<int> cellstart, cellsize, cellnodes;
-    vector<int> cellcolors;
-    gmesh->generate(numpcs, nodepos, nodecolors, nodemcolors,
-            cellstart, cellsize, cellnodes, cellcolors);
-
-    nump = nodepos.size();
-    numz = cellstart.size();
-    nums = cellnodes.size();
-    numc = nums;
-
-    // copy cell sizes to mesh
-    znump = alloc<int>(numz);
-    copy(cellsize.begin(), cellsize.end(), znump);
-
-    // populate maps:
-    // use the cell* arrays to populate the side maps
-    initSides(cellstart, cellsize, cellnodes);
-    // release memory from cell* arrays
-    cellstart.resize(0);
-    cellsize.resize(0);
-    cellnodes.resize(0);
-
-    // populate chunk information
-    initChunks();
-
-    // write mesh statistics
-    writeStats();
-
-    // allocate remaining arrays
-    px = alloc<double2>(nump);
-    ex = alloc<double2>(nums);
-    zx = alloc<double2>(numz);
-    sarea = alloc<double>(nums);
-    svol = alloc<double>(nums);
-    zarea = alloc<double>(numz);
-    zvol = alloc<double>(numz);
-    smf = alloc<double>(nums);
-
-    // do a few initial calculations
-    for (int pch = 0; pch < numpch; ++pch) {
-        int pfirst = pchpfirst[pch];
-        int plast = pchplast[pch];
-        // copy nodepos into px, distributed across threads
-        for (int p = pfirst; p < plast; ++p)
-            px[p] = nodepos[p];
-
-    }
-
-    int numsbad = 0;
-    for (int sch = 0; sch < numsch; ++sch) {
-        int sfirst = schsfirst[sch];
-        int slast = schslast[sch];
-        calcCtrs(px, ex, zx, sfirst, slast);
-        numsbad += 
-          calcVols(px, zx, sarea, svol, zarea, zvol, sfirst, slast);
-        calcSideFracs(sarea, zarea, smf, sfirst, slast);
-    }
-    // check for negative volumes on initialization
-    if (numsbad > 0) {
-        cerr << "Error: " << numsbad << " negative side volumes" << endl;
-        cerr << "Exiting..." << endl;
-        exit(1);
-    }
-
-    // create index spaces and fields for points, zones, sides
-    IndexSpace isp = runtime->create_index_space(ctx, nump);
-    FieldSpace fsp = runtime->create_field_space(ctx);
-    FieldAllocator fap = runtime->create_field_allocator(ctx, fsp);
-    fap.allocate_field(sizeof(double2), FID_PX);
-    runtime->attach_name(fsp, FID_PX, "PX");
-    fap.allocate_field(sizeof(double2), FID_PXP);
-    runtime->attach_name(fsp, FID_PXP, "PXP");
-    fap.allocate_field(sizeof(double2), FID_PX0);
-    runtime->attach_name(fsp, FID_PX0, "PX0");
-    fap.allocate_field(sizeof(double2), FID_PU);
-    runtime->attach_name(fsp, FID_PU, "PU");
-    fap.allocate_field(sizeof(double2), FID_PU0);
-    runtime->attach_name(fsp, FID_PU0, "PU0");
-    fap.allocate_field(sizeof(double), FID_PMASWT);
-    runtime->attach_name(fsp, FID_PMASWT, "PMASWT");
-    fap.allocate_field(sizeof(double2), FID_PF);
-    runtime->attach_name(fsp, FID_PF, "PF");
-    fap.allocate_field(sizeof(double2), FID_PAP);
-    runtime->attach_name(fsp, FID_PAP, "PAP");
-    lrp = runtime->create_logical_region(ctx, isp, fsp);
-    runtime->attach_name(lrp, "lrp");
-
-    IndexSpace isz = runtime->create_index_space(ctx, numz);
-    FieldSpace fsz = runtime->create_field_space(ctx);
-    FieldAllocator faz = runtime->create_field_allocator(ctx, fsz);
-    faz.allocate_field(sizeof(int), FID_ZNUMP);
-    runtime->attach_name(fsz, FID_ZNUMP, "ZNUMP");
-    faz.allocate_field(sizeof(double2), FID_ZX);
-    runtime->attach_name(fsz, FID_ZX, "ZX");
-    faz.allocate_field(sizeof(double2), FID_ZXP);
-    runtime->attach_name(fsz, FID_ZXP, "ZXP");
-    faz.allocate_field(sizeof(double), FID_ZAREA);
-    runtime->attach_name(fsz, FID_ZAREA, "ZAREA");
-    faz.allocate_field(sizeof(double), FID_ZVOL);
-    runtime->attach_name(fsz, FID_ZVOL, "ZVOL");
-    faz.allocate_field(sizeof(double), FID_ZAREAP);
-    runtime->attach_name(fsz, FID_ZAREAP, "ZAREAP");
-    faz.allocate_field(sizeof(double), FID_ZVOLP);
-    runtime->attach_name(fsz, FID_ZVOLP, "ZVOLP");
-    faz.allocate_field(sizeof(double), FID_ZVOL0);
-    runtime->attach_name(fsz, FID_ZVOL0, "ZVOL0");
-    faz.allocate_field(sizeof(double), FID_ZDL);
-    runtime->attach_name(fsz, FID_ZDL, "ZDL");
-    faz.allocate_field(sizeof(double), FID_ZM);
-    runtime->attach_name(fsz, FID_ZM, "ZM");
-    faz.allocate_field(sizeof(double), FID_ZR);
-    runtime->attach_name(fsz, FID_ZR, "ZR");
-    faz.allocate_field(sizeof(double), FID_ZRP);
-    runtime->attach_name(fsz, FID_ZRP, "ZRP");
-    faz.allocate_field(sizeof(double), FID_ZE);
-    runtime->attach_name(fsz, FID_ZE, "ZE");
-    faz.allocate_field(sizeof(double), FID_ZETOT);
-    runtime->attach_name(fsz, FID_ZETOT, "ZETOT");
-    faz.allocate_field(sizeof(double), FID_ZW);
-    runtime->attach_name(fsz, FID_ZW, "ZW");
-    faz.allocate_field(sizeof(double), FID_ZWRATE);
-    runtime->attach_name(fsz, FID_ZWRATE, "ZWRATE");
-    faz.allocate_field(sizeof(double), FID_ZP);
-    runtime->attach_name(fsz, FID_ZP, "ZP");
-    faz.allocate_field(sizeof(double), FID_ZSS);
-    runtime->attach_name(fsz, FID_ZSS, "ZSS");
-    faz.allocate_field(sizeof(double), FID_ZDU);
-    runtime->attach_name(fsz, FID_ZDU, "ZDU");
-    faz.allocate_field(sizeof(double2), FID_ZUC);
-    runtime->attach_name(fsz, FID_ZUC, "ZUC");
-    faz.allocate_field(sizeof(double), FID_ZTMP);
-    runtime->attach_name(fsz, FID_ZTMP, "ZTMP");
-    lrz = runtime->create_logical_region(ctx, isz, fsz);
-    runtime->attach_name(lrz, "lrz");
-
-    IndexSpace iss = runtime->create_index_space(ctx, nums);
-    FieldSpace fss = runtime->create_field_space(ctx);
-    FieldAllocator fas = runtime->create_field_allocator(ctx, fss);
-    fas.allocate_field(sizeof(Pointer), FID_MAPSP1);
-    runtime->attach_name(fss, FID_MAPSP1, "MAPSP1");
-    fas.allocate_field(sizeof(Pointer), FID_MAPSP2);
-    runtime->attach_name(fss, FID_MAPSP2, "MAPSP2");
-    fas.allocate_field(sizeof(Pointer), FID_MAPSZ);
-    runtime->attach_name(fss, FID_MAPSZ, "MAPSZ");
-    fas.allocate_field(sizeof(Pointer), FID_MAPSS3);
-    runtime->attach_name(fss, FID_MAPSS3, "MAPSS3");
-    fas.allocate_field(sizeof(Pointer), FID_MAPSS4);
-    runtime->attach_name(fss, FID_MAPSS4, "MAPSS4");
-    fas.allocate_field(sizeof(int), FID_MAPSP1REG);
-    runtime->attach_name(fss, FID_MAPSP1REG, "MAPSP1REG");
-    fas.allocate_field(sizeof(int), FID_MAPSP2REG);
-    runtime->attach_name(fss, FID_MAPSP2REG, "MAPSP2REG");
-    fas.allocate_field(sizeof(double2), FID_EX);
-    runtime->attach_name(fss, FID_EX, "EX");
-    fas.allocate_field(sizeof(double2), FID_EXP);
-    runtime->attach_name(fss, FID_EXP, "EXP");
-    fas.allocate_field(sizeof(double), FID_SAREA);
-    runtime->attach_name(fss, FID_SAREA, "SAREA");
-    fas.allocate_field(sizeof(double), FID_SVOL);
-    runtime->attach_name(fss, FID_SVOL, "SVOL");
-    fas.allocate_field(sizeof(double), FID_SAREAP);
-    runtime->attach_name(fss, FID_SAREAP, "SAREAP");
-    fas.allocate_field(sizeof(double), FID_SVOLP);
-    runtime->attach_name(fss, FID_SVOLP, "SVOLP");
-    fas.allocate_field(sizeof(double2), FID_SSURFP);
-    runtime->attach_name(fss, FID_SSURFP, "SSURFP");
-    fas.allocate_field(sizeof(double), FID_ELEN);
-    runtime->attach_name(fss, FID_ELEN, "ELEN");
-    fas.allocate_field(sizeof(double), FID_SMF);
-    runtime->attach_name(fss, FID_SMF, "SMF");
-    fas.allocate_field(sizeof(double2), FID_SFP);
-    runtime->attach_name(fss, FID_SFP, "SFP");
-    fas.allocate_field(sizeof(double2), FID_SFQ);
-    runtime->attach_name(fss, FID_SFQ, "SFQ");
-    fas.allocate_field(sizeof(double2), FID_SFT);
-    runtime->attach_name(fss, FID_SFT, "SFT");
-    fas.allocate_field(sizeof(double), FID_CAREA);
-    runtime->attach_name(fss, FID_CAREA, "CAREA");
-    fas.allocate_field(sizeof(double), FID_CEVOL);
-    runtime->attach_name(fss, FID_CEVOL, "CEVOL");
-    fas.allocate_field(sizeof(double), FID_CDU);
-    runtime->attach_name(fss, FID_CDU, "CDU");
-    fas.allocate_field(sizeof(double), FID_CDIV);
-    runtime->attach_name(fss, FID_CDIV, "CDIV");
-    fas.allocate_field(sizeof(double), FID_CCOS);
-    runtime->attach_name(fss, FID_CCOS, "CCOS");
-    fas.allocate_field(sizeof(double2), FID_CQE1);
-    runtime->attach_name(fss, FID_CQE1, "CQE1");
-    fas.allocate_field(sizeof(double2), FID_CQE2);
-    runtime->attach_name(fss, FID_CQE2, "CQE2");
-    fas.allocate_field(sizeof(double), FID_CRMU);
-    runtime->attach_name(fss, FID_CRMU, "CRMU");
-    fas.allocate_field(sizeof(double), FID_CW);
-    runtime->attach_name(fss, FID_CW, "CW");
-    lrs = runtime->create_logical_region(ctx, iss, fss);
-    runtime->attach_name(lrs, "lrs");
-
-    // create index spaces and fields for global vars
-    IndexSpace isglb = runtime->create_index_space(ctx, 1);
-    FieldSpace fsglb = runtime->create_field_space(ctx);
-    FieldAllocator faglb = runtime->create_field_allocator(ctx, fsglb);
-    faglb.allocate_field(sizeof(int), FID_NUMSBAD);
-    faglb.allocate_field(sizeof(double), FID_DTREC);
-    lrglb = runtime->create_logical_region(ctx, isglb, fsglb);
-    runtime->attach_name(lrglb, "lrglb");
-
-    // create domain over pieces
-    Rect<1> task_rect(Point<1>(0), Point<1>(numpcs-1));
-    dompc  = Domain(task_rect);
-    this->ispc = runtime->create_index_space(ctx, dompc);
-    // create zone and side partitions
-    Coloring colorz, colors;
-    int z0 = 0;
-    while (z0 < numz)
-    {
-        int s0 = cellstart[z0];
-        int c = cellcolors[z0];
-        int z1 = z0 + 1;
-        // find range with [z0, z1) all the same color
-        while (z1 < numz && cellcolors[z1] == c) ++z1;
-        int s1 = (z1 < numz ? cellstart[z1] : nums);
-        colorz[c].ranges.insert(pair<int, int>(z0, z1 - 1));
-        colors[c].ranges.insert(pair<int, int>(s0, s1 - 1));
-        z0 = z1;
-    }
-    IndexPartition ipz = runtime->create_index_partition(
-                ctx, isz, colorz, true);
-    lpz = runtime->get_logical_partition(ctx, lrz, ipz);
-    IndexPartition ips = runtime->create_index_partition(
-                ctx, iss, colors, true);
-    lps = runtime->get_logical_partition(ctx, lrs, ips);
-
-    // create point partitions
-    Coloring colorpall, colorpprv, colorpshr, colorpmstr;
-    // force all colors to exist, even if they might be empty
-    colorpall[0];
-    colorpall[1];
-    for (int c = 0; c < numpcs; ++c) {
-        colorpprv[c];
-        colorpmstr[c];
-        colorpshr[c];
-    }
-    int p0 = 0;
-    while (p0 < nump)
-    {
-        int c = nodecolors[p0];
-        int p1 = p0 + 1;
-        if (c != MULTICOLOR) {
-            // find range with [p0, p1) all the same color
-            while (p1 < nump && nodecolors[p1] == c) ++p1;
-            colorpall[0].ranges.insert(pair<int, int>(p0, p1 - 1));
-            colorpprv[c].ranges.insert(pair<int, int>(p0, p1 - 1));
-        }
-        else {
-            // insert p0 by itself
-            colorpall[1].points.insert(p0);
-            vector<int>& pmc = nodemcolors[p0];
-            colorpmstr[pmc[0]].points.insert(p0);
-            for (int i = 0; i < pmc.size(); ++i)
-                colorpshr[pmc[i]].points.insert(p0);
-        }
-        p0 = p1;
-    }
-    IndexPartition ippall = runtime->create_index_partition(
-                ctx, isp, colorpall, true);
-    lppall = runtime->get_logical_partition(ctx, lrp, ippall);
-    IndexSpace ispprv = runtime->get_index_subspace(ctx, ippall, 0);
-    IndexSpace ispshr = runtime->get_index_subspace(ctx, ippall, 1);
-
-    IndexPartition ippprv = runtime->create_index_partition(
-                ctx, ispprv, colorpprv, true);
-    lppprv = runtime->get_logical_partition_by_tree(
-            ctx, ippprv, fsp, lrp.get_tree_id());
-    IndexPartition ippmstr = runtime->create_index_partition(
-                ctx, ispshr, colorpmstr, true);
-    lppmstr = runtime->get_logical_partition_by_tree(
-            ctx, ippmstr, fsp, lrp.get_tree_id());
-    IndexPartition ippshr = runtime->create_index_partition(
-                ctx, ispshr, colorpshr, false);
-    lppshr = runtime->get_logical_partition_by_tree(
-            ctx, ippshr, fsp, lrp.get_tree_id());
-
-    vector<Pointer> lgmapsp1(&mapsp1[0], &mapsp1[nums]);
-    vector<Pointer> lgmapsp2(&mapsp2[0], &mapsp2[nums]);
-    vector<Pointer> lgmapsz (&mapsz [0], &mapsz [nums]);
-    vector<Pointer> lgmapss3(&mapss3[0], &mapss3[nums]);
-    vector<Pointer> lgmapss4(&mapss4[0], &mapss4[nums]);
-
-    vector<int> lgmapsp1reg(nums), lgmapsp2reg(nums);
-    for (int s = 0; s < nums; ++s) {
-        lgmapsp1reg[s] = (nodecolors[mapsp1[s]] == MULTICOLOR);
-        lgmapsp2reg[s] = (nodecolors[mapsp2[s]] == MULTICOLOR);
-    }
-
-    setField(lrs, FID_MAPSP1, &lgmapsp1[0], nums);
-    setField(lrs, FID_MAPSP2, &lgmapsp2[0], nums);
-    setField(lrs, FID_MAPSZ,  &lgmapsz[0],  nums);
-    setField(lrs, FID_MAPSS3, &lgmapss3[0], nums);
-    setField(lrs, FID_MAPSS4, &lgmapss4[0], nums);
-    setField(lrs, FID_MAPSP1REG, &lgmapsp1reg[0], nums);
-    setField(lrs, FID_MAPSP2REG, &lgmapsp2reg[0], nums);
-
-    setField(lrp, FID_PX, px, nump);
-    setField(lrz, FID_ZVOL, zvol, numz);
-    setField(lrz, FID_ZNUMP, znump, numz);
-    setField(lrs, FID_SMF, smf, nums);
-
-    setField(lrglb, FID_NUMSBAD, &numsbad, 1);
-
-}
-
-
-void Mesh::initParallel() {
     const Rect<1> piece_rect(Point<1>(0), Point<1>(numpcs-1));
     dompc  = Domain(piece_rect);
     // Create a space for the number of pieces that we will have
@@ -874,12 +551,12 @@ void Mesh::initParallel() {
       IndexCopyLauncher update_launcher(is_piece);
       update_launcher.add_copy_requirements(
           RegionRequirement(lp_points_equal, 0/*identity projection*/, 
-                            READ_ONLY, EXCLUSIVE, lr_temp_points),
-          RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
+                            LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_temp_points),
+          RegionRequirement(lps, 0/*identity projection*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
       update_launcher.add_src_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP1);
       update_launcher.add_src_indirect_field(FID_MAPSP1TEMP,
-          RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs)); 
+          RegionRequirement(lps, 0/*identity projection*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs)); 
       update_launcher.possible_src_indirect_out_of_range = false;
       runtime->issue_copy_operation(ctx, update_launcher);
     }
@@ -887,12 +564,12 @@ void Mesh::initParallel() {
       IndexCopyLauncher update_launcher(is_piece);
       update_launcher.add_copy_requirements(
           RegionRequirement(lp_points_equal, 0/*identity projection*/, 
-                            READ_ONLY, EXCLUSIVE, lr_temp_points),
-          RegionRequirement(lps, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lrs));
+                            LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_temp_points),
+          RegionRequirement(lps, 0/*identity projection*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
       update_launcher.add_src_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_dst_field(0/*index*/, FID_MAPSP2);
       update_launcher.add_src_indirect_field(FID_MAPSP2TEMP,
-          RegionRequirement(lps, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lrs));
+          RegionRequirement(lps, 0/*identity projection*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
       update_launcher.possible_src_indirect_out_of_range = false;
       runtime->issue_copy_operation(ctx, update_launcher);
     }
@@ -900,26 +577,26 @@ void Mesh::initParallel() {
     {
       TaskLauncher update_launcher(TID_TEMPGATHER, TaskArgument());
       update_launcher.add_region_requirement(
-          RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points));
+          RegionRequirement(lr_temp_points, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_temp_points));
       update_launcher.add_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_region_requirement(
-          RegionRequirement(lrs, WRITE_DISCARD, EXCLUSIVE, lrs));
+          RegionRequirement(lrs, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
       update_launcher.add_field(1/*index*/, FID_MAPSP1);
       update_launcher.add_region_requirement(
-          RegionRequirement(lrs, READ_ONLY, EXCLUSIVE, lrs));
+          RegionRequirement(lrs, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
       update_launcher.add_field(2/*index*/, FID_MAPSP1TEMP);
       runtime->execute_task(ctx, update_launcher);
     }
     {
       TaskLauncher update_launcher(TID_TEMPGATHER, TaskArgument());
       update_launcher.add_region_requirement(
-          RegionRequirement(lr_temp_points, READ_ONLY, EXCLUSIVE, lr_temp_points));
+          RegionRequirement(lr_temp_points, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_temp_points));
       update_launcher.add_field(0/*index*/, FID_MAPLOAD2DENSE);
       update_launcher.add_region_requirement(
-          RegionRequirement(lrs, WRITE_DISCARD, EXCLUSIVE, lrs));
+          RegionRequirement(lrs, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
       update_launcher.add_field(1/*index*/, FID_MAPSP2);
       update_launcher.add_region_requirement(
-          RegionRequirement(lrs, READ_ONLY, EXCLUSIVE, lrs));
+          RegionRequirement(lrs, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
       update_launcher.add_field(2/*index*/, FID_MAPSP2TEMP);
       runtime->execute_task(ctx, update_launcher);
     }
@@ -946,7 +623,7 @@ void Mesh::initParallel() {
     calcSideFracsParallel(runtime, ctx, lrs, lps, lrz, lpz, is_piece);
 
     // create index spaces and fields for global vars
-    IndexSpace isglb = runtime->create_index_space(ctx, 1);
+    IndexSpace isglb = runtime->create_index_space(ctx, Rect<1>(Point<1>(0),Point<1>(0)));
     FieldSpace fsglb = runtime->create_field_space(ctx);
     {
       FieldAllocator faglb = runtime->create_field_allocator(ctx, fsglb);
@@ -975,101 +652,16 @@ void Mesh::initParallel() {
 }
 
 
-void Mesh::initSides(
-        std::vector<int>& cellstart,
-        std::vector<int>& cellsize,
-        std::vector<int>& cellnodes) {
-
-    mapsp1 = alloc<int>(nums);
-    mapsp2 = alloc<int>(nums);
-    mapsz  = alloc<int>(nums);
-    mapss3 = alloc<int>(nums);
-    mapss4 = alloc<int>(nums);
-
-    for (int z = 0; z < numz; ++z) {
-        int sbase = cellstart[z];
-        int size = cellsize[z];
-        for (int n = 0; n < size; ++n) {
-            int s = sbase + n;
-            int snext = sbase + (n + 1 == size ? 0 : n + 1);
-            int slast = sbase + (n == 0 ? size : n) - 1;
-            mapsz[s] = z;
-            mapsp1[s] = cellnodes[s];
-            mapsp2[s] = cellnodes[snext];
-            mapss3[s] = slast;
-            mapss4[s] = snext;
-        } // for n
-    } // for z
-
-}
-
-
-void Mesh::initChunks() {
-
-    if (chunksize == 0) chunksize = max(nump, nums);
-    // check for bad chunksize
-    if (chunksize < 0) {
-        cerr << "Error: bad chunksize " << chunksize << endl;
-        cerr << "Exiting..." << endl;
-        exit(1);
-    }
-
-    // compute side chunks
-    // use 'chunksize' for maximum chunksize; decrease as needed
-    // to ensure that no zone has its sides split across chunk
-    // boundaries
-    coord_t s1, s2 = 0;
-    while (s2 < nums) {
-        s1 = s2;
-        s2 = min(s2 + chunksize, nums);
-        while (s2 < nums && mapsz[s2] == mapsz[s2-1])
-            --s2;
-        schsfirst.push_back(s1);
-        schslast.push_back(s2);
-        schzfirst.push_back(mapsz[s1]);
-        schzlast.push_back(mapsz[s2-1] + 1);
-    }
-    numsch = schsfirst.size();
-
-    // compute point chunks
-    coord_t p1, p2 = 0;
-    while (p2 < nump) {
-        p1 = p2;
-        p2 = min(p2 + chunksize, nump);
-        pchpfirst.push_back(p1);
-        pchplast.push_back(p2);
-    }
-    numpch = pchpfirst.size();
-
-    // compute zone chunks
-    coord_t z1, z2 = 0;
-    while (z2 < numz) {
-        z1 = z2;
-        z2 = min(z2 + chunksize, numz);
-        zchzfirst.push_back(z1);
-        zchzlast.push_back(z2);
-    }
-    numzch = zchzfirst.size();
-
-}
-
-
 void Mesh::writeStats() {
 
     coord_t gnump = nump;
     coord_t gnumz = numz;
     coord_t gnums = nums;
-    coord_t gnumpch = numpch;
-    coord_t gnumzch = numzch;
-    coord_t gnumsch = numsch;
 
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "--- Mesh Information ---\n");
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "Points:  %lld\n", gnump);
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "Zones:   %lld\n", gnumz);
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "Sides:   %lld\n", gnums);
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Side chunks:  %lld\n", gnumsch);
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Point chunks: %lld\n", gnumpch);
-    LEGION_PRINT_ONCE(runtime, ctx, stdout, "Zone chunks:  %lld\n", gnumzch);
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "Chunk size:   %d\n", chunksize);
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "------------------------\n");
 }
@@ -1077,68 +669,25 @@ void Mesh::writeStats() {
 
 void Mesh::write(
         const string& probname,
-        const int cycle,
-        const double time,
-        const double* zr,
-        const double* ze,
-        const double* zp) {
+        const Future &f_cycle,
+        const Future &f_time) {
 
-    wxy->write(probname, zr, ze, zp);
-    egold->write(probname, cycle, time, zr, ze, zp);
-
-}
-
-
-vector<int> Mesh::getXPlane(const double c) {
-
-    vector<int> mapbp;
-    const double eps = 1.e-12;
-
-    for (int p = 0; p < nump; ++p) {
-        if (fabs(px[p].x - c) < eps) {
-            mapbp.push_back(p);
-        }
-    }
-    return mapbp;
-
-}
-
-
-vector<int> Mesh::getYPlane(const double c) {
-
-    vector<int> mapbp;
-    const double eps = 1.e-12;
-
-    for (int p = 0; p < nump; ++p) {
-        if (fabs(px[p].y - c) < eps) {
-            mapbp.push_back(p);
-        }
-    }
-    return mapbp;
-
-}
-
-
-void Mesh::getPlaneChunks(
-        const int numb,
-        const int* mapbp,
-        vector<int>& pchbfirst,
-        vector<int>& pchblast) {
-
-    pchbfirst.resize(0);
-    pchblast.resize(0);
-
-    // compute boundary point chunks
-    // (boundary points contained in each point chunk)
-    int bf, bl = 0;
-    for (int pch = 0; pch < numpch; ++pch) {
-         int pl = pchplast[pch];
-         bf = bl;
-         bl = lower_bound(&mapbp[bf], &mapbp[numb], pl) - &mapbp[0];
-         pchbfirst.push_back(bf);
-         pchblast.push_back(bl);
-    }
-
+    TaskLauncher launcher(TID_WRITE, TaskArgument(probname.c_str(), probname.size()+1));
+    launcher.add_future(f_cycle);
+    launcher.add_future(f_time);
+    launcher.add_region_requirement(
+        RegionRequirement(lrz, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
+    launcher.add_field(0, FID_ZP);
+    launcher.add_field(0, FID_ZE);
+    launcher.add_field(0, FID_ZR);
+    launcher.add_field(0, FID_ZNUMP);
+    launcher.add_region_requirement(
+        RegionRequirement(lrp, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
+    launcher.add_field(1, FID_PX);
+    launcher.add_region_requirement(
+        RegionRequirement(lrs, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
+    launcher.add_field(2, FID_MAPSP1);
+    runtime->execute_task(ctx, launcher);
 }
 
 
@@ -1154,11 +703,11 @@ void Mesh::calcOwnershipParallel(
   IndexTaskLauncher launcher(TID_CALCOWNERS, is_piece, 
                             TaskArgument(&args, sizeof(args)), ArgumentMap());
   launcher.add_region_requirement(
-      RegionRequirement(lp_sides, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_sides));
+      RegionRequirement(lp_sides, 0/*identity projection*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_sides));
   launcher.add_field(0/*index*/, FID_MAPSP1);
   launcher.add_field(0/*index*/, FID_MAPSP2);
   launcher.add_region_requirement(
-      RegionRequirement(lp_sides, 0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+      RegionRequirement(lp_sides, 0/*identity projection*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_sides));
   launcher.add_field(1/*index*/, FID_MAPSP1REG);
   launcher.add_field(1/*index*/, FID_MAPSP2REG);
   runtime->execute_index_space(ctx, launcher);
@@ -1220,26 +769,26 @@ void Mesh::calcCtrsParallel(
             IndexSpace is_piece) {
   IndexTaskLauncher launcher(TID_CALCCTRS, is_piece, TaskArgument(), ArgumentMap());
   launcher.add_region_requirement(
-      RegionRequirement(lp_sides, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_sides));
+      RegionRequirement(lp_sides, 0/*identity projection*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_sides));
   launcher.add_field(0/*index*/, FID_MAPSP1);
   launcher.add_field(0/*index*/, FID_MAPSP2);
   launcher.add_field(0/*index*/, FID_MAPSZ);
   launcher.add_field(0/*index*/, FID_MAPSP1REG);
   launcher.add_field(0/*index*/, FID_MAPSP2REG);
   launcher.add_region_requirement(
-      RegionRequirement(lp_zones, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_zones));
+      RegionRequirement(lp_zones, 0/*identity projection*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_zones));
   launcher.add_field(1/*index*/, FID_ZNUMP);
   launcher.add_region_requirement(
-      RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+      RegionRequirement(lp_points_private, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_points));
   launcher.add_field(2/*index*/, FID_PX);
   launcher.add_region_requirement(
-      RegionRequirement(lp_points_shared, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+      RegionRequirement(lp_points_shared, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_points));
   launcher.add_field(3/*index*/, FID_PX);
   launcher.add_region_requirement(
-      RegionRequirement(lp_sides, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+      RegionRequirement(lp_sides, 0/*identity*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_sides));
   launcher.add_field(4/*index*/, FID_EX);
   launcher.add_region_requirement(
-      RegionRequirement(lp_zones, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_zones));
+      RegionRequirement(lp_zones, 0/*identity*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_zones));
   launcher.add_field(5/*index*/, FID_ZX);
   runtime->execute_index_space(ctx, launcher);
 }
@@ -1350,27 +899,27 @@ Future Mesh::calcVolsParallel(
             IndexSpace is_piece) {
   IndexTaskLauncher launcher(TID_CALCVOLS, is_piece, TaskArgument(), ArgumentMap());
   launcher.add_region_requirement(
-      RegionRequirement(lp_sides, 0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_sides));
+      RegionRequirement(lp_sides, 0/*identity projection*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_sides));
   launcher.add_field(0/*index*/, FID_MAPSP1);
   launcher.add_field(0/*index*/, FID_MAPSP2);
   launcher.add_field(0/*index*/, FID_MAPSZ);
   launcher.add_field(0/*index*/, FID_MAPSP1REG);
   launcher.add_field(0/*index*/, FID_MAPSP2REG);
   launcher.add_region_requirement(
-      RegionRequirement(lp_points_private, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+      RegionRequirement(lp_points_private, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_points));
   launcher.add_field(1/*index*/, FID_PX);
   launcher.add_region_requirement(
-      RegionRequirement(lp_points_shared, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_points));
+      RegionRequirement(lp_points_shared, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_points));
   launcher.add_field(2/*index*/, FID_PX);
   launcher.add_region_requirement(
-      RegionRequirement(lp_zones, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_zones));
+      RegionRequirement(lp_zones, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_zones));
   launcher.add_field(3/*index*/, FID_ZX);
   launcher.add_region_requirement(
-      RegionRequirement(lp_sides, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+      RegionRequirement(lp_sides, 0/*identity*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_sides));
   launcher.add_field(4/*index*/, FID_SAREA);
   launcher.add_field(4/*index*/, FID_SVOL);
   launcher.add_region_requirement(
-      RegionRequirement(lp_zones, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lr_zones));
+      RegionRequirement(lp_zones, 0/*identity*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_zones));
   launcher.add_field(5/*index*/, FID_ZAREA);
   launcher.add_field(5/*index*/, FID_ZVOL);
   return runtime->execute_index_space(ctx, launcher, OPID_SUMINT);
@@ -1520,14 +1069,14 @@ void Mesh::calcSideFracsParallel(
             IndexSpace is_piece) {
   IndexTaskLauncher launcher(TID_CALCSIDEFRACS, is_piece, TaskArgument(), ArgumentMap());
   launcher.add_region_requirement(
-      RegionRequirement(lp_sides, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_sides));
+      RegionRequirement(lp_sides, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_sides));
   launcher.add_field(0/*index*/, FID_SAREA);
   launcher.add_field(0/*index*/, FID_MAPSZ);
   launcher.add_region_requirement(
-      RegionRequirement(lp_zones, 0/*identity*/, READ_ONLY, EXCLUSIVE, lr_zones));
+      RegionRequirement(lp_zones, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_zones));
   launcher.add_field(1/*index*/, FID_ZAREA);
   launcher.add_region_requirement(
-      RegionRequirement(lp_sides, 0/*idenity*/, WRITE_DISCARD, EXCLUSIVE, lr_sides));
+      RegionRequirement(lp_sides, 0/*idenity*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_sides));
   launcher.add_field(2/*index*/, FID_SMF);
   runtime->execute_index_space(ctx, launcher);
 }
@@ -1729,6 +1278,7 @@ void Mesh::calcCharLenOMPTask(
 }
 
 
+#if 0
 void Mesh::calcCtrs(
         const double2* px,
         double2* ex,
@@ -1792,6 +1342,7 @@ int Mesh::calcVols(
 
     return count;
 }
+#endif
 
 
 void Mesh::checkBadSides(int cycle, Future f, Predicate pred) {
@@ -1806,6 +1357,7 @@ void Mesh::checkBadSides(int cycle, Future f, Predicate pred) {
 }
 
 
+#if 0
 void Mesh::calcSideFracs(
         const double* sarea,
         const double* zarea,
@@ -1819,6 +1371,7 @@ void Mesh::calcSideFracs(
         smf[s] = sarea[s] / zarea[z];
     }
 }
+#endif
 
 
 void Mesh::computeRangesParallel(
@@ -1840,7 +1393,7 @@ void Mesh::computeRangesParallel(
     IndexTaskLauncher launcher(TID_COUNTPOINTS, is_piece,
         TaskArgument(&ip_private, sizeof(ip_private)), ArgumentMap());
     launcher.add_region_requirement(RegionRequirement(lp_private_range,
-          0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_private_range));
+          0/*identity projection*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_private_range));
     launcher.add_field(0/*index*/, FID_COUNT);
     runtime->execute_index_space(ctx, launcher);
   }
@@ -1848,26 +1401,26 @@ void Mesh::computeRangesParallel(
     IndexTaskLauncher launcher(TID_COUNTPOINTS, is_piece,
         TaskArgument(&ip_shared, sizeof(ip_shared)), ArgumentMap());
     launcher.add_region_requirement(RegionRequirement(lp_shared_range,
-          0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_shared_range));
+          0/*identity projection*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_shared_range));
     launcher.add_field(0/*index*/, FID_COUNT);
     runtime->execute_index_space(ctx, launcher);
   }
   // Then we do a single task launch to compute the ranges
   TaskLauncher launcher(TID_CALCRANGES, TaskArgument());
   launcher.add_region_requirement(
-      RegionRequirement(lr_all_range, WRITE_DISCARD, EXCLUSIVE, lr_all_range));
+      RegionRequirement(lr_all_range, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_all_range));
   launcher.add_field(0/*index*/, FID_RANGE);
   launcher.add_region_requirement(
-      RegionRequirement(lr_private_range, WRITE_DISCARD, EXCLUSIVE, lr_private_range));
+      RegionRequirement(lr_private_range, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_private_range));
   launcher.add_field(1/*index*/, FID_RANGE);
   launcher.add_region_requirement(
-      RegionRequirement(lr_shared_range, WRITE_DISCARD, EXCLUSIVE, lr_shared_range));
+      RegionRequirement(lr_shared_range, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_shared_range));
   launcher.add_field(2/*index*/, FID_RANGE);
   launcher.add_region_requirement(
-      RegionRequirement(lr_private_range, READ_ONLY, EXCLUSIVE, lr_private_range));
+      RegionRequirement(lr_private_range, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_private_range));
   launcher.add_field(3/*index*/, FID_COUNT);
   launcher.add_region_requirement(
-      RegionRequirement(lr_shared_range, READ_ONLY, EXCLUSIVE, lr_shared_range));
+      RegionRequirement(lr_shared_range, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_shared_range));
   launcher.add_field(4/*index*/, FID_COUNT);
   runtime->execute_task(ctx, launcher);
 }
@@ -1885,13 +1438,13 @@ void Mesh::compactPointsParallel(
   IndexTaskLauncher launcher(TID_COMPACTPOINTS, is_piece,
                               TaskArgument(), ArgumentMap());
   launcher.add_region_requirement(RegionRequirement(lp_points,
-        0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_points));
+        0/*identity projection*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_points));
   launcher.add_field(0/*index*/, FID_PX);
   launcher.add_region_requirement(RegionRequirement(lp_temp_points,
-        0/*identity projection*/, READ_ONLY, EXCLUSIVE, lr_temp_points));
+        0/*identity projection*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr_temp_points));
   launcher.add_field(1/*index*/, FID_PX);
   launcher.add_region_requirement(RegionRequirement(lp_temp_points,
-        0/*identity projection*/, WRITE_DISCARD, EXCLUSIVE, lr_temp_points));
+        0/*identity projection*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lr_temp_points));
   launcher.add_field(2/*index*/, FID_MAPLOAD2DENSE);
 
   runtime->execute_index_space(ctx, launcher);
@@ -2015,3 +1568,39 @@ void Mesh::tempGatherTask(
     }
 }
 
+
+void Mesh::writeTask(
+        const Task *task,
+        const std::vector<PhysicalRegion> &regions,
+        Context ctx,
+        Runtime *runtime) {
+  const AccessorRO<double> acc_zp(regions[0], FID_ZP);
+  const AccessorRO<double> acc_ze(regions[0], FID_ZE);
+  const AccessorRO<double> acc_zr(regions[0], FID_ZR);
+  const AccessorRO<int> acc_znump(regions[0], FID_ZNUMP);
+  const Rect<1> zone_bounds = runtime->get_index_space_domain(ctx, 
+      task->regions[0].region.get_index_space());
+  const double *zp = acc_zp.ptr(zone_bounds);
+  const double *ze = acc_ze.ptr(zone_bounds);
+  const double *zr = acc_zr.ptr(zone_bounds);
+  const int *znump = acc_znump.ptr(zone_bounds);
+
+  const AccessorRO<double2> acc_px(regions[1], FID_PX);
+  const Rect<1> point_bounds = runtime->get_index_space_domain(ctx,
+      task->regions[1].region.get_index_space());
+  const double2 *px = acc_px.ptr(point_bounds);
+
+  const AccessorRO<Pointer> acc_mapsp1(regions[2], FID_MAPSP1);
+  const Rect<1> side_bounds = runtime->get_index_space_domain(ctx,
+      task->regions[2].region.get_index_space());
+  const Pointer *mapsp1 = acc_mapsp1.ptr(side_bounds);
+
+  std::string probname((const char*)task->args);
+  WriteXY wxy;
+  wxy.write(probname, zr, ze, zp, zone_bounds.volume());
+  ExportGold egold;
+  egold.write(probname, task->futures[0].get_result<int>(),
+      task->futures[1].get_result<double>(), 
+      zr, ze, zp, znump, zone_bounds.volume(), 
+      px, point_bounds.volume(), mapsp1);
+}

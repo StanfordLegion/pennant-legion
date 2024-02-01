@@ -63,12 +63,10 @@ public:
   virtual void speculate(const Legion::Mapping::MapperContext ctx,
                          const Legion::Task &task,
                                SpeculativeOutput &output);
-#ifndef NO_LEGION_CONTROL_REPLICATION
   virtual void select_sharding_functor(const Legion::Mapping::MapperContext ctx,
                                        const Legion::Task &task,
                                        const SelectShardingFunctorInput &input,
                                              SelectShardingFunctorOutput &output);
-#endif
 public:
   virtual void map_copy(const Legion::Mapping::MapperContext ctx,
                         const Legion::Copy &copy,
@@ -77,12 +75,10 @@ public:
   virtual void speculate(const Legion::Mapping::MapperContext ctx,
                          const Legion::Copy &copy,
                                SpeculativeOutput &output);
-#ifndef NO_LEGION_CONTROL_REPLICATION
   virtual void select_sharding_functor(const Legion::Mapping::MapperContext ctx,
                                        const Legion::Copy &copy,
                                        const SelectShardingFunctorInput &input,
                                              SelectShardingFunctorOutput &output);
-#endif
 public:
   virtual void select_partition_projection(const Legion::Mapping::MapperContext  ctx,
                                            const Legion::Partition& partition,
@@ -92,7 +88,6 @@ public:
                              const Legion::Partition& partition,
                              const MapPartitionInput&   input,
                                    MapPartitionOutput&  output);
-#ifndef NO_LEGION_CONTROL_REPLICATION
   virtual void select_sharding_functor(const Legion::Mapping::MapperContext ctx,
                                        const Legion::Partition &partition,
                                        const SelectShardingFunctorInput &input,
@@ -102,7 +97,6 @@ public:
                                        const Legion::Fill& fill,
                                        const SelectShardingFunctorInput &input,
                                              SelectShardingFunctorOutput &output);
-#endif
 public:
   virtual void memoize_operation(const Legion::Mapping::MapperContext ctx,
                                  const Legion::Mappable& mappable,

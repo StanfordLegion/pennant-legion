@@ -62,11 +62,6 @@ public:
     HydroBC(
             Mesh* msh,
             const double2 v,
-            const std::vector<int>& mbp);
-
-    HydroBC(
-            Mesh* msh,
-            const double2 v,
             const double bound, 
             const bool xplane);
 

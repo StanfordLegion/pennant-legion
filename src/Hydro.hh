@@ -98,19 +98,6 @@ public:
     std::vector<double> bcx;    // x values of x-plane fixed boundaries
     std::vector<double> bcy;    // y values of y-plane fixed boundaries
 
-    double dtrec;               // maximum timestep for hydro
-    std::string msgdtrec;       // message:  reason for dtrec
-
-    double2* pu;       // point velocity
-
-    double* zm;        // zone mass
-    double* zr;        // zone density
-    double* ze;        // zone specific internal energy
-                       // (energy per unit mass)
-    double* zetot;     // zone total internal energy
-    double* zwrate;    // zone work rate
-    double* zp;        // zone pressure
-
     Hydro(
             const InputFile* inp,
             Mesh* m,
@@ -120,17 +107,8 @@ public:
 
     void init();
 
-    void initParallel();
-
-    void initRadialVel(
-            const double vel,
-            const int pfirst,
-            const int plast);
-
     Legion::Future doCycle(Legion::Future f_dt, const int cycle,
                            Legion::Predicate p_not_done);
-
-    void getFinalState();
 
     static void advPosHalfTask(
             const Legion::Task *task,

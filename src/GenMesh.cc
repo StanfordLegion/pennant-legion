@@ -537,7 +537,7 @@ void GenMesh::generatePointsParallel(
     calcNumPieces(numpcs);
     const GenPointArgs args(this);
     RegionRequirement req(points_lp, 0/*identity projection*/,
-                          WRITE_DISCARD, EXCLUSIVE, points_lr);
+                          LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, points_lr);
     req.add_field(FID_PX);
     req.add_field(FID_PIECE);
     if (meshtype == "rect") {
@@ -580,7 +580,7 @@ void GenMesh::generateZonesParallel(
       runtime->fill_fields(ctx, fill);
       // Task launch for figuring out piece for a zone
       RegionRequirement req(zones_lp, 0/*identity projection*/,
-                          WRITE_DISCARD, EXCLUSIVE, zones_lr);
+                          LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, zones_lr);
       req.add_field(FID_PIECE);
       const GenZoneArgs args(this);
       IndexTaskLauncher launcher(TID_GENZONES_RECT, piece_is,
@@ -590,7 +590,7 @@ void GenMesh::generateZonesParallel(
     } else if (meshtype == "pie") {
       // Task launch for number of points per zone and piece for zone
       RegionRequirement req(zones_lp, 0/*identity projection*/,
-                          WRITE_DISCARD, EXCLUSIVE, zones_lr);
+                          LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, zones_lr);
       req.add_field(FID_ZNUMP);
       req.add_field(FID_PIECE);
       const GenZoneArgs args(this);
@@ -607,7 +607,7 @@ void GenMesh::generateZonesParallel(
       runtime->fill_fields(ctx, fill);
       // Task launch for figuring out piece for a zone
       RegionRequirement req(zones_lp, 0/*identity projection*/,
-                          WRITE_DISCARD, EXCLUSIVE, zones_lr);
+                          LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, zones_lr);
       req.add_field(FID_PIECE);
       const GenZoneArgs args(this);
       IndexTaskLauncher launcher(TID_GENZONES_RECT, piece_is,
@@ -632,7 +632,7 @@ void GenMesh::generateSidesParallel(
     calcNumPieces(numpcs);
     const GenSideArgs args(this);
     RegionRequirement req(sides_lp, 0/*identity projection*/,
-                          WRITE_DISCARD, EXCLUSIVE, sides_lr);
+                          LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, sides_lr);
     // Only fill in the load pointers here
 #ifdef PRECOMPACTED_RECT_POINTS
     req.add_field(FID_MAPSP1);

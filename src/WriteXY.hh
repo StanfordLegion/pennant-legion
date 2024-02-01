@@ -22,16 +22,15 @@ class Mesh;
 class WriteXY {
 public:
 
-    Mesh* mesh;
-
-    WriteXY(Mesh* m);
+    WriteXY();
     ~WriteXY();
 
     void write(
             const std::string& basename,
             const double* zr,
             const double* ze,
-            const double* zp);
+            const double* zp,
+            const int numz);
 
 };
 

@@ -20,7 +20,7 @@
 using namespace std;
 
 
-WriteXY::WriteXY(Mesh* m) : mesh(m) {}
+WriteXY::WriteXY() {}
 
 WriteXY::~WriteXY() {}
 
@@ -29,9 +29,8 @@ void WriteXY::write(
         const string& basename,
         const double* zr,
         const double* ze,
-        const double* zp) {
-
-    const int numz = mesh->numz;
+        const double* zp,
+        const int numz) {
 
     string xyname = basename + ".xy";
     ofstream ofs(xyname.c_str());

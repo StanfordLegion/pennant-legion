@@ -63,57 +63,6 @@ static void __attribute__ ((constructor)) registerTasks() {
 HydroBC::HydroBC(
         Mesh* msh,
         const double2 v,
-        const vector<int>& mbp)
-    : mesh(msh), numb(mbp.size()), vfix(v) {
-
-    mapbp = alloc<int>(numb);
-    copy(mbp.begin(), mbp.end(), mapbp);
-
-    mesh->getPlaneChunks(numb, mapbp, pchbfirst, pchblast);
-
-    Context ctx = mesh->ctx;
-    Runtime* runtime = mesh->runtime;
-
-    // create index space for boundary points
-    IndexSpace isb = runtime->create_index_space(ctx, numb);
-    FieldSpace fsb = runtime->create_field_space(ctx);
-    FieldAllocator fab = runtime->create_field_allocator(ctx, fsb);
-    fab.allocate_field(sizeof(Pointer), FID_MAPBP);
-    fab.allocate_field(sizeof(int), FID_MAPBPREG);
-    lrb = runtime->create_logical_region(ctx, isb, fsb);
-
-    // create boundary point partition
-    Coloring colorb;
-    // force all colors to exist, even if they might be empty
-    for (int c = 0; c < mesh->numpcs; ++c) {
-        colorb[c];
-    }
-    for (int b = 0; b < numb; ++b) {
-        int p = mbp[b];
-        int c = mesh->nodecolors[p];
-        if (c == MULTICOLOR) c = mesh->nodemcolors[p][0];
-        colorb[c].points.insert(b);
-    }
-    IndexPartition ipb = runtime->create_index_partition(
-                ctx, isb, colorb, true);
-    lpb = runtime->get_logical_partition(ctx, lrb, ipb);
-
-    // create boundary point maps
-    vector<Pointer> lgmapbp(&mbp[0], &mbp[numb]);
-    vector<int> lgmapbpreg(numb);
-    for (int b = 0; b < numb; ++b) {
-        lgmapbpreg[b] = (mesh->nodecolors[mbp[b]] == MULTICOLOR);
-    }
-
-    mesh->setField(lrb, FID_MAPBP, &lgmapbp[0], numb);
-    mesh->setField(lrb, FID_MAPBPREG, &lgmapbpreg[0], numb);
-
-}
-
-
-HydroBC::HydroBC(
-        Mesh* msh,
-        const double2 v,
         const double bound,
         const bool xplane)
   : mesh(msh), vfix(v) {
@@ -140,13 +89,13 @@ HydroBC::HydroBC(
     IndexTaskLauncher launcher(TID_COUNTBCPOINTS, is_piece,
           TaskArgument(&args, sizeof(args)), ArgumentMap());
     launcher.add_region_requirement(
-        RegionRequirement(lppprv, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+        RegionRequirement(lppprv, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launcher.add_field(0/*index*/, FID_PX);
     launcher.add_region_requirement(
-        RegionRequirement(lppmstr, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+        RegionRequirement(lppmstr, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launcher.add_field(1/*index*/, FID_PX);
     launcher.add_region_requirement(
-        RegionRequirement(lpc, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrc));
+        RegionRequirement(lpc, 0/*identity*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrc));
     launcher.add_field(2/*index*/, FID_COUNT);
     runtime->execute_index_space(ctx, launcher);
   }
@@ -154,10 +103,10 @@ HydroBC::HydroBC(
   {
     TaskLauncher launcher(TID_COUNTBCRANGES, TaskArgument());
     launcher.add_region_requirement(
-        RegionRequirement(lrc, READ_ONLY, EXCLUSIVE, lrc));
+        RegionRequirement(lrc, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrc));
     launcher.add_field(0/*index*/, FID_COUNT);
     launcher.add_region_requirement(
-        RegionRequirement(lrc, WRITE_DISCARD, EXCLUSIVE, lrc));
+        RegionRequirement(lrc, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrc));
     launcher.add_field(1/*index*/, FID_RANGE);
     Future f = runtime->execute_task(ctx, launcher);
     numb = f.get_result<coord_t>(true/*silence warnings*/);
@@ -181,13 +130,13 @@ HydroBC::HydroBC(
     IndexTaskLauncher launcher(TID_CREATEBCMAPS, is_piece,
         TaskArgument(&args, sizeof(args)), ArgumentMap());
     launcher.add_region_requirement(
-        RegionRequirement(lppprv, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+        RegionRequirement(lppprv, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launcher.add_field(0/*index*/, FID_PX);
     launcher.add_region_requirement(
-        RegionRequirement(lppmstr, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+        RegionRequirement(lppmstr, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launcher.add_field(1/*index*/, FID_PX);
     launcher.add_region_requirement(
-        RegionRequirement(lpb, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrb));
+        RegionRequirement(lpb, 0/*identity*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrb));
     launcher.add_field(2/*index*/, FID_MAPBP);
     launcher.add_field(2/*index*/, FID_MAPBPREG);
     runtime->execute_index_space(ctx, launcher);

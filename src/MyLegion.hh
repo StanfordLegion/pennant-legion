@@ -61,46 +61,46 @@ inline void check_double2_nan(const ACC &acc, const Legion::PhysicalRegion &regi
 // for NaN values on creation for read privileges and on destruction for
 // write privileges
 template<typename T>
-class AccessorRO : public Legion::FieldAccessor<READ_ONLY,T,1,Legion::coord_t,
+class AccessorRO : public Legion::FieldAccessor<LEGION_READ_ONLY,T,1,Legion::coord_t,
                                 Realm::AffineAccessor<T,1,Legion::coord_t> >
 {
 public:
   AccessorRO(const Legion::PhysicalRegion &region, Legion::FieldID fid)
-    : Legion::FieldAccessor<READ_ONLY,T,1,Legion::coord_t,
+    : Legion::FieldAccessor<LEGION_READ_ONLY,T,1,Legion::coord_t,
         Realm::AffineAccessor<T,1,Legion::coord_t> >(region, fid) { }
 };
 
 // specialization for double
 template<>
-class AccessorRO<double> : public Legion::FieldAccessor<READ_ONLY,double,1,Legion::coord_t,
+class AccessorRO<double> : public Legion::FieldAccessor<LEGION_READ_ONLY,double,1,Legion::coord_t,
                                 Realm::AffineAccessor<double,1,Legion::coord_t> >
 {
 public:
   AccessorRO(const Legion::PhysicalRegion &region, Legion::FieldID fid)
-    : Legion::FieldAccessor<READ_ONLY,double,1,Legion::coord_t,
+    : Legion::FieldAccessor<LEGION_READ_ONLY,double,1,Legion::coord_t,
         Realm::AffineAccessor<double,1,Legion::coord_t> >(region, fid) 
   { check_double_nan(*this, region); } 
 };
 
 // specialization for double2
 template<>
-class AccessorRO<double2> : public Legion::FieldAccessor<READ_ONLY,double2,1,Legion::coord_t,
+class AccessorRO<double2> : public Legion::FieldAccessor<LEGION_READ_ONLY,double2,1,Legion::coord_t,
                                 Realm::AffineAccessor<double2,1,Legion::coord_t> >
 {
 public:
   AccessorRO(const Legion::PhysicalRegion &region, Legion::FieldID fid)
-    : Legion::FieldAccessor<READ_ONLY,double2,1,Legion::coord_t,
+    : Legion::FieldAccessor<LEGION_READ_ONLY,double2,1,Legion::coord_t,
         Realm::AffineAccessor<double2,1,Legion::coord_t> >(region, fid)
   { check_double2_nan(*this, region); }
 };
 
 template<typename T>
-class AccessorWD : public Legion::FieldAccessor<WRITE_DISCARD,T,1,Legion::coord_t,
+class AccessorWD : public Legion::FieldAccessor<LEGION_WRITE_DISCARD,T,1,Legion::coord_t,
                                 Realm::AffineAccessor<T,1,Legion::coord_t> >
 {
 public:
   AccessorWD(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
-    : Legion::FieldAccessor<WRITE_DISCARD,T,1,Legion::coord_t,
+    : Legion::FieldAccessor<LEGION_WRITE_DISCARD,T,1,Legion::coord_t,
         Realm::AffineAccessor<T,1,Legion::coord_t> >(reg, fid)
   { }
 };
@@ -108,12 +108,12 @@ public:
 // specialization for double
 template<>
 class AccessorWD<double> : 
-            public Legion::FieldAccessor<WRITE_DISCARD,double,1,Legion::coord_t,
+            public Legion::FieldAccessor<LEGION_WRITE_DISCARD,double,1,Legion::coord_t,
                                 Realm::AffineAccessor<double,1,Legion::coord_t> >
 {
 public:
   AccessorWD(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
-    : Legion::FieldAccessor<WRITE_DISCARD,double,1,Legion::coord_t,
+    : Legion::FieldAccessor<LEGION_WRITE_DISCARD,double,1,Legion::coord_t,
         Realm::AffineAccessor<double,1,Legion::coord_t> >(reg, fid), 
         region(reg), field(fid)
   { }
@@ -131,12 +131,12 @@ public:
 // specialization for double2
 template<>
 class AccessorWD<double2> : 
-            public Legion::FieldAccessor<WRITE_DISCARD,double2,1,Legion::coord_t,
+            public Legion::FieldAccessor<LEGION_WRITE_DISCARD,double2,1,Legion::coord_t,
                                 Realm::AffineAccessor<double2,1,Legion::coord_t> >
 {
 public:
   AccessorWD(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
-    : Legion::FieldAccessor<WRITE_DISCARD,double2,1,Legion::coord_t,
+    : Legion::FieldAccessor<LEGION_WRITE_DISCARD,double2,1,Legion::coord_t,
         Realm::AffineAccessor<double2,1,Legion::coord_t> >(reg, fid), 
         region(reg), field(fid)
   { }
@@ -152,23 +152,23 @@ public:
 };
 
 template<typename T>
-class AccessorRW : public Legion::FieldAccessor<READ_WRITE,T,1,Legion::coord_t,
+class AccessorRW : public Legion::FieldAccessor<LEGION_READ_WRITE,T,1,Legion::coord_t,
                                 Realm::AffineAccessor<T,1,Legion::coord_t> >
 {
 public:
   AccessorRW(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
-    : Legion::FieldAccessor<READ_WRITE,T,1,Legion::coord_t,
+    : Legion::FieldAccessor<LEGION_READ_WRITE,T,1,Legion::coord_t,
         Realm::AffineAccessor<T,1,Legion::coord_t> >(reg, fid) { }
 };
 
 // specialization for double
 template<>
-class AccessorRW<double> : public Legion::FieldAccessor<READ_WRITE,double,1,Legion::coord_t,
+class AccessorRW<double> : public Legion::FieldAccessor<LEGION_READ_WRITE,double,1,Legion::coord_t,
                                 Realm::AffineAccessor<double,1,Legion::coord_t> >
 {
 public:
   AccessorRW(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
-    : Legion::FieldAccessor<READ_WRITE,double,1,Legion::coord_t,
+    : Legion::FieldAccessor<LEGION_READ_WRITE,double,1,Legion::coord_t,
         Realm::AffineAccessor<double,1,Legion::coord_t> >(reg, fid), 
         region(reg), field(fid)
   { check_double_nan(*this, region); }
@@ -185,12 +185,12 @@ public:
 
 // specialization for double2
 template<>
-class AccessorRW<double2> : public Legion::FieldAccessor<READ_WRITE,double2,1,Legion::coord_t,
+class AccessorRW<double2> : public Legion::FieldAccessor<LEGION_READ_WRITE,double2,1,Legion::coord_t,
                                 Realm::AffineAccessor<double2,1,Legion::coord_t> >
 {
 public:
   AccessorRW(const Legion::PhysicalRegion &reg, Legion::FieldID fid)
-    : Legion::FieldAccessor<READ_WRITE,double2,1,Legion::coord_t,
+    : Legion::FieldAccessor<LEGION_READ_WRITE,double2,1,Legion::coord_t,
         Realm::AffineAccessor<double2,1,Legion::coord_t> >(reg, fid), 
         region(reg), field(fid)
   { check_double2_nan(*this, region); }
@@ -206,13 +206,13 @@ public:
 };
 #else
 template <typename T>
-using AccessorRO = typename Legion::FieldAccessor<READ_ONLY,T,1,Legion::coord_t,
+using AccessorRO = typename Legion::FieldAccessor<LEGION_READ_ONLY,T,1,Legion::coord_t,
                                 Realm::AffineAccessor<T,1,Legion::coord_t> >;
 template <typename T>
-using AccessorWD = typename Legion::FieldAccessor<WRITE_DISCARD,T,1,Legion::coord_t,
+using AccessorWD = typename Legion::FieldAccessor<LEGION_WRITE_DISCARD,T,1,Legion::coord_t,
                                 Realm::AffineAccessor<T,1,Legion::coord_t> >;
 template <typename T>
-using AccessorRW = typename Legion::FieldAccessor<READ_WRITE,T,1,Legion::coord_t,
+using AccessorRW = typename Legion::FieldAccessor<LEGION_READ_WRITE,T,1,Legion::coord_t,
                                 Realm::AffineAccessor<T,1,Legion::coord_t> >;
 #endif
 

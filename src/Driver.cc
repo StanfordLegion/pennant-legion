@@ -66,7 +66,6 @@ Driver::Driver(
         const InputFile* inp,
         const std::string& pname,
         const int numpcs,
-        const bool parallel,
         Context c,
         Runtime* rt)
         : probname(pname), ctx(c), runtime(rt) {
@@ -88,7 +87,7 @@ Driver::Driver(
     dtreport = inp->getInt("dtreport", 10);
 
     // initialize mesh, hydro
-    mesh = new Mesh(inp, numpcs, parallel, ctx, runtime);
+    mesh = new Mesh(inp, numpcs, ctx, runtime);
     hydro = new Hydro(inp, mesh, ctx, runtime);
 
 }
@@ -104,9 +103,9 @@ void Driver::run(void) {
 
     Predicate p_not_done = Predicate::TRUE_PRED;
     const double time_init = 0.0;
-    Future f_time = Future::from_value(runtime, time_init);
+    Future f_time = Future::from_value(time_init);
     const int cycle_init = 0;
-    Future f_cycle = Future::from_value(runtime, cycle_init);
+    Future f_cycle = Future::from_value(cycle_init);
     // Need to give these dummy values so we can trace consistently
     Future f_dt = Future::from_value(runtime, 0.0);
     Future f_cdt = Future::from_value(runtime, 0.0);
@@ -180,14 +179,11 @@ void Driver::run(void) {
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "hydro cycle run time= %14.8g us\n", walltime);
     LEGION_PRINT_ONCE(runtime, ctx, stdout, "************************************\n");
 
-
-    // do final mesh output if we aren't in a parallel mode
-    if (!mesh->parallel) {
-      hydro->getFinalState();
-      mesh->write(probname, f_cycle.get_result<int>(), f_time.get_result<double>(),
-              hydro->zr, hydro->ze, hydro->zp);
-    }
-
+    // Write out any output from running this
+    // Note this is inherently not scalable in its current implementation so you can skip
+    // it if it is causing you problems by trying to suck all the data to one node to 
+    // write it out to individual files.
+    mesh->write(probname, f_cycle, f_time);
 }
 
 

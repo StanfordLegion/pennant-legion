@@ -59,7 +59,6 @@ void mainTask(const Task *task,
     
     volatile bool debug = false;
     int numpcs = 1;
-    bool sequential = false;
     const char* filename = NULL;
     bool warn = true;
     while (i < iargs.argc) { 
@@ -75,14 +74,10 @@ void mainTask(const Task *task,
         numpcs = atoi(iargs.argv[i + 1]);
         i += 2;
       }
-      else if (iargs.argv[i] == string("-s")) {
-        sequential = true;
-        i++;
-      }
       else {
         if (warn) {
           LEGION_PRINT_ONCE(runtime, ctx, stderr, "Usage: pennant [legion args] "
-                                                   "[-n <numpcs>] <filename>\n");
+                                                   "[-n <numpcs>] -f <filename>\n");
           warn = false;
         }
         i++;
@@ -105,7 +100,7 @@ void mainTask(const Task *task,
     if (probname.substr(len - 4, 4) == ".pnt")
         probname = probname.substr(0, len - 4);
 
-    Driver drv(&inp, probname, numpcs, !sequential, ctx, runtime);
+    Driver drv(&inp, probname, numpcs, ctx, runtime);
 
     drv.run();
 
@@ -119,9 +114,7 @@ int main(int argc, char **argv)
     Runtime::set_top_level_task_id(TID_MAIN);
     TaskVariantRegistrar registrar(TID_MAIN, "main");
     registrar.add_constraint(ProcessorConstraint(Processor::LOC_PROC));
-#ifndef NO_LEGION_CONTROL_REPLICATION
     registrar.set_replicable(true);
-#endif
     Runtime::preregister_task_variant<mainTask>(registrar, "main");
 
     Runtime::add_registration_callback(registerMappers);

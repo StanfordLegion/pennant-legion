@@ -219,21 +219,12 @@ Hydro::Hydro(
 
     const double2 vfixx = double2(1., 0.);
     const double2 vfixy = double2(0., 1.);
-    if (mesh->parallel) {
-      for (int i = 0; i < bcx.size(); ++i)
-        bcs.push_back(new HydroBC(mesh, vfixx, bcx[i], true/*xplane*/));
-      for (int i = 0; i < bcy.size(); ++i)
-        bcs.push_back(new HydroBC(mesh, vfixy, bcy[i], false/*xplane*/));
+    for (int i = 0; i < bcx.size(); ++i)
+      bcs.push_back(new HydroBC(mesh, vfixx, bcx[i], true/*xplane*/));
+    for (int i = 0; i < bcy.size(); ++i)
+      bcs.push_back(new HydroBC(mesh, vfixy, bcy[i], false/*xplane*/));
 
-      initParallel();
-    } else {
-      for (int i = 0; i < bcx.size(); ++i)
-          bcs.push_back(new HydroBC(mesh, vfixx, mesh->getXPlane(bcx[i])));
-      for (int i = 0; i < bcy.size(); ++i)
-          bcs.push_back(new HydroBC(mesh, vfixy, mesh->getYPlane(bcy[i])));
-
-      init();
-    }
+    init();
 }
 
 
@@ -248,77 +239,6 @@ Hydro::~Hydro() {
 
 
 void Hydro::init() {
-
-    const int numpch = mesh->numpch;
-    const int numzch = mesh->numzch;
-    const int nump = mesh->nump;
-    const int numz = mesh->numz;
-
-    const double2* zx = mesh->zx;
-    const double* zvol = mesh->zvol;
-
-    // allocate arrays
-    pu = alloc<double2>(nump);
-    zm = alloc<double>(numz);
-    zr = alloc<double>(numz);
-    ze = alloc<double>(numz);
-    zetot = alloc<double>(numz);
-    zwrate = alloc<double>(numz);
-    zp = alloc<double>(numz);
-
-    // initialize hydro vars
-    for (int zch = 0; zch < numzch; ++zch) {
-        int zfirst = mesh->zchzfirst[zch];
-        int zlast = mesh->zchzlast[zch];
-
-        fill(&zr[zfirst], &zr[zlast], rinit);
-        fill(&ze[zfirst], &ze[zlast], einit);
-        fill(&zwrate[zfirst], &zwrate[zlast], 0.);
-
-        const vector<double>& subrgn = mesh->subregion;
-        if (!subrgn.empty()) {
-            const double eps = 1.e-12;
-            #pragma ivdep
-            for (int z = zfirst; z < zlast; ++z) {
-                if (zx[z].x > (subrgn[0] - eps) &&
-                    zx[z].x < (subrgn[1] + eps) &&
-                    zx[z].y > (subrgn[2] - eps) &&
-                    zx[z].y < (subrgn[3] + eps)) {
-                    zr[z] = rinitsub;
-                    ze[z] = einitsub;
-                }
-            }
-        }
-
-        #pragma ivdep
-        for (int z = zfirst; z < zlast; ++z) {
-            zm[z] = zr[z] * zvol[z];
-            zetot[z] = ze[z] * zm[z];
-        }
-    }  // for sch
-
-    for (int pch = 0; pch < numpch; ++pch) {
-        int pfirst = mesh->pchpfirst[pch];
-        int plast = mesh->pchplast[pch];
-        if (uinitradial != 0.)
-            initRadialVel(uinitradial, pfirst, plast);
-        else
-            fill(&pu[pfirst], &pu[plast], double2(0., 0.));
-    }  // for pch
-
-    LogicalRegion& lrp = mesh->lrp;
-    LogicalRegion& lrz = mesh->lrz;
-    mesh->setField(lrp, FID_PU, pu, nump);
-    mesh->setField(lrz, FID_ZM, zm, numz);
-    mesh->setField(lrz, FID_ZR, zr, numz);
-    mesh->setField(lrz, FID_ZE, ze, numz);
-    mesh->setField(lrz, FID_ZETOT, zetot, numz);
-    mesh->setField(lrz, FID_ZWRATE, zwrate, numz);
-
-}
-
-
-void Hydro::initParallel() {
   const LogicalRegion& lrp = mesh->lrp;
   const LogicalPartition lppprv = mesh->lppprv;
   const LogicalPartition lppmstr = mesh->lppmstr;
@@ -356,10 +276,10 @@ void Hydro::initParallel() {
     IndexTaskLauncher launcher(TID_INITSUBRGN, is_piece,
         TaskArgument(&args, sizeof(args)), ArgumentMap());
     launcher.add_region_requirement(
-        RegionRequirement(lpz, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrz));
+        RegionRequirement(lpz, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launcher.add_field(0/*index*/, FID_ZX);
     launcher.add_region_requirement(
-        RegionRequirement(lpz, 0/*identity*/, READ_WRITE, EXCLUSIVE, lrz));
+        RegionRequirement(lpz, 0/*identity*/, LEGION_READ_WRITE, LEGION_EXCLUSIVE, lrz));
     launcher.add_field(1/*index*/, FID_ZR);
     launcher.add_field(1/*index*/, FID_ZE);
     runtime->execute_index_space(ctx, launcher);
@@ -370,12 +290,12 @@ void Hydro::initParallel() {
     IndexTaskLauncher launcher(TID_INITHYDRO, is_piece, 
                           TaskArgument(), ArgumentMap());
     launcher.add_region_requirement(
-        RegionRequirement(lpz, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrz));
+        RegionRequirement(lpz, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launcher.add_field(0/*index*/, FID_ZR);
     launcher.add_field(0/*index*/, FID_ZVOL);
     launcher.add_field(0/*index*/, FID_ZE);
     launcher.add_region_requirement(
-        RegionRequirement(lpz, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrz));
+        RegionRequirement(lpz, 0/*identity*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launcher.add_field(1/*index*/, FID_ZM);
     launcher.add_field(1/*index*/, FID_ZETOT);
     runtime->execute_index_space(ctx, launcher);
@@ -390,10 +310,10 @@ void Hydro::initParallel() {
       IndexTaskLauncher launcher(TID_INITRADIALVEL, is_piece,
             TaskArgument(&args, sizeof(args)), ArgumentMap());
       launcher.add_region_requirement(
-          RegionRequirement(lppprv, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+          RegionRequirement(lppprv, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
       launcher.add_field(0/*index*/, FID_PX);
       launcher.add_region_requirement(
-          RegionRequirement(lppprv, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrp));
+          RegionRequirement(lppprv, 0/*identity*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrp));
       launcher.add_field(1/*index*/, FID_PU);
       runtime->execute_index_space(ctx, launcher);
     }
@@ -401,10 +321,10 @@ void Hydro::initParallel() {
       IndexTaskLauncher launcher(TID_INITRADIALVEL, is_piece,
             TaskArgument(&args, sizeof(args)), ArgumentMap());
       launcher.add_region_requirement(
-          RegionRequirement(lppmstr, 0/*identity*/, READ_ONLY, EXCLUSIVE, lrp));
+          RegionRequirement(lppmstr, 0/*identity*/, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
       launcher.add_field(0/*index*/, FID_PX);
       launcher.add_region_requirement(
-          RegionRequirement(lppmstr, 0/*identity*/, WRITE_DISCARD, EXCLUSIVE, lrp));
+          RegionRequirement(lppmstr, 0/*identity*/, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrp));
       launcher.add_field(1/*index*/, FID_PU);
       runtime->execute_index_space(ctx, launcher);
     }
@@ -416,24 +336,6 @@ void Hydro::initParallel() {
     launcher.add_field(FID_PU);
     runtime->fill_fields(ctx, launcher);
   }
-}
-
-
-void Hydro::initRadialVel(
-        const double vel,
-        const int pfirst,
-        const int plast) {
-    const double2* px = mesh->px;
-    const double eps = 1.e-12;
-
-    #pragma ivdep
-    for (int p = pfirst; p < plast; ++p) {
-        double pmag = length(px[p]);
-        if (pmag > eps)
-            pu[p] = vel * px[p] / pmag;
-        else
-            pu[p] = double2(0., 0.);
-    }
 }
 
 
@@ -458,8 +360,8 @@ Future Hydro::doCycle(
 
     IndexCopyLauncher launchcfd(ispc);
     launchcfd.add_copy_requirements(
-        RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz),
-        RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+        RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz),
+        RegionRequirement(lpz, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launchcfd.add_src_field(0/*index*/, FID_ZVOL);
     launchcfd.add_dst_field(0/*index*/, FID_ZVOL0);
     launchcfd.predicate = p_not_done;
@@ -487,10 +389,10 @@ Future Hydro::doCycle(
     for (int part = 0; part < 2; ++part) {
         LogicalPartition& lppcurr = (part == 0 ? lppprv : lppmstr);
         launchcfd.src_requirements[0] = 
-                RegionRequirement(lppcurr, 0, READ_ONLY, EXCLUSIVE, lrp);
+                RegionRequirement(lppcurr, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp);
         launchcfd.add_src_field(0, FID_PX);
         launchcfd.dst_requirements[0] = 
-                RegionRequirement(lppcurr, 0, WRITE_DISCARD, EXCLUSIVE, lrp);
+                RegionRequirement(lppcurr, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrp);
         launchcfd.add_dst_field(0, FID_PX0);
         runtime->issue_copy_operation(ctx, launchcfd);
 
@@ -518,12 +420,12 @@ Future Hydro::doCycle(
         launchaph.region_requirements.clear();
         launchaph.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        READ_ONLY, EXCLUSIVE, lrp));
+                        LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
         launchaph.add_field(0, FID_PX0);
         launchaph.add_field(0, FID_PU0);
         launchaph.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        WRITE_DISCARD, EXCLUSIVE, lrp));
+                        LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrp));
         launchaph.add_field(1, FID_PXP);
         // Only really need OpenMP for the private part
         if (part == 0)
@@ -536,26 +438,26 @@ Future Hydro::doCycle(
 
     IndexTaskLauncher launchcc(TID_CALCCTRS, ispc, ta, am, p_not_done);
     launchcc.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchcc.add_field(0, FID_MAPSP1);
     launchcc.add_field(0, FID_MAPSP2);
     launchcc.add_field(0, FID_MAPSZ);
     launchcc.add_field(0, FID_MAPSP1REG);
     launchcc.add_field(0, FID_MAPSP2REG);
     launchcc.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchcc.add_field(1, FID_ZNUMP);
     launchcc.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchcc.add_field(2, FID_PXP);
     launchcc.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchcc.add_field(3, FID_PXP);
     launchcc.add_region_requirement(
-            RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
     launchcc.add_field(4, FID_EXP);
     launchcc.add_region_requirement(
-            RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launchcc.add_field(5, FID_ZXP);
     launchcc.tag |= PennantMapper::CRITICAL | 
       PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
@@ -563,27 +465,27 @@ Future Hydro::doCycle(
 
     IndexTaskLauncher launchcv(TID_CALCVOLS, ispc, ta, am, p_not_done);
     launchcv.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchcv.add_field(0, FID_MAPSP1);
     launchcv.add_field(0, FID_MAPSP2);
     launchcv.add_field(0, FID_MAPSZ);
     launchcv.add_field(0, FID_MAPSP1REG);
     launchcv.add_field(0, FID_MAPSP2REG);
     launchcv.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchcv.add_field(1, FID_PXP);
     launchcv.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchcv.add_field(2, FID_PXP);
     launchcv.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchcv.add_field(3, FID_ZXP);
     launchcv.add_region_requirement(
-            RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
     launchcv.add_field(4, FID_SAREAP);
     launchcv.add_field(4, FID_SVOLP);
     launchcv.add_region_requirement(
-            RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launchcv.add_field(5, FID_ZAREAP);
     launchcv.add_field(5, FID_ZVOLP);
     launchcv.tag |= PennantMapper::CRITICAL | 
@@ -592,33 +494,33 @@ Future Hydro::doCycle(
 
     IndexTaskLauncher launchcsv(TID_CALCSURFVECS, ispc, ta, am, p_not_done);
     launchcsv.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchcsv.add_field(0, FID_MAPSZ);
     launchcsv.add_field(0, FID_EXP);
     launchcsv.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchcsv.add_field(1, FID_ZXP);
     launchcsv.add_region_requirement(
-            RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
     launchcsv.add_field(2, FID_SSURFP);
     launchcsv.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcsv);
 
     IndexTaskLauncher launchcel(TID_CALCEDGELEN, ispc, ta, am, p_not_done);
     launchcel.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchcel.add_field(0, FID_MAPSP1);
     launchcel.add_field(0, FID_MAPSP2);
     launchcel.add_field(0, FID_MAPSP1REG);
     launchcel.add_field(0, FID_MAPSP2REG);
     launchcel.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchcel.add_field(1, FID_PXP);
     launchcel.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchcel.add_field(2, FID_PXP);
     launchcel.add_region_requirement(
-            RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
     launchcel.add_field(3, FID_ELEN);
     launchcel.tag |= PennantMapper::CRITICAL | 
       PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
@@ -626,26 +528,26 @@ Future Hydro::doCycle(
 
     IndexTaskLauncher launchccl(TID_CALCCHARLEN, ispc, ta, am, p_not_done);
     launchccl.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchccl.add_field(0, FID_MAPSZ);
     launchccl.add_field(0, FID_SAREAP);
     launchccl.add_field(0, FID_ELEN);
     launchccl.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchccl.add_field(1, FID_ZNUMP);
     launchccl.add_region_requirement(
-            RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launchccl.add_field(2, FID_ZDL);
     launchccl.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchccl);
 
     IndexTaskLauncher launchcr(TID_CALCRHO, ispc, ta, am, p_not_done);
     launchcr.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchcr.add_field(0, FID_ZM);
     launchcr.add_field(0, FID_ZVOLP);
     launchcr.add_region_requirement(
-            RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launchcr.add_field(1, FID_ZRP);
     launchcr.tag |= PennantMapper::CRITICAL | 
       PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
@@ -653,22 +555,22 @@ Future Hydro::doCycle(
 
     IndexTaskLauncher launchccm(TID_CALCCRNRMASS, ispc, ta, am, p_not_done);
     launchccm.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchccm.add_field(0, FID_MAPSP1);
     launchccm.add_field(0, FID_MAPSP1REG);
     launchccm.add_field(0, FID_MAPSS3);
     launchccm.add_field(0, FID_MAPSZ);
     launchccm.add_field(0, FID_SMF);
     launchccm.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchccm.add_field(1, FID_ZRP);
     launchccm.add_field(1, FID_ZAREAP);
     launchccm.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_WRITE, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, LEGION_READ_WRITE, LEGION_EXCLUSIVE, lrp));
     launchccm.add_field(2, FID_PMASWT);
     launchccm.add_region_requirement(
             RegionRequirement(lppshr, 0, OPID_SUMDBL,
-                    SIMULTANEOUS, lrp));
+                    LEGION_SIMULTANEOUS, lrp));
     launchccm.add_field(3, FID_PMASWT);
     launchccm.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchccm);
@@ -678,7 +580,7 @@ Future Hydro::doCycle(
             TaskArgument(cshargs, sizeof(cshargs)), am, p_not_done);
     launchcsh.add_future(f_dt);
     launchcsh.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchcsh.add_field(0, FID_ZR);
     launchcsh.add_field(0, FID_ZVOLP);
     launchcsh.add_field(0, FID_ZVOL0);
@@ -686,7 +588,7 @@ Future Hydro::doCycle(
     launchcsh.add_field(0, FID_ZWRATE);
     launchcsh.add_field(0, FID_ZM);
     launchcsh.add_region_requirement(
-            RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launchcsh.add_field(1, FID_ZP);
     launchcsh.add_field(1, FID_ZSS);
     launchcsh.tag |= PennantMapper::CRITICAL | 
@@ -695,14 +597,14 @@ Future Hydro::doCycle(
 
     IndexTaskLauncher launchcfp(TID_CALCFORCEPGAS, ispc, ta, am, p_not_done);
     launchcfp.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchcfp.add_field(0, FID_MAPSZ);
     launchcfp.add_field(0, FID_SSURFP);
     launchcfp.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchcfp.add_field(1, FID_ZP);
     launchcfp.add_region_requirement(
-            RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
     launchcfp.add_field(2, FID_SFP);
     launchcfp.tag |= PennantMapper::CRITICAL | 
       PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
@@ -712,18 +614,18 @@ Future Hydro::doCycle(
     IndexTaskLauncher launchcft(TID_CALCFORCETTS, ispc,
             TaskArgument(cftargs, sizeof(cftargs)), am, p_not_done);
     launchcft.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchcft.add_field(0, FID_MAPSZ);
     launchcft.add_field(0, FID_SAREAP);
     launchcft.add_field(0, FID_SMF);
     launchcft.add_field(0, FID_SSURFP);
     launchcft.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchcft.add_field(1, FID_ZAREAP);
     launchcft.add_field(1, FID_ZRP);
     launchcft.add_field(1, FID_ZSS);
     launchcft.add_region_requirement(
-            RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
     launchcft.add_field(2, FID_SFT);
     launchcft.tag |= PennantMapper::CRITICAL | 
       PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
@@ -731,7 +633,7 @@ Future Hydro::doCycle(
 
     IndexTaskLauncher launchscd(TID_SETCORNERDIV, ispc, ta, am, p_not_done);
     launchscd.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchscd.add_field(0, FID_MAPSZ);
     launchscd.add_field(0, FID_MAPSP1);
     launchscd.add_field(0, FID_MAPSP2);
@@ -741,22 +643,22 @@ Future Hydro::doCycle(
     launchscd.add_field(0, FID_EXP);
     launchscd.add_field(0, FID_ELEN);
     launchscd.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchscd.add_field(1, FID_ZNUMP);
     launchscd.add_field(1, FID_ZXP);
     launchscd.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchscd.add_field(2, FID_PXP);
     launchscd.add_field(2, FID_PU0);
     launchscd.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchscd.add_field(3, FID_PXP);
     launchscd.add_field(3, FID_PU0);
     launchscd.add_region_requirement(
-            RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launchscd.add_field(4, FID_ZUC);
     launchscd.add_region_requirement(
-            RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
     launchscd.add_field(5, FID_CAREA);
     launchscd.add_field(5, FID_CCOS);
     launchscd.add_field(5, FID_CDIV);
@@ -770,7 +672,7 @@ Future Hydro::doCycle(
     IndexTaskLauncher launchsqcf(TID_SETQCNFORCE, ispc,
             TaskArgument(sqcfargs, sizeof(sqcfargs)), am, p_not_done);
     launchsqcf.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchsqcf.add_field(0, FID_MAPSZ);
     launchsqcf.add_field(0, FID_MAPSP1);
     launchsqcf.add_field(0, FID_MAPSP2);
@@ -782,17 +684,17 @@ Future Hydro::doCycle(
     launchsqcf.add_field(0, FID_CDU);
     launchsqcf.add_field(0, FID_CEVOL);
     launchsqcf.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchsqcf.add_field(1, FID_ZRP);
     launchsqcf.add_field(1, FID_ZSS);
     launchsqcf.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchsqcf.add_field(2, FID_PU0);
     launchsqcf.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchsqcf.add_field(3, FID_PU0);
     launchsqcf.add_region_requirement(
-            RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
     launchsqcf.add_field(4, FID_CRMU);
     launchsqcf.add_field(4, FID_CQE1);
     launchsqcf.add_field(4, FID_CQE2);
@@ -802,17 +704,17 @@ Future Hydro::doCycle(
 
     IndexTaskLauncher launchsfq(TID_SETFORCEQCS, ispc, ta, am, p_not_done);
     launchsfq.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchsfq.add_field(0, FID_MAPSS4);
     launchsfq.add_field(0, FID_CAREA);
     launchsfq.add_field(0, FID_CQE1);
     launchsfq.add_field(0, FID_CQE2);
     launchsfq.add_field(0, FID_ELEN);
     launchsfq.add_region_requirement(
-            RegionRequirement(lps, 0, READ_WRITE, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_WRITE, LEGION_EXCLUSIVE, lrs));
     launchsfq.add_field(1, FID_CCOS);
     launchsfq.add_region_requirement(
-            RegionRequirement(lps, 0, WRITE_DISCARD, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrs));
     launchsfq.add_field(2, FID_CW);
     launchsfq.add_field(2, FID_SFQ);
     launchsfq.tag |= PennantMapper::CRITICAL | 
@@ -823,7 +725,7 @@ Future Hydro::doCycle(
     IndexTaskLauncher launchsvd(TID_SETVELDIFF, ispc,
             TaskArgument(svdargs, sizeof(svdargs)), am, p_not_done);
     launchsvd.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchsvd.add_field(0, FID_MAPSZ);
     launchsvd.add_field(0, FID_MAPSP1);
     launchsvd.add_field(0, FID_MAPSP2);
@@ -831,18 +733,18 @@ Future Hydro::doCycle(
     launchsvd.add_field(0, FID_MAPSP2REG);
     launchsvd.add_field(0, FID_ELEN);
     launchsvd.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchsvd.add_field(1, FID_ZSS);
     launchsvd.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchsvd.add_field(2, FID_PXP);
     launchsvd.add_field(2, FID_PU0);
     launchsvd.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchsvd.add_field(3, FID_PXP);
     launchsvd.add_field(3, FID_PU0);
     launchsvd.add_region_requirement(
-            RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launchsvd.add_field(4, FID_ZTMP);
     launchsvd.add_field(4, FID_ZDU);
     launchsvd.tag |= PennantMapper::CRITICAL | 
@@ -851,7 +753,7 @@ Future Hydro::doCycle(
 
     IndexTaskLauncher launchscf(TID_SUMCRNRFORCE, ispc, ta, am, p_not_done);
     launchscf.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchscf.add_field(0, FID_MAPSP1);
     launchscf.add_field(0, FID_MAPSP1REG);
     launchscf.add_field(0, FID_MAPSS3);
@@ -859,11 +761,11 @@ Future Hydro::doCycle(
     launchscf.add_field(0, FID_SFQ);
     launchscf.add_field(0, FID_SFT);
     launchscf.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_WRITE, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, LEGION_READ_WRITE, LEGION_EXCLUSIVE, lrp));
     launchscf.add_field(1, FID_PF);
     launchscf.add_region_requirement(
             RegionRequirement(lppshr, 0, OPID_SUMDBL2,
-                    SIMULTANEOUS, lrp));
+                    LEGION_SIMULTANEOUS, lrp));
     launchscf.add_field(2, FID_PF);
     launchscf.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchscf);
@@ -877,17 +779,17 @@ Future Hydro::doCycle(
         launchafbc.region_requirements.clear();
         launchafbc.add_region_requirement(
                 RegionRequirement(bcs[i]->lpb, 0,
-                        READ_ONLY, EXCLUSIVE, bcs[i]->lrb));
+                        LEGION_READ_ONLY, LEGION_EXCLUSIVE, bcs[i]->lrb));
         launchafbc.add_field(0, FID_MAPBP);
         launchafbc.add_field(0, FID_MAPBPREG);
         launchafbc.add_region_requirement(
                 RegionRequirement(lppprv, 0,
-                        READ_WRITE, EXCLUSIVE, lrp));
+                        LEGION_READ_WRITE, LEGION_EXCLUSIVE, lrp));
         launchafbc.add_field(1, FID_PF);
         launchafbc.add_field(1, FID_PU0);
         launchafbc.add_region_requirement(
                 RegionRequirement(lppmstr, 0,
-                        READ_WRITE, EXCLUSIVE, lrp, PennantMapper::PREFER_ZCOPY));
+                        LEGION_READ_WRITE, LEGION_EXCLUSIVE, lrp, PennantMapper::PREFER_ZCOPY));
         launchafbc.add_field(2, FID_PF);
         launchafbc.add_field(2, FID_PU0);
         launchafbc.tag |= PennantMapper::CRITICAL | 
@@ -911,13 +813,13 @@ Future Hydro::doCycle(
         launchca.region_requirements.clear();
         launchca.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        READ_ONLY, EXCLUSIVE, lrp,
+                        LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp,
                         (part == 0) ? 0 : PennantMapper::PREFER_ZCOPY));
         launchca.add_field(0, FID_PF);
         launchca.add_field(0, FID_PMASWT);
         launchca.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        WRITE_DISCARD, EXCLUSIVE, lrp));
+                        LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrp));
         launchca.add_field(1, FID_PAP);
         // Only really need OpenMP for the private part
         // But the shared part is the one on the critical path
@@ -935,13 +837,13 @@ Future Hydro::doCycle(
         launchapf.region_requirements.clear();
         launchapf.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        READ_ONLY, EXCLUSIVE, lrp));
+                        LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
         launchapf.add_field(0, FID_PX0);
         launchapf.add_field(0, FID_PU0);
         launchapf.add_field(0, FID_PAP);
         launchapf.add_region_requirement(
                 RegionRequirement(lppcurr, 0,
-                        WRITE_DISCARD, EXCLUSIVE, lrp));
+                        LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrp));
         launchapf.add_field(1, FID_PX);
         launchapf.add_field(1, FID_PU);
         // Only really need OpenMP for the private part
@@ -984,7 +886,7 @@ Future Hydro::doCycle(
     IndexTaskLauncher launchcw(TID_CALCWORK, ispc, ta, am, p_not_done);
     launchcw.add_future(f_dt);
     launchcw.add_region_requirement(
-            RegionRequirement(lps, 0, READ_ONLY, EXCLUSIVE, lrs));
+            RegionRequirement(lps, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrs));
     launchcw.add_field(0, FID_MAPSP1);
     launchcw.add_field(0, FID_MAPSP2);
     launchcw.add_field(0, FID_MAPSZ);
@@ -993,20 +895,20 @@ Future Hydro::doCycle(
     launchcw.add_field(0, FID_SFP);
     launchcw.add_field(0, FID_SFQ);
     launchcw.add_region_requirement(
-            RegionRequirement(lppprv, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppprv, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchcw.add_field(1, FID_PU);
     launchcw.add_field(1, FID_PU0);
     launchcw.add_field(1, FID_PXP);
     launchcw.add_region_requirement(
-            RegionRequirement(lppshr, 0, READ_ONLY, EXCLUSIVE, lrp));
+            RegionRequirement(lppshr, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrp));
     launchcw.add_field(2, FID_PU);
     launchcw.add_field(2, FID_PU0);
     launchcw.add_field(2, FID_PXP);
     launchcw.add_region_requirement(
-            RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launchcw.add_field(3, FID_ZW);
     launchcw.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_WRITE, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_WRITE, LEGION_EXCLUSIVE, lrz));
     launchcw.add_field(4, FID_ZETOT);
     launchcw.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcw);
@@ -1014,13 +916,13 @@ Future Hydro::doCycle(
     IndexTaskLauncher launchcwr(TID_CALCWORKRATE, ispc, ta, am, p_not_done);
     launchcwr.add_future(f_dt);
     launchcwr.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchcwr.add_field(0, FID_ZVOL0);
     launchcwr.add_field(0, FID_ZVOL);
     launchcwr.add_field(0, FID_ZW);
     launchcwr.add_field(0, FID_ZP);
     launchcwr.add_region_requirement(
-            RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launchcwr.add_field(1, FID_ZWRATE);
     launchcwr.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchcwr);
@@ -1028,11 +930,11 @@ Future Hydro::doCycle(
     // 8. update state variables
     IndexTaskLauncher launchce(TID_CALCENERGY, ispc, ta, am, p_not_done);
     launchce.add_region_requirement(
-            RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchce.add_field(0, FID_ZETOT);
     launchce.add_field(0, FID_ZM);
     launchce.add_region_requirement(
-            RegionRequirement(lpz, 0, WRITE_DISCARD, EXCLUSIVE, lrz));
+            RegionRequirement(lpz, 0, LEGION_WRITE_DISCARD, LEGION_EXCLUSIVE, lrz));
     launchce.add_field(1, FID_ZE);
     launchce.tag |= PennantMapper::PREFER_OMP | PennantMapper::PREFER_GPU;
     runtime->execute_index_space(ctx, launchce);
@@ -1051,7 +953,7 @@ Future Hydro::doCycle(
     IndexTaskLauncher launchdtnew(TID_CALCDTNEW, ispc, 
         TaskArgument(&cfl, sizeof(cfl)), am, p_not_done);
     launchdtnew.add_region_requirement(
-        RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+        RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchdtnew.add_field(0, FID_ZDL);
     launchdtnew.add_field(0, FID_ZDU);
     launchdtnew.add_field(0, FID_ZSS);
@@ -1060,7 +962,7 @@ Future Hydro::doCycle(
 
     IndexTaskLauncher launchdvol(TID_CALCDVOL, ispc, ta, am, p_not_done);
     launchdvol.add_region_requirement(
-        RegionRequirement(lpz, 0, READ_ONLY, EXCLUSIVE, lrz));
+        RegionRequirement(lpz, 0, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lrz));
     launchdvol.add_field(0, FID_ZVOL);
     launchdvol.add_field(0, FID_ZVOL0);
     launchdvol.tag |= PennantMapper::CRITICAL | 
@@ -1078,14 +980,6 @@ Future Hydro::doCycle(
     mesh->checkBadSides(cycle, f_cv, p_not_done);
 
     return f_cdt;
-}
-
-
-void Hydro::getFinalState() {
-    mesh->getField(mesh->lrp, FID_PX, mesh->px, mesh->nump);
-    mesh->getField(mesh->lrz, FID_ZP, zp, mesh->numz);
-    mesh->getField(mesh->lrz, FID_ZE, ze, mesh->numz);
-    mesh->getField(mesh->lrz, FID_ZR, zr, mesh->numz);
 }
 
 

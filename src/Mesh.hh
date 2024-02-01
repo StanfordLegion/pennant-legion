@@ -117,7 +117,8 @@ enum MeshTaskID {
     TID_COMPACTPOINTS,
     TID_CALCOWNERS,
     TID_CHECKBADSIDES,
-    TID_TEMPGATHER
+    TID_TEMPGATHER,
+    TID_WRITE
 };
 
 enum MeshOpID {
@@ -128,11 +129,9 @@ enum MeshOpID {
     OPID_MAXDBL
 };
 
-#ifndef NO_LEGION_CONTROL_REPLICATION
 enum ShardingID {
     PENNANT_SHARD_ID = 1,
 };
-#endif
 
 // atomic versions of lhs += rhs
 template <typename T> __CUDA_HD__
@@ -327,7 +326,6 @@ public:
         { ReduceHelper<T, EXCLUSIVE>::maxOf(rhs1, rhs2); }
 };
 
-#ifndef NO_LEGION_CONTROL_REPLICATION
 class PennantShardingFunctor : public Legion::ShardingFunctor {
 public:
   PennantShardingFunctor(const Legion::coord_t numpcx, const Legion::coord_t numpcy);
@@ -345,7 +343,6 @@ protected:
   Legion::coord_t shards;
   bool sharded; 
 };
-#endif
 
 class Mesh {
 public:
@@ -362,11 +359,8 @@ public:
 
     // children
     GenMesh* gmesh;
-    WriteXY* wxy;
-    ExportGold* egold;
 
     // parameters
-    bool parallel;                 // perform parallel mesh generation
     int chunksize;                 // max size for processing chunks
     std::vector<double> subregion; // bounding box for a subregion
                                    // if nonempty, should have 4 entries:
@@ -379,6 +373,7 @@ public:
                        // number of points, edges, zones,
                        // sides, corners, resp.
     int numpcs;        // number of pieces in Legion partition
+#if 0
     int* mapsp1;       // maps: side -> points 1 and 2
     int* mapsp2;
     int* mapsz;        // map: side -> zone
@@ -409,6 +404,7 @@ public:
     int numzch;                    // number of zone chunks
     std::vector<int> zchzfirst;    // start/stop index for zone chunks
     std::vector<int> zchzlast;
+#endif
 
     std::vector<int> nodecolors;
     colormap nodemcolors;
@@ -428,7 +424,6 @@ public:
     Mesh(
             const InputFile* inp,
             const int numpcsa,
-            const bool parallel,
             Legion::Context ctxa,
             Legion::Runtime* runtimea);
     ~Mesh();
@@ -449,45 +444,14 @@ public:
 
     void init();
     
-    void initParallel();
-
-    void initPoints();
-
-    void initZones();
-
-    void initSides();
-
-    // populate mapping arrays
-    void initSides(
-            std::vector<int>& cellstart,
-            std::vector<int>& cellsize,
-            std::vector<int>& cellnodes);
-
-    // populate chunk information
-    void initChunks();
-
     // write mesh statistics
     void writeStats();
 
     // write mesh
     void write(
             const std::string& probname,
-            const int cycle,
-            const double time,
-            const double* zr,
-            const double* ze,
-            const double* zp);
-
-    // find plane with constant x, y value
-    std::vector<int> getXPlane(const double c);
-    std::vector<int> getYPlane(const double c);
-
-    // compute chunks for a given plane
-    void getPlaneChunks(
-            const int numb,
-            const int* mapbp,
-            std::vector<int>& pchbfirst,
-            std::vector<int>& pchblast);
+            const Legion::Future &f_cycle,
+            const Legion::Future &f_time);
 
     static void sumToPointsTask(
             const Legion::Task *task,
@@ -734,6 +698,12 @@ public:
             Legion::Context ctx,
             Legion::Runtime *runtime);
 
+    static void writeTask(
+            const Legion::Task *task,
+            const std::vector<Legion::PhysicalRegion> &regions,
+            Legion::Context ctx,
+            Legion::Runtime *runtime);
+
 }; // class Mesh
 
 
@@ -744,12 +714,12 @@ void Mesh::getField(
         T* var,
         const int n) {
     using namespace Legion;
-    RegionRequirement req(lr, READ_ONLY, EXCLUSIVE, lr);
+    RegionRequirement req(lr, LEGION_READ_ONLY, LEGION_EXCLUSIVE, lr);
     req.add_field(fid);
     InlineLauncher inl(req);
     PhysicalRegion pr = runtime->map_region(ctx, inl);
     pr.wait_until_valid();
-    FieldAccessor<READ_ONLY,T,1,coord_t,
+    FieldAccessor<LEGION_READ_ONLY,T,1,coord_t,
       Realm::AffineAccessor<T,1,coord_t> > acc(pr, fid);
     const IndexSpace& is = lr.get_index_space();
     
@@ -769,7 +739,7 @@ void Mesh::setField(
         const T* var,
         const int n) {
     using namespace Legion;
-    RegionRequirement req(lr, WRITE_DISCARD, EXCLUSIVE, lr);
+    RegionRequirement req(lr, WRITE_DISCARD, LEGION_EXCLUSIVE, lr);
     req.add_field(fid);
     InlineLauncher inl(req);
     PhysicalRegion pr = runtime->map_region(ctx, inl);

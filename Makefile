@@ -28,19 +28,10 @@ endif
 #DEBUG=1                   # Include debugging symbols
 DEBUG=0
 OUTPUT_LEVEL=LEVEL_DEBUG  # Compile time print level
-#OUTPUT_LEVEL=LEVEL_INFO   # Compile time print level
-#SHARED_LOWLEVEL=1	  # Use the shared low level
 SHARED_LOWLEVEL=0
 USE_CUDA=0
 USE_OPENMP=0
-GASNET_ROOT= ${HOME}/local
 HDF_ROOT = ${HOME}/local
-#GASNET_ROOT=/users/cferenba/gasnet/1.24.0/build-mustang-gnu48
-#GASNET_ROOT=/users/cferenba/gasnet/1.24.0/build-mustang-intel14
-GASNET=$(GASNET_ROOT)
-#CONDUIT=udp
-CONDUIT=ibv
-#ALT_MAPPERS=1		  # Compile the alternative mappers
 USE_HDF   =0
 USE_GASNET=0
 
