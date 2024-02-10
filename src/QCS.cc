@@ -691,7 +691,7 @@ void QCS::setForceOMPTask(
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense
     const Rect<1> rects = runtime->get_index_space_domain(iss);
-    #pragma omp paralel for
+    #pragma omp parallel for
     for (coord_t c = rects.lo[0]; c <= rects.hi[0]; c++)
     {
         const double ccos = acc_ccos[c];
