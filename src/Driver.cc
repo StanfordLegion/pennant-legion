@@ -103,9 +103,9 @@ void Driver::run(void) {
 
     Predicate p_not_done = Predicate::TRUE_PRED;
     const double time_init = 0.0;
-    Future f_time = Future::from_value(time_init);
+    Future f_time = Future::from_value(runtime, time_init);
     const int cycle_init = 0;
-    Future f_cycle = Future::from_value(cycle_init);
+    Future f_cycle = Future::from_value(runtime, cycle_init);
     // Need to give these dummy values so we can trace consistently
     Future f_dt = Future::from_value(runtime, 0.0);
     Future f_cdt = Future::from_value(runtime, 0.0);
