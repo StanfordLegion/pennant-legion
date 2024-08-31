@@ -193,7 +193,20 @@ void PennantMapper::map_task(const MapperContext ctx,
                              const MapTaskInput &input,
                                    MapTaskOutput &output)
 {
-  if ((task.tag & PREFER_GPU) && !local_gpus.empty()) {
+  if (input.shard_processor.exists()) {
+    // Always place replicated task on designated processor
+    output.target_procs.clear();
+    output.target_procs.push_back(input.shard_processor);
+    if (input.shard_processor.kind() == Processor::TOC_PROC) {
+      output.chosen_variant = find_gpu_variant(ctx, task.task_id);
+    } else if (input.shard_processor.kind() == Processor::OMP_PROC) {
+      output.chosen_variant = find_omp_variant(ctx, task.task_id);
+    } else if (input.shard_processor.kind() == Processor::LOC_PROC) {
+      output.chosen_variant = find_cpu_variant(ctx, task.task_id);
+    } else {
+      abort();
+    }
+  } else if ((task.tag & PREFER_GPU) && !local_gpus.empty()) {
     output.chosen_variant = find_gpu_variant(ctx, task.task_id);
     output.target_procs.push_back(task.target_proc);
   } else if ((task.tag & PREFER_OMP) && !local_omps.empty()) {
