@@ -1740,7 +1740,7 @@ void Hydro::initSubrgnTask(
         const std::vector<PhysicalRegion> &regions,
         Context ctx,
         Runtime *runtime) {
-  const InitSubrgnArgs *args = reinterpret_cast<InitSubrgnArgs*>(task->args);
+  const InitSubrgnArgs *args = reinterpret_cast<const InitSubrgnArgs*>(task->args);
 
   const AccessorRO<double2> acc_zx(regions[0], FID_ZX);
 
