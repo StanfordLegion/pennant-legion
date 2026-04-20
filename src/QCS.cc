@@ -146,7 +146,7 @@ void QCS::setCornerDivTask(
     // [1] Compute a zone-centered velocity
     const IndexSpace& isz = task->regions[1].region.get_index_space();
     for (PointIterator itz(runtime, isz); itz(); itz++)
-        acc_zuc[*itz] = double2(0., 0.);
+        acc_zuc[*itz] = make_double2(0., 0.);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     for (PointIterator its(runtime, iss); its(); its++)
@@ -488,7 +488,7 @@ void QCS::setCornerDivOMPTask(
     const Rect<1> rectz = runtime->get_index_space_domain(isz);
     #pragma omp parallel for
     for (coord_t z = rectz.lo[0]; z <= rectz.hi[0]; z++)
-        acc_zuc[z] = double2(0., 0.);
+        acc_zuc[z] = make_double2(0., 0.);
 
     const IndexSpace& iss = task->regions[0].region.get_index_space();
     // This will assert if it is not dense

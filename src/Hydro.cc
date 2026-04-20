@@ -217,8 +217,8 @@ Hydro::Hydro(
     tts = new TTS(inp, this);
     qcs = new QCS(inp, this);
 
-    const double2 vfixx = double2(1., 0.);
-    const double2 vfixy = double2(0., 1.);
+    const double2 vfixx = make_double2(1., 0.);
+    const double2 vfixy = make_double2(0., 1.);
     for (int i = 0; i < bcx.size(); ++i)
       bcs.push_back(new HydroBC(mesh, vfixx, bcx[i], true/*xplane*/));
     for (int i = 0; i < bcy.size(); ++i)
@@ -331,7 +331,7 @@ void Hydro::init() {
   }
   else
   {
-    const double2 zero2(0., 0.);
+    const double2 zero2 = make_double2(0., 0.);
     FillLauncher launcher(lrp, lrp, TaskArgument(&zero2,sizeof(zero2)));
     launcher.add_field(FID_PU);
     runtime->fill_fields(ctx, launcher);
@@ -375,7 +375,7 @@ Future Hydro::doCycle(
     launchffd.argument = TaskArgument(ffdargs, sizeof(ffdargs));
     launchffd.predicate = p_not_done;
 
-    double2 ffd2args[] = { double2(0., 0.) };
+    double2 ffd2args[] = { make_double2(0., 0.) };
     IndexFillLauncher launchffd2;
     launchffd2.launch_space = ispc;
     launchffd2.projection = 0;
@@ -1802,7 +1802,7 @@ void Hydro::initRadialVelTask(
     if (pmag > args->eps)
       acc_pu[*itr] = args->vel * px / pmag;
     else
-      acc_pu[*itr] = double2(0., 0.);
+      acc_pu[*itr] = make_double2(0., 0.);
   }
 }
 
